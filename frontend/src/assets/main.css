@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* ── Dark mode: apply when .dark class is on any ancestor ─────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Custom theme tokens (replaces tailwind.config.js in v4) ─────────────── */
+@theme {
+  /* Font family */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Status colors */
+  --color-status-free: #22c55e;
+  --color-status-reserved: #3b82f6;
+  --color-status-static: #ef4444;
+  --color-status-dhcp: #8b5cf6;
+  --color-status-observed: #eab308;
+  --color-status-conflict: #f97316;
+}
+
+/* ── Base styles ──────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    @apply font-mono;
+  }
+  html.dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+  html:not(.dark) body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
+/* ── Component classes ────────────────────────────────────────────────────── */
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium
+           border transition-all duration-150 focus:outline-none focus:ring-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-sky-600 hover:bg-sky-500 active:bg-sky-700 border-sky-600 text-white
+           focus:ring-sky-400;
+  }
+  .btn-ghost {
+    @apply bg-transparent hover:bg-slate-100 active:bg-slate-200
+           dark:hover:bg-slate-800/60 dark:active:bg-slate-800
+           border-transparent dark:text-slate-200 text-slate-700;
+  }
+  .btn-secondary {
+    @apply dark:bg-slate-800 bg-slate-200 dark:border-slate-700 border-slate-300
+           dark:hover:bg-slate-700 hover:bg-slate-300 dark:active:bg-slate-600
+           dark:text-slate-100 text-slate-900 focus:ring-slate-400;
+  }
+  .panel {
+    @apply dark:bg-slate-900 bg-white dark:border-slate-800 border-slate-200
+           border rounded-xl shadow-sm;
+  }
+  .input {
+    @apply w-full px-3 py-2 text-sm rounded-lg border
+           dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100
+           bg-white border-slate-300 text-slate-900
+           focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all duration-150;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide
+           dark:text-slate-400 text-slate-500 mb-1;
+  }
+  .table-cell {
+    @apply px-3 py-2 text-sm;
+  }
+  .status-dot {
+    @apply inline-block w-2 h-2 rounded-full mr-1.5 align-middle;
+  }
+}

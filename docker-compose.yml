@@ -1,0 +1,56 @@
+# netis docker-compose
+#
+# Default profile uses SQLite (no extra container).
+# Enable the `postgres` profile to switch to PostgreSQL:
+#   docker compose --profile postgres up -d
+#
+# For ARP scanning to actually work from inside the container, the backend
+# needs host network access (uncomment `network_mode: host`) AND CAP_NET_RAW.
+# Most homelab setups will run discovery on the host directly instead.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: netis-backend:latest
+    restart: unless-stopped
+    environment:
+      NETIS_DATABASE_URL: ${NETIS_DATABASE_URL:-sqlite:////data/netis.db}
+      NETIS_SECRET_KEY: ${NETIS_SECRET_KEY:-please-change-me}
+      NETIS_ACCESS_TOKEN_EXPIRE_MINUTES: ${NETIS_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      NETIS_CORS_ORIGINS: ${NETIS_CORS_ORIGINS:-http://localhost:8080}
+    volumes:
+      - netis-data:/data
+    cap_add:
+      - NET_RAW
+    # Uncomment to allow ARP scans of the host network:
+    # network_mode: host
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    image: netis-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: netis
+      POSTGRES_PASSWORD: netis
+      POSTGRES_DB: netis
+    volumes:
+      - netis-pg:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  netis-data:
+  netis-pg:
