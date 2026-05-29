@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api import api_router
@@ -59,6 +62,20 @@ def create_app() -> FastAPI:
     @app.get("/api/health", tags=["meta"])
     def health() -> dict:
         return {"status": "ok", "version": __version__}
+
+    # Serve the compiled Vue SPA when running from the combined Docker image.
+    # The static/ directory is only present inside the container (copied by the
+    # root Dockerfile); dev mode (uvicorn --reload) skips this gracefully.
+    static_dir = Path(__file__).parent.parent / "static"
+    if static_dir.is_dir():
+        # /assets, /favicon.ico, etc. — exact file matches
+        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+
+        # SPA fallback: every other path that doesn't match an API route returns
+        # index.html so Vue Router can handle client-side navigation.
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(full_path: str) -> FileResponse:
+            return FileResponse(static_dir / "index.html")
 
     return app
 
