@@ -1,0 +1,17 @@
+[Unit]
+Description=netis home network organizer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/netis/netis
+Environment=NETIS_DB=/var/lib/netis/netis.db
+Environment=NETIS_PRIVILEGED_ICMP=1
+AmbientCapabilities=CAP_NET_RAW
+StateDirectory=netis
+Restart=on-failure
+User=netis
+Group=netis
+
+[Install]
+WantedBy=multi-user.target

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
+	"netis/internal/wol"
 )
 
 var validKinds = map[string]bool{"computer": true, "switch": true, "phone": true,
@@ -323,6 +325,59 @@ func (s *Server) handleFieldDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteCustomField(id, key); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
+	}
+	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+}
+
+// handleWOL sends a Wake-on-LAN magic packet to the MAC of the device's
+// first interface that has one, then redirects back to the device page.
+func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ifaces, err := s.store.ListIfaces(id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	for _, f := range ifaces {
+		if f.MAC != nil {
+			if err := wol.Send(*f.MAC); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+			return
+		}
+	}
+	http.Error(w, "device has no MAC", 400)
+}
+
+// handlePortScan runs an on-demand TCP port scan against the first IP of
+// the device's first interface, upserts any open ports found, and
+// redirects back to the device page.
+func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ifaces, err := s.store.ListIfaces(id)
+	if err != nil || len(ifaces) == 0 {
+		http.Error(w, "device has no interface", 400)
+		return
+	}
+	ips, err := s.store.ListIPs(ifaces[0].ID)
+	if err != nil || len(ips) == 0 {
+		http.Error(w, "device has no IP", 400)
+		return
+	}
+	open := scan.PortScan(r.Context(), ips[0].IP, scan.CommonPorts, time.Second)
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, p := range open {
+		s.store.UpsertOpenPort(ifaces[0].ID, p, "tcp", scan.ServiceGuess(p), now)
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }

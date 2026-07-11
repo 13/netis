@@ -303,6 +303,16 @@ templ DevicePage(username string, d DeviceDetail) {
 			}
 		</table>
 
+		<h2>Actions</h2>
+		<p>
+			<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
+				<button type="submit">Wake on LAN</button>
+			</form>
+			<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
+				<button type="submit">Scan ports</button>
+			</form>
+		</p>
+
 		<h2>Edit</h2>
 		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d", d.Device.ID)) } class="auth-card">
 			<label>
