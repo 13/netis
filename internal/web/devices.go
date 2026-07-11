@@ -90,10 +90,18 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	d, err := s.store.GetDevice(id)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	d, err := s.store.GetDevice(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
 		return
 	}
 	if kind := r.FormValue("kind"); validKinds[kind] {
@@ -119,7 +127,11 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 	if err := s.store.DeleteDevice(id); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
