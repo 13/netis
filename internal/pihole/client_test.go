@@ -60,6 +60,18 @@ func TestLeases(t *testing.T) {
 	}
 }
 
+func TestNormMACRejectsGarbage(t *testing.T) {
+	if got := normMAC("AA:BB:CC:00:00:10"); got != "aa:bb:cc:00:00:10" {
+		t.Errorf("valid MAC = %q", got)
+	}
+	// 17 chars but not hex pairs — must be rejected, not passed through.
+	for _, bad := range []string{"zz:zz:zz:zz:zz:zz", "10.0.0.1", "aa:bb:cc:dd:ee", "not-a-mac-at-all!"} {
+		if got := normMAC(bad); got != "" {
+			t.Errorf("normMAC(%q) = %q, want empty", bad, got)
+		}
+	}
+}
+
 func TestReservationsSkipsMalformed(t *testing.T) {
 	var hits int32
 	srv := fixtureServer(t, &hits)

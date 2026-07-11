@@ -6,12 +6,17 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/netip"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+// macRe matches a canonical lowercase colon-separated MAC (6 hex pairs).
+var macRe = regexp.MustCompile(`^[0-9a-f]{2}(:[0-9a-f]{2}){5}$`)
 
 type Lease struct {
 	IP       string
@@ -132,6 +137,7 @@ func (c *Client) doGet(ctx context.Context, path string, out any) (int, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
+		io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
 		return resp.StatusCode, nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
@@ -142,10 +148,7 @@ func (c *Client) doGet(ctx context.Context, path string, out any) (int, error) {
 
 func normMAC(s string) string {
 	m := strings.ToLower(strings.TrimSpace(s))
-	if _, err := netip.ParseAddr(m); err == nil { // guard against an IP slipping in
-		return ""
-	}
-	if len(m) != 17 {
+	if !macRe.MatchString(m) {
 		return ""
 	}
 	return m
