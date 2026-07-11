@@ -139,11 +139,13 @@ func (s *Store) AssignIP(ifaceID, subnetID int64, ip, kind string) (int64, error
 	return res.LastInsertId()
 }
 
-// RemoveIfaceIPsInSubnetExcept retires an iface's stale IP assignments in a
-// subnet, keeping only keepIP. Used when a MAC-matched iface is observed on
-// a new IP so the old IP no longer lingers in the subnet occupancy/grid.
+// RemoveIfaceIPsInSubnetExcept retires an iface's stale DHCP IP assignments
+// in a subnet, keeping only keepIP. Used when a MAC-matched iface is observed
+// on a new IP so the old IP no longer lingers in the subnet occupancy/grid.
+// Only kind='dhcp' rows are removed: a user-assigned static IP on the same
+// iface must survive a DHCP renewal to a different address.
 func (s *Store) RemoveIfaceIPsInSubnetExcept(ifaceID, subnetID int64, keepIP string) error {
-	_, err := s.DB.Exec(`DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>?`,
+	_, err := s.DB.Exec(`DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
 		ifaceID, subnetID, keepIP)
 	return err
 }
@@ -244,6 +246,13 @@ func (s *Store) ListSubnetIfaceIPs(subnetID int64) ([]SubnetIfaceIP, error) {
 	return out, rows.Err()
 }
 
+// IfaceOnline reports whether an iface is currently online along with its
+// last-seen timestamp, for callers outside the store package (e.g. the
+// device detail page).
+func (s *Store) IfaceOnline(ifaceID int64) (bool, *string, error) {
+	return s.ifaceOnline(ifaceID)
+}
+
 // ifaceOnline and deviceTagNames get real implementations in Task 4;
 // these stubs keep Task 3 self-contained.
 func (s *Store) ifaceOnline(ifaceID int64) (bool, *string, error) {
@@ -255,6 +264,64 @@ func (s *Store) ifaceOnline(ifaceID int64) (bool, *string, error) {
 		return false, nil, nil // no status row yet
 	}
 	return online, lastSeen, nil
+}
+
+// ListDeviceEvents returns the most recent events for a single device, same
+// shape as ListEvents but filtered to deviceID.
+func (s *Store) ListDeviceEvents(deviceID int64, limit int) ([]Event, error) {
+	rows, err := s.DB.Query(`SELECT id,ts,type,device_id,details FROM event
+		WHERE device_id=? ORDER BY id DESC LIMIT ?`, deviceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.DeviceID, &e.Details); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// ListChildren returns devices whose parent_device_id is deviceID.
+func (s *Store) ListChildren(deviceID int64) ([]Device, error) {
+	rows, err := s.DB.Query(`SELECT `+deviceCols+` FROM device WHERE parent_device_id=? ORDER BY name`, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Device
+	for rows.Next() {
+		d, err := scanDevice(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// DeviceTags returns the full Tag rows attached to a device (compare
+// deviceTagNames, which only returns names for the filterable list view).
+func (s *Store) DeviceTags(deviceID int64) ([]Tag, error) {
+	rows, err := s.DB.Query(`SELECT t.id,t.name,t.color FROM tag t
+		JOIN device_tag dt ON dt.tag_id=t.id WHERE dt.device_id=? ORDER BY t.name`, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Tag
+	for rows.Next() {
+		var t Tag
+		if err := rows.Scan(&t.ID, &t.Name, &t.Color); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) deviceTagNames(deviceID int64) ([]string, error) {
