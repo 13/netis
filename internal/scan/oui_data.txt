@@ -1,0 +1,24 @@
+BC2411	Proxmox Server Solutions GmbH
+B827EB	Raspberry Pi Foundation
+DCA632	Raspberry Pi Trading Ltd
+E45F01	Raspberry Pi Trading Ltd
+001132	Synology Incorporated
+9009D0	Synology Incorporated
+245EBE	QNAP Systems Inc.
+04D9F5	ASUSTek COMPUTER INC.
+FCECDA	Ubiquiti Inc
+245A4C	Ubiquiti Inc
+784558	Apple, Inc.
+3C0754	Apple, Inc.
+F0D1A9	Apple, Inc.
+5CCF7F	Espressif Inc.
+240AC4	Espressif Inc.
+A4CF12	Espressif Inc.
+EC086B	TP-LINK TECHNOLOGIES CO.,LTD.
+50C7BF	TP-LINK TECHNOLOGIES CO.,LTD.
+001A11	Google, Inc.
+F4F5D8	Google, Inc.
+FCFC48	Samsung Electronics Co.,Ltd
+8CDE52	ieGeek/Shenzhen
+00155D	Microsoft Corporation (Hyper-V)
+525400	QEMU/KVM virtual NIC
