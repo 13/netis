@@ -38,6 +38,11 @@ func NewSSHRunner(addr, user, keyPath string) (*SSHRunner, error) {
 	}, nil
 }
 
+type sshResult struct {
+	out []byte
+	err error
+}
+
 func (r *SSHRunner) Run(ctx context.Context, cmd string) ([]byte, error) {
 	client, err := ssh.Dial("tcp", r.addr, r.config)
 	if err != nil {
@@ -49,5 +54,17 @@ func (r *SSHRunner) Run(ctx context.Context, cmd string) ([]byte, error) {
 		return nil, err
 	}
 	defer sess.Close()
-	return sess.Output(cmd)
+
+	resCh := make(chan sshResult, 1)
+	go func() {
+		out, err := sess.Output(cmd)
+		resCh <- sshResult{out: out, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-resCh:
+		return res.out, res.err
+	}
 }

@@ -49,3 +49,34 @@ func TestSyncCreatesPeersAndStatus(t *testing.T) {
 		t.Fatal("peerB (no handshake) must be offline")
 	}
 }
+
+type blockingRunner struct{}
+
+func (b *blockingRunner) Run(ctx context.Context, cmd string) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestRunOnceRespectsContextCancellation(t *testing.T) {
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+
+	sync := NewSync(st, &blockingRunner{}, events.NewService(st, events.NewBroker()), "wg0")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sync.RunOnce(ctx)
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected non-nil error from cancelled context, got nil")
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("RunOnce did not return within 1s of context cancellation")
+	}
+}

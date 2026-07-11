@@ -127,7 +127,10 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		if err := s.RunOnce(ctx); err != nil {
+		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := s.RunOnce(cctx)
+		cancel()
+		if err != nil {
 			if !s.failing {
 				s.failing = true
 				s.events.Emit("scan_error", nil, "wireguard sync failing: "+err.Error())
