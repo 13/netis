@@ -2,6 +2,8 @@ package proxmox
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -53,6 +55,9 @@ func (s *Sync) upsertNode(node string) (int64, error) {
 	if err == nil {
 		return id, nil
 	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
 	return s.store.CreateDevice(store.Device{Name: node, Kind: "server", Source: "proxmox"})
 }
 
@@ -64,7 +69,10 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 	var devID int64
 	err := s.store.DB.QueryRow(
 		`SELECT id FROM device WHERE proxmox_vmid=? AND source='proxmox'`, g.VMID).Scan(&devID)
-	if err != nil { // new guest
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if errors.Is(err, sql.ErrNoRows) { // new guest
 		vmid := g.VMID
 		devID, err = s.store.CreateDevice(store.Device{
 			Name: g.Name, Kind: kind, Source: "proxmox",

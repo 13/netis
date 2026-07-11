@@ -77,6 +77,10 @@ func (c *Client) ListGuests(ctx context.Context) ([]Guest, error) {
 
 var macRe = regexp.MustCompile(`(?i)\b([0-9a-f]{2}(?::[0-9a-f]{2}){5})\b`)
 
+// netKeyRe matches Proxmox network interface config keys (net0, net1, …),
+// avoiding false matches on any future non-numeric net* key.
+var netKeyRe = regexp.MustCompile(`^net\d+$`)
+
 func (c *Client) GuestMACs(ctx context.Context, node string, vmid int64, typ string) ([]string, error) {
 	var body struct {
 		Data map[string]any `json:"data"`
@@ -87,7 +91,7 @@ func (c *Client) GuestMACs(ctx context.Context, node string, vmid int64, typ str
 	}
 	var macs []string
 	for key, val := range body.Data {
-		if !strings.HasPrefix(key, "net") {
+		if !netKeyRe.MatchString(key) {
 			continue
 		}
 		sval, ok := val.(string)
