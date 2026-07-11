@@ -54,6 +54,15 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("POST /devices/{id}/tags/{tagID}/delete", s.requireAdmin(s.handleTagRemove))
 	s.mux.HandleFunc("POST /devices/{id}/fields", s.requireAdmin(s.handleFieldSet))
 	s.mux.HandleFunc("POST /devices/{id}/fields/delete", s.requireAdmin(s.handleFieldDelete))
+	s.mux.HandleFunc("GET /events", s.handleEventsPage)
+	s.mux.HandleFunc("GET /settings", s.handleSettingsPage)
+	s.mux.HandleFunc("POST /settings/subnets", s.requireAdmin(s.handleSubnetCreate))
+	s.mux.HandleFunc("POST /settings/subnets/{id}", s.requireAdmin(s.handleSubnetUpdate))
+	s.mux.HandleFunc("POST /settings/subnets/{id}/delete", s.requireAdmin(s.handleSubnetDelete))
+	s.mux.HandleFunc("POST /settings/integrations", s.requireAdmin(s.handleIntegrationsSave))
+	s.mux.HandleFunc("POST /settings/users", s.requireAdmin(s.handleUserCreate))
+	s.mux.HandleFunc("POST /settings/users/{id}/delete", s.requireAdmin(s.handleUserDelete))
+	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
 	return s
 }
 
