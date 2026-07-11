@@ -60,6 +60,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) run(ctx context.Context, sn store.Subnet) {
+	// Guard here (not just at the call sites) so every entry point that
+	// reaches run — periodic tick or manual Trigger — is protected.
+	if !sn.ScanEnabled || sn.Kind == "wireguard" {
+		return
+	}
 	s.mu.Lock()
 	s.lastRun[sn.ID] = time.Now()
 	s.mu.Unlock()

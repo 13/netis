@@ -42,6 +42,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	}
 
 	aliveIPs := make(map[string]bool)
+	seen := make(map[int64]bool) // ifaceID -> seen this sweep, on any IP
 	for _, r := range results {
 		if !r.Alive {
 			continue
@@ -49,6 +50,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		aliveIPs[r.IP] = true
 		if k, ok := knownByIP[r.IP]; ok {
 			e.markSeen(k.IfaceID, k.DeviceID, r.RTTms, now, bucket)
+			seen[k.IfaceID] = true
 			continue
 		}
 		mac := arp[r.IP]
@@ -56,17 +58,21 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 			if iface, ok, _ := e.Store.FindIfaceByMAC(mac); ok {
 				// known device moved to a new IP
 				e.Store.AssignIP(iface.ID, sn.ID, r.IP, "dhcp")
+				e.Store.RemoveIfaceIPsInSubnetExcept(iface.ID, sn.ID, r.IP)
 				e.Events.Emit("ip_changed", &iface.DeviceID,
 					fmt.Sprintf("MAC %s now at %s", mac, r.IP))
 				e.markSeen(iface.ID, iface.DeviceID, r.RTTms, now, bucket)
+				seen[iface.ID] = true
 				continue
 			}
 		}
-		e.createUnknown(ctx, sn, r, mac, now, bucket)
+		if ifID, ok := e.createUnknown(ctx, sn, r, mac, now, bucket); ok {
+			seen[ifID] = true
+		}
 	}
 
 	for _, k := range known {
-		if aliveIPs[k.IP] {
+		if aliveIPs[k.IP] || seen[k.IfaceID] {
 			continue
 		}
 		went, _ := e.Store.MarkMissed(k.IfaceID, e.OfflineAfter)
@@ -90,7 +96,10 @@ func (e *Engine) markSeen(ifaceID, deviceID int64, rtt float64, now time.Time, b
 	}
 }
 
-func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, mac string, now time.Time, bucket string) {
+// createUnknown creates a device+iface for a previously-unseen IP/MAC.
+// It returns the new iface ID and true on success, so the caller can mark
+// it seen for this sweep and avoid the closing loop mis-marking it missed.
+func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, mac string, now time.Time, bucket string) (int64, bool) {
 	resolved := e.Resolve(ctx, r.IP)
 	name := resolved
 	if name == "" && mac != "" {
@@ -102,7 +111,7 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: Vendor(mac)}
 	devID, err := e.Store.CreateDevice(d)
 	if err != nil {
-		return
+		return 0, false
 	}
 	var macP, hostP *string
 	if mac != "" {
@@ -113,10 +122,11 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	}
 	ifID, err := e.Store.AddIface(devID, macP, hostP)
 	if err != nil {
-		return
+		return 0, false
 	}
 	e.Store.AssignIP(ifID, sn.ID, r.IP, "dhcp")
 	e.Store.MarkSeen(ifID, r.RTTms, now)
 	e.Store.RecordAvailability(ifID, true, bucket)
 	e.Events.Emit("device_new", &devID, fmt.Sprintf("new device %s at %s", name, r.IP))
+	return ifID, true
 }

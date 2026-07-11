@@ -139,6 +139,15 @@ func (s *Store) AssignIP(ifaceID, subnetID int64, ip, kind string) (int64, error
 	return res.LastInsertId()
 }
 
+// RemoveIfaceIPsInSubnetExcept retires an iface's stale IP assignments in a
+// subnet, keeping only keepIP. Used when a MAC-matched iface is observed on
+// a new IP so the old IP no longer lingers in the subnet occupancy/grid.
+func (s *Store) RemoveIfaceIPsInSubnetExcept(ifaceID, subnetID int64, keepIP string) error {
+	_, err := s.DB.Exec(`DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>?`,
+		ifaceID, subnetID, keepIP)
+	return err
+}
+
 func (s *Store) ListIPs(ifaceID int64) ([]IPRow, error) {
 	rows, err := s.DB.Query(`SELECT id,ip,subnet_id,kind FROM ip_assignment WHERE iface_id=?`, ifaceID)
 	if err != nil {
