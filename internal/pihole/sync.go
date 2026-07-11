@@ -3,6 +3,7 @@ package pihole
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/netip"
 	"time"
 
@@ -27,23 +28,31 @@ func NewSync(st *store.Store, c Fetcher, ev *events.Service) *Sync {
 	return &Sync{store: st, client: c, events: ev}
 }
 
-func (s *Sync) RunOnce(ctx context.Context) error {
+type Stats struct {
+	Leases       int
+	Reservations int
+	DNSRecords   int
+	Created      int
+}
+
+func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	reservations, err := s.client.Reservations(ctx)
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	leases, err := s.client.Leases(ctx)
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	dns, err := s.client.DNSRecords(ctx)
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	subnets, err := s.store.ListSubnets()
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
+	stats := Stats{Reservations: len(reservations), Leases: len(leases), DNSRecords: len(dns)}
 
 	// claimed holds the "<subnetID>|<ip>" pairs a reservation assigned this
 	// run; a lease for one of these skips assignment so a reservation's static
@@ -55,8 +64,12 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if !ok {
 			continue
 		}
-		if err := s.upsertByMAC(r.MAC, r.IP, r.Hostname, snID, "static"); err != nil {
-			return err
+		created, err := s.upsertByMAC(r.MAC, r.IP, r.Hostname, snID, "static")
+		if err != nil {
+			return Stats{}, err
+		}
+		if created {
+			stats.Created++
 		}
 		claimed[fmt.Sprintf("%d|%s", snID, r.IP)] = true
 	}
@@ -71,18 +84,22 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 			if l.Hostname != "" {
 				iface, found, err := s.store.FindIfaceByMAC(l.MAC)
 				if err != nil {
-					return err
+					return Stats{}, err
 				}
 				if found {
 					if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, l.Hostname); err != nil {
-						return err
+						return Stats{}, err
 					}
 				}
 			}
 			continue
 		}
-		if err := s.upsertByMAC(l.MAC, l.IP, l.Hostname, snID, "dhcp"); err != nil {
-			return err
+		created, err := s.upsertByMAC(l.MAC, l.IP, l.Hostname, snID, "dhcp")
+		if err != nil {
+			return Stats{}, err
+		}
+		if created {
+			stats.Created++
 		}
 	}
 	for _, rec := range dns {
@@ -92,38 +109,39 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		}
 		iface, found, err := s.store.FindIfaceByIP(snID, rec.IP)
 		if err != nil {
-			return err
+			return Stats{}, err
 		}
 		if !found {
 			continue // never create a device from a DNS record alone
 		}
 		if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, rec.Name); err != nil {
-			return err
+			return Stats{}, err
 		}
 		if err := s.store.SetCustomField(iface.DeviceID, "pihole_dns", rec.Name); err != nil {
-			return err
+			return Stats{}, err
 		}
 	}
-	return nil
+	return stats, nil
 }
 
 // upsertByMAC enriches an existing device (matched by MAC) or creates a new
 // pihole-sourced device, then assigns the IP with the given kind. A DB write
 // failure is returned so RunOnce surfaces it (and Start emits scan_error)
-// rather than silently reporting a healthy cycle.
-func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string) error {
+// rather than silently reporting a healthy cycle. The returned bool reports
+// whether a new device was created (vs. an existing one enriched).
+func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string) (bool, error) {
 	iface, found, err := s.store.FindIfaceByMAC(mac)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if found {
 		if err := s.store.UpsertIPAssignment(iface.ID, subnetID, ip, kind); err != nil {
-			return err
+			return false, err
 		}
 		if hostname != "" {
-			return s.store.SetIfaceHostnameIfEmpty(iface.ID, hostname)
+			return false, s.store.SetIfaceHostnameIfEmpty(iface.ID, hostname)
 		}
-		return nil
+		return false, nil
 	}
 	name := hostname
 	if name == "" {
@@ -131,7 +149,7 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	}
 	devID, err := s.store.CreateDevice(store.Device{Name: name, Kind: "other", Source: "pihole"})
 	if err != nil {
-		return err
+		return false, err
 	}
 	m := mac
 	var hp *string
@@ -140,13 +158,13 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	}
 	ifID, err := s.store.AddIface(devID, &m, hp)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := s.store.UpsertIPAssignment(ifID, subnetID, ip, kind); err != nil {
-		return err
+		return false, err
 	}
 	s.events.Emit("device_new", &devID, fmt.Sprintf("pihole device %s at %s", name, ip))
-	return nil
+	return true, nil
 }
 
 func subnetForIP(subnets []store.Subnet, ip string) (int64, bool) {
@@ -166,18 +184,37 @@ func subnetForIP(subnets []store.Subnet, ip string) (int64, bool) {
 	return 0, false
 }
 
+func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
+	return s.RunOnce(ctx)
+}
+
+func (s *Sync) recordStatus(stats Stats, err error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	st := store.IntegrationStatus{Name: "pihole", LastRun: now}
+	if err != nil {
+		if !s.failing {
+			s.failing = true
+			s.events.Emit("scan_error", nil, "pihole sync failing: "+err.Error())
+		}
+		st.OK = false
+		st.Detail = err.Error()
+	} else {
+		s.failing = false
+		st.OK = true
+		st.ItemCount = stats.Leases
+		st.Detail = fmt.Sprintf("%d leases, %d new", stats.Leases, stats.Created)
+	}
+	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+		log.Printf("pihole status write: %v", serr)
+	}
+	s.events.Broker().Publish("dashboard", "refresh")
+}
+
 func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		if err := s.RunOnce(ctx); err != nil {
-			if !s.failing {
-				s.failing = true
-				s.events.Emit("scan_error", nil, "pihole sync failing: "+err.Error())
-			}
-		} else {
-			s.failing = false
-		}
+		s.recordStatus(s.runAndCount(ctx))
 		select {
 		case <-ctx.Done():
 			return

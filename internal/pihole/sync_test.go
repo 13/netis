@@ -45,7 +45,7 @@ func deviceByName(t *testing.T, st *store.Store, name string) store.DeviceRow {
 func TestSyncCreatesUnknownFromReservation(t *testing.T) {
 	st, f, sync := testSync(t)
 	f.res = []Reservation{{MAC: "aa:bb:cc:00:00:20", IP: "10.0.0.20", Hostname: "printer"}}
-	if err := sync.RunOnce(context.Background()); err != nil {
+	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	d := deviceByName(t, st, "printer")
@@ -70,7 +70,7 @@ func TestSyncEnrichesExistingByMAC(t *testing.T) {
 	devID, _ := st.CreateDevice(store.Device{Name: "known", Kind: "computer", Source: "scan"})
 	st.AddIface(devID, strpP("aa:bb:cc:00:00:10"), nil)
 	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
-	if err := sync.RunOnce(context.Background()); err != nil {
+	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := st.ListDevices()
@@ -91,7 +91,7 @@ func TestReservationBeatsLease(t *testing.T) {
 	st, f, sync := testSync(t)
 	f.res = []Reservation{{MAC: "aa:bb:cc:00:00:20", IP: "10.0.0.20", Hostname: "printer"}}
 	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:20", IP: "10.0.0.20", Hostname: "printer"}}
-	if err := sync.RunOnce(context.Background()); err != nil {
+	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	d := deviceByName(t, st, "printer")
@@ -110,7 +110,7 @@ func TestDNSRecordAttachesAndSkipsUnknown(t *testing.T) {
 		{IP: "10.0.0.20", Name: "printer.lan"},
 		{IP: "10.0.0.99", Name: "ghost.lan"}, // no device at this IP → skipped
 	}
-	if err := sync.RunOnce(context.Background()); err != nil {
+	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := st.ListDevices()
@@ -135,7 +135,7 @@ func TestSyncIdempotentAndNoStatus(t *testing.T) {
 	f.res = []Reservation{{MAC: "aa:bb:cc:00:00:20", IP: "10.0.0.20", Hostname: "printer"}}
 	f.dns = []DNSRecord{{IP: "10.0.0.20", Name: "printer.lan"}}
 	for i := 0; i < 2; i++ {
-		if err := sync.RunOnce(context.Background()); err != nil {
+		if _, err := sync.RunOnce(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -154,3 +154,28 @@ func TestSyncIdempotentAndNoStatus(t *testing.T) {
 }
 
 func strpP(s string) *string { return &s }
+
+func TestPiholeRunOnceStats(t *testing.T) {
+	_, f, sync := testSync(t)
+	f.res = []Reservation{{MAC: "aa:bb:cc:00:00:20", IP: "10.0.0.20", Hostname: "printer"}}
+	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
+	f.dns = []DNSRecord{{IP: "10.0.0.20", Name: "printer.lan"}}
+	stats, err := sync.RunOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Reservations != 1 || stats.Leases != 1 || stats.DNSRecords != 1 || stats.Created != 2 {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestPiholeStartRecordsStatus(t *testing.T) {
+	st, f, sync := testSync(t)
+	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
+	// One iteration: record status via the same path Start uses.
+	sync.recordStatus(sync.runAndCount(context.Background()))
+	list, _ := st.ListIntegrationStatus()
+	if len(list) != 1 || list[0].Name != "pihole" || !list[0].OK || list[0].ItemCount != 1 {
+		t.Fatalf("status=%+v", list)
+	}
+}

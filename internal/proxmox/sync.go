@@ -23,10 +23,15 @@ func NewSync(st *store.Store, c *Client, ev *events.Service) *Sync {
 	return &Sync{store: st, client: c, events: ev}
 }
 
-func (s *Sync) RunOnce(ctx context.Context) error {
+type Stats struct {
+	Guests int
+	Nodes  int
+}
+
+func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	guests, err := s.client.ListGuests(ctx)
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	nodeIDs := make(map[string]int64)
 	for _, g := range guests {
@@ -35,7 +40,7 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		}
 		id, err := s.upsertNode(g.Node)
 		if err != nil {
-			return err
+			return Stats{}, err
 		}
 		nodeIDs[g.Node] = id
 	}
@@ -44,7 +49,37 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 			log.Printf("proxmox guest %d: %v", g.VMID, err)
 		}
 	}
-	return nil
+	return Stats{Guests: len(guests), Nodes: len(nodeIDs)}, nil
+}
+
+// runAndCount runs one cycle and returns the stats and error, so Start and
+// tests share exactly one code path.
+func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
+	return s.RunOnce(ctx)
+}
+
+// recordStatus writes the integration_status row and manages the
+// once-per-outage scan_error event.
+func (s *Sync) recordStatus(stats Stats, err error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	st := store.IntegrationStatus{Name: "proxmox", LastRun: now}
+	if err != nil {
+		if !s.failing {
+			s.failing = true
+			s.events.Emit("scan_error", nil, "proxmox sync failing: "+err.Error())
+		}
+		st.OK = false
+		st.Detail = err.Error()
+	} else {
+		s.failing = false
+		st.OK = true
+		st.ItemCount = stats.Guests
+		st.Detail = fmt.Sprintf("%d guests, %d nodes", stats.Guests, stats.Nodes)
+	}
+	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+		log.Printf("proxmox status write: %v", serr)
+	}
+	s.events.Broker().Publish("dashboard", "refresh")
 }
 
 func (s *Sync) upsertNode(node string) (int64, error) {
@@ -112,14 +147,7 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		if err := s.RunOnce(ctx); err != nil {
-			if !s.failing {
-				s.failing = true
-				s.events.Emit("scan_error", nil, "proxmox sync failing: "+err.Error())
-			}
-		} else {
-			s.failing = false
-		}
+		s.recordStatus(s.runAndCount(ctx))
 		select {
 		case <-ctx.Done():
 			return
