@@ -9,6 +9,7 @@ import (
 
 	"netis/internal/config"
 	"netis/internal/events"
+	"netis/internal/pihole"
 	"netis/internal/proxmox"
 	"netis/internal/scan"
 	"netis/internal/store"
@@ -64,6 +65,13 @@ func main() {
 		} else {
 			go wireguard.NewSync(st, runner, evs, wgIface).Start(ctx, time.Minute)
 		}
+	}
+
+	if phURL, _ := st.GetSetting("pihole_url"); phURL != "" {
+		phPass, _ := st.GetSetting("pihole_password")
+		phInsecure, _ := st.GetSetting("pihole_insecure")
+		ph := pihole.NewSync(st, pihole.NewClient(phURL, phPass, phInsecure == "1"), evs)
+		go ph.Start(ctx, time.Minute)
 	}
 
 	srv := web.NewServer(st, broker, sched)
