@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -63,11 +64,24 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-func newToken() string {
+func newToken() (string, error) {
 	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
+
+// dummyHash is a precomputed bcrypt hash compared against when a login
+// username is unknown, so unknown-user requests cost roughly the same as
+// known-user requests and don't leak timing information.
+var dummyHash = func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("netis-dummy-password"), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}()
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +127,27 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	username, password := r.FormValue("username"), r.FormValue("password")
 	u, ok, err := s.store.GetUserByName(username)
-	if err == nil && ok &&
-		bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil {
-		token := newToken()
+	var match bool
+	if err == nil && ok {
+		match = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
+	} else {
+		// Run a bcrypt compare against a dummy hash even when the user is
+		// unknown, so this path costs about the same as the known-user
+		// path and doesn't leak username validity via timing.
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+	}
+	if err == nil && ok && match {
+		token, terr := newToken()
+		if terr != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		expires := time.Now().UTC().Add(30 * 24 * time.Hour)
-		s.store.CreateSession(token, u.ID, expires.Format(time.RFC3339))
+		if serr := s.store.CreateSession(token, u.ID, expires.Format(time.RFC3339)); serr != nil {
+			log.Printf("create session: %v", serr)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		http.SetCookie(w, &http.Cookie{
 			Name: "netis_session", Value: token, Path: "/",
 			HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires,
@@ -152,9 +182,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username, password := r.FormValue("username"), r.FormValue("password")
-	if username == "" || len(password) < 6 {
+	if username == "" || len(password) < 8 {
 		w.WriteHeader(http.StatusBadRequest)
-		views.SetupPage("username required, password min 6 chars").Render(r.Context(), w)
+		views.SetupPage("username required, password min 8 chars").Render(r.Context(), w)
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -162,8 +192,13 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := s.store.CreateUser(username, string(hash), "admin"); err != nil {
+	created, err := s.store.CreateFirstAdmin(username, string(hash))
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !created {
+		http.Error(w, "already set up", http.StatusForbidden)
 		return
 	}
 	http.Redirect(w, r, "/login", http.StatusSeeOther)

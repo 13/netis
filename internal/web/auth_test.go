@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -41,7 +42,7 @@ func TestRedirectToSetupWhenNoUsers(t *testing.T) {
 
 func TestSetupCreatesAdminOnce(t *testing.T) {
 	srv, st := testServer(t)
-	form := url.Values{"username": {"ben"}, "password": {"secret"}}
+	form := url.Values{"username": {"ben"}, "password": {"secret123"}}
 	req := httptest.NewRequest("POST", "/setup", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -60,6 +61,31 @@ func TestSetupCreatesAdminOnce(t *testing.T) {
 	srv.Handler().ServeHTTP(rec2, req2)
 	if rec2.Code != 403 {
 		t.Fatalf("second setup code=%d", rec2.Code)
+	}
+}
+
+func TestSetupRaceCreatesOneAdmin(t *testing.T) {
+	srv, st := testServer(t)
+	usernames := []string{"alice", "bob"}
+	var wg sync.WaitGroup
+	for _, name := range usernames {
+		wg.Add(1)
+		go func(username string) {
+			defer wg.Done()
+			form := url.Values{"username": {username}, "password": {"secret123"}}
+			req := httptest.NewRequest("POST", "/setup", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+		}(name)
+	}
+	wg.Wait()
+	n, err := st.CountUsers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("CountUsers()=%d, want 1", n)
 	}
 }
 

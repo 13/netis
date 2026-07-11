@@ -35,6 +35,22 @@ func (s *Store) GetUserByName(username string) (User, bool, error) {
 	return u, true, nil
 }
 
+// CreateFirstAdmin inserts an admin user only if the user table is
+// currently empty, atomically. It reports whether the row was created.
+func (s *Store) CreateFirstAdmin(username, passwordHash string) (bool, error) {
+	res, err := s.DB.Exec(`INSERT INTO user (username,password_hash,role)
+		SELECT ?,?,'admin' WHERE NOT EXISTS (SELECT 1 FROM user)`,
+		username, passwordHash)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func (s *Store) CountUsers() (int, error) {
 	var n int
 	err := s.DB.QueryRow(`SELECT count(*) FROM user`).Scan(&n)
