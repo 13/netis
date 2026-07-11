@@ -13,6 +13,7 @@ import (
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web"
+	"netis/internal/wireguard"
 )
 
 func main() {
@@ -49,6 +50,20 @@ func main() {
 		insecure, _ := st.GetSetting("proxmox_insecure")
 		px := proxmox.NewSync(st, proxmox.NewClient(pxURL, tokenID, secret, insecure == "1"), evs)
 		go px.Start(ctx, time.Minute)
+	}
+
+	if wgAddr, _ := st.GetSetting("wg_ssh_addr"); wgAddr != "" {
+		wgUser, _ := st.GetSetting("wg_ssh_user")
+		wgKey, _ := st.GetSetting("wg_ssh_key_path")
+		wgIface, _ := st.GetSetting("wg_iface")
+		if wgIface == "" {
+			wgIface = "wg0"
+		}
+		if runner, err := wireguard.NewSSHRunner(wgAddr, wgUser, wgKey); err != nil {
+			log.Printf("wireguard ssh setup: %v", err)
+		} else {
+			go wireguard.NewSync(st, runner, evs, wgIface).Start(ctx, time.Minute)
+		}
 	}
 
 	srv := web.NewServer(st)
