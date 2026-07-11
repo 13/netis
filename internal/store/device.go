@@ -150,6 +150,37 @@ func (s *Store) RemoveIfaceIPsInSubnetExcept(ifaceID, subnetID int64, keepIP str
 	return err
 }
 
+// UpsertIPAssignment assigns ip to (ifaceID, subnetID) idempotently: it
+// inserts the row if absent, otherwise updates its kind. This lets a Pi-hole
+// reservation upgrade an existing dhcp assignment to static without creating a
+// duplicate row.
+func (s *Store) UpsertIPAssignment(ifaceID, subnetID int64, ip, kind string) error {
+	var id int64
+	err := s.DB.QueryRow(
+		`SELECT id FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip=?`,
+		ifaceID, subnetID, ip).Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = s.DB.Exec(
+				`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
+				ifaceID, subnetID, ip, kind)
+			return err
+		}
+		return err
+	}
+	_, err = s.DB.Exec(`UPDATE ip_assignment SET kind=? WHERE id=?`, kind, id)
+	return err
+}
+
+// SetIfaceHostnameIfEmpty sets the interface hostname only when it is not
+// already set, so an integration never clobbers a user- or scan-provided name.
+func (s *Store) SetIfaceHostnameIfEmpty(ifaceID int64, hostname string) error {
+	_, err := s.DB.Exec(
+		`UPDATE iface SET hostname=? WHERE id=? AND (hostname IS NULL OR hostname='')`,
+		hostname, ifaceID)
+	return err
+}
+
 func (s *Store) ListIPs(ifaceID int64) ([]IPRow, error) {
 	rows, err := s.DB.Query(`SELECT id,ip,subnet_id,kind FROM ip_assignment WHERE iface_id=?`, ifaceID)
 	if err != nil {
