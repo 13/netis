@@ -1,0 +1,54 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+// eventPageTypes is the fixed set of event types accepted by the schema's
+// CHECK constraint (see internal/store/migrations/0001_init.sql), in the
+// order shown in the filter <select>.
+var eventPageTypes = []string{"device_new", "online", "offline", "ip_changed", "scan_error"}
+
+templ EventsPage(username string, evs []store.Event, typeFilter string) {
+	@Layout("Events", username) {
+		<h1>Events</h1>
+		<form method="get" action="/events">
+			<label>
+				Type
+				<select name="type" onchange="this.form.submit()">
+					<option value="">all</option>
+					for _, t := range eventPageTypes {
+						if t == typeFilter {
+							<option value={ t } selected>{ t }</option>
+						} else {
+							<option value={ t }>{ t }</option>
+						}
+					}
+				</select>
+			</label>
+			<noscript><button type="submit">Filter</button></noscript>
+		</form>
+		<table>
+			<tr>
+				<th>Time</th>
+				<th>Type</th>
+				<th>Device</th>
+				<th>Details</th>
+			</tr>
+			for _, e := range evs {
+				<tr>
+					<td class="mono">{ e.TS }</td>
+					<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+					<td>
+						if e.DeviceID != nil {
+							<a href={ templ.URL(fmt.Sprintf("/devices/%d", *e.DeviceID)) }>{ fmt.Sprint(*e.DeviceID) }</a>
+						}
+					</td>
+					<td>{ e.Details }</td>
+				</tr>
+			}
+		</table>
+	}
+}

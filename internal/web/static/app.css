@@ -1,0 +1,33 @@
+:root { --bg:#111418; --fg:#e6e6e6; --card:#1b2027; --ok:#3fb950; --bad:#f85149;
+        --warn:#d29922; --muted:#8b949e; --free:#2d333b; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+       font:15px/1.5 system-ui, sans-serif; }
+nav { display:flex; gap:1rem; align-items:center; padding:.6rem 1rem;
+      background:var(--card); }
+nav a { color:var(--fg); text-decoration:none; }
+nav .brand { font-weight:700; }
+nav .logout { margin-left:auto; display:flex; gap:.5rem; align-items:center; }
+main { padding:1rem; max-width:1100px; margin:0 auto; }
+.mono { font-family:ui-monospace, monospace; }
+.cards { display:flex; flex-wrap:wrap; gap:1rem; }
+.card { background:var(--card); border-radius:8px; padding:1rem;
+        color:var(--fg); text-decoration:none; min-width:220px; }
+.ok { color:var(--ok); } .error { color:var(--bad); }
+table { width:100%; border-collapse:collapse; }
+td, th { padding:.35rem .5rem; border-bottom:1px solid var(--free); text-align:left; }
+.badge { padding:0 .4rem; border-radius:4px; font-size:.85em; background:var(--free); }
+.badge.online { color:var(--ok); } .badge.offline { color:var(--bad); }
+.badge.device_new { color:var(--warn); } .badge.scan_error { color:var(--bad); }
+.grid { display:grid; grid-template-columns:repeat(16, 28px); gap:3px; }
+.sq { width:28px; height:28px; border-radius:4px; background:var(--free);
+      display:block; position:relative; }
+.sq.online { background:var(--ok); } .sq.offline { background:#57606a; }
+.sq.reserved { background:var(--warn); } .sq.conflict { background:var(--bad); }
+.auth { display:grid; place-items:center; min-height:100vh; }
+.auth-card { background:var(--card); padding:2rem; border-radius:8px;
+             display:flex; flex-direction:column; gap:.75rem; width:280px; }
+input, select, button { padding:.5rem; border-radius:6px; border:1px solid var(--free);
+                        background:var(--bg); color:var(--fg); }
+button { cursor:pointer; background:var(--free); }
+form.inline { display:inline-block; margin-right:.5rem; }

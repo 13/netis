@@ -1,0 +1,217 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+// subnetKinds is the fixed set of subnet kinds accepted by the schema's
+// CHECK constraint (see internal/store/migrations/0001_init.sql).
+var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
+
+// SettingsData is the view-model for the settings page: current subnets,
+// users, and a flattened map of setting values for form defaults. Values
+// never contains proxmox_secret — the integrations form always renders that
+// field blank so the stored secret is never echoed back to the browser.
+type SettingsData struct {
+	Subnets []store.Subnet
+	Users   []store.User
+	Values  map[string]string
+}
+
+templ SettingsPage(username string, d SettingsData) {
+	@Layout("Settings", username) {
+		<h1>Settings</h1>
+
+		<h2>Subnets</h2>
+		<table>
+			<tr>
+				<th>CIDR</th>
+				<th>Name</th>
+				<th>Kind</th>
+				<th>Scan enabled</th>
+				<th>Interval (s)</th>
+				<th></th>
+			</tr>
+			for _, sn := range d.Subnets {
+				<tr>
+					<td class="mono">{ sn.CIDR }</td>
+					<td>{ sn.Name }</td>
+					<td>{ sn.Kind }</td>
+					<td>
+						if sn.ScanEnabled {
+							<span class="ok">yes</span>
+						} else {
+							<span class="muted">no</span>
+						}
+					</td>
+					<td>{ fmt.Sprint(sn.ScanIntervalSec) }</td>
+					<td>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
+							<button type="submit">delete</button>
+						</form>
+					</td>
+				</tr>
+				<tr>
+					<td colspan="6">
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) } class="inline">
+							<input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/>
+							<input type="text" name="name" value={ sn.Name } required/>
+							<select name="kind">
+								for _, k := range subnetKinds {
+									if k == sn.Kind {
+										<option value={ k } selected>{ k }</option>
+									} else {
+										<option value={ k }>{ k }</option>
+									}
+								}
+							</select>
+							<input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/>
+							<label>
+								<input
+									type="checkbox" name="scan_enabled"
+									if sn.ScanEnabled {
+										checked
+									}
+								/>
+								Scan enabled
+							</label>
+							<button type="submit">save</button>
+						</form>
+					</td>
+				</tr>
+			}
+		</table>
+		<form method="post" action="/settings/subnets" class="auth-card">
+			<label>
+				CIDR
+				<input type="text" name="cidr" placeholder="192.168.1.0/24" required/>
+			</label>
+			<label>
+				Name
+				<input type="text" name="name" required/>
+			</label>
+			<label>
+				Kind
+				<select name="kind">
+					for _, k := range subnetKinds {
+						<option value={ k }>{ k }</option>
+					}
+				</select>
+			</label>
+			<label>
+				Scan interval (s)
+				<input type="number" name="scan_interval_sec" value="120" min="30"/>
+			</label>
+			<label>
+				<input type="checkbox" name="scan_enabled" checked/>
+				Scan enabled
+			</label>
+			<button type="submit">Add subnet</button>
+		</form>
+
+		<h2>Integrations</h2>
+		<p class="muted">restart netis to apply integration changes</p>
+		<form method="post" action="/settings/integrations" class="auth-card">
+			<fieldset>
+				<legend>Proxmox</legend>
+				<label>
+					URL
+					<input type="text" name="proxmox_url" value={ d.Values["proxmox_url"] } placeholder="https://proxmox.local:8006"/>
+				</label>
+				<label>
+					Token ID
+					<input type="text" name="proxmox_token_id" value={ d.Values["proxmox_token_id"] }/>
+				</label>
+				<label>
+					Secret
+					<input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/>
+				</label>
+				<label>
+					<input
+						type="checkbox" name="proxmox_insecure"
+						if d.Values["proxmox_insecure"] == "1" {
+							checked
+						}
+					/>
+					Skip TLS verification
+				</label>
+			</fieldset>
+			<fieldset>
+				<legend>WireGuard (via SSH)</legend>
+				<label>
+					SSH address
+					<input type="text" name="wg_ssh_addr" value={ d.Values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/>
+				</label>
+				<label>
+					SSH user
+					<input type="text" name="wg_ssh_user" value={ d.Values["wg_ssh_user"] }/>
+				</label>
+				<label>
+					SSH key path
+					<input type="text" name="wg_ssh_key_path" value={ d.Values["wg_ssh_key_path"] }/>
+				</label>
+				<label>
+					Interface
+					<input type="text" name="wg_iface" value={ d.Values["wg_iface"] } placeholder="wg0"/>
+				</label>
+			</fieldset>
+			<button type="submit">Save integrations</button>
+		</form>
+
+		<h2>Users</h2>
+		<table>
+			<tr>
+				<th>Username</th>
+				<th>Role</th>
+				<th></th>
+			</tr>
+			for _, u := range d.Users {
+				<tr>
+					<td>{ u.Username }</td>
+					<td>{ u.Role }</td>
+					<td>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline">
+							<button type="submit">delete</button>
+						</form>
+					</td>
+				</tr>
+			}
+		</table>
+		<form method="post" action="/settings/users" class="auth-card">
+			<label>
+				Username
+				<input type="text" name="username" required/>
+			</label>
+			<label>
+				Password
+				<input type="password" name="password" minlength="6" required/>
+			</label>
+			<label>
+				Role
+				<select name="role">
+					<option value="viewer">viewer</option>
+					<option value="admin">admin</option>
+				</select>
+			</label>
+			<button type="submit">Add user</button>
+		</form>
+
+		<h2>General</h2>
+		<form method="post" action="/settings/general" class="auth-card">
+			<label>
+				Offline after (missed scans)
+				<input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/>
+			</label>
+			<button type="submit">Save</button>
+		</form>
+	}
+}
+
+func generalOfflineAfter(values map[string]string) string {
+	if v := values["offline_after"]; v != "" {
+		return v
+	}
+	return "3"
+}
