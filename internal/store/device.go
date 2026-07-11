@@ -1,5 +1,10 @@
 package store
 
+import (
+	"database/sql"
+	"errors"
+)
+
 type Device struct {
 	ID             int64
 	Name           string
@@ -103,7 +108,7 @@ func (s *Store) FindIfaceByMAC(mac string) (Iface, bool, error) {
 	err := s.DB.QueryRow(`SELECT id,device_id,mac,hostname FROM iface WHERE mac=?`, mac).
 		Scan(&i.ID, &i.DeviceID, &i.MAC, &i.Hostname)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return i, false, nil
 		}
 		return i, false, err
@@ -117,7 +122,7 @@ func (s *Store) FindIfaceByIP(subnetID int64, ip string) (Iface, bool, error) {
 		JOIN ip_assignment a ON a.iface_id=f.id WHERE a.subnet_id=? AND a.ip=?`, subnetID, ip).
 		Scan(&i.ID, &i.DeviceID, &i.MAC, &i.Hostname)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if errors.Is(err, sql.ErrNoRows) {
 			return i, false, nil
 		}
 		return i, false, err
