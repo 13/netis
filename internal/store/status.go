@@ -1,11 +1,18 @@
 package store
 
-import "time"
+import (
+	"database/sql"
+	"errors"
+	"time"
+)
 
 func (s *Store) MarkSeen(ifaceID int64, rttMS float64, at time.Time) (bool, error) {
 	ts := at.UTC().Format(time.RFC3339)
 	var online bool
 	err := s.DB.QueryRow(`SELECT online FROM iface_status WHERE iface_id=?`, ifaceID).Scan(&online)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
 	wasOffline := err != nil || !online
 	_, err = s.DB.Exec(`INSERT INTO iface_status (iface_id,online,first_seen,last_seen,last_rtt_ms,missed_sweeps)
 		VALUES (?,1,?,?,?,0)
@@ -21,8 +28,11 @@ func (s *Store) MarkMissed(ifaceID int64, offlineAfter int) (bool, error) {
 	var missed int
 	err := s.DB.QueryRow(`SELECT online,missed_sweeps FROM iface_status WHERE iface_id=?`, ifaceID).
 		Scan(&online, &missed)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil // never seen: nothing to mark
+	}
+	if err != nil {
+		return false, err
 	}
 	missed++
 	wentOffline := online && missed >= offlineAfter
