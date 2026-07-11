@@ -113,6 +113,25 @@ database's key/value settings table:
 | `wg_ssh_user` | SSH username for the WireGuard host. |
 | `wg_ssh_key_path` | Path to the SSH private key used to connect. |
 | `wg_iface` | WireGuard interface name to poll (default `wg0`). |
+| `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
+| `pihole_password` | Pi-hole app password (never shown back in the UI). |
+| `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
+
+### Pi-hole (v6)
+
+Set in Settings → Integrations, or as `setting` rows:
+
+- `pihole_url` — base URL of the Pi-hole admin, e.g. `https://pi.hole` (empty disables the integration)
+- `pihole_password` — Pi-hole app password (never shown back in the UI)
+- `pihole_insecure` — `1` to skip TLS verification (self-signed certs)
+
+When configured, netis polls Pi-hole every minute and merges DHCP leases,
+static reservations, and local DNS A records into the device inventory:
+devices are matched by MAC (unknown MACs are created with source `pihole`),
+reservations mark their IP `static`, and DNS names attach to the matching
+device. Pi-hole data never changes a device's online/last-seen status — that
+stays driven by the scanner. IPs are only attached when they fall inside a
+subnet you've configured in netis.
 
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after

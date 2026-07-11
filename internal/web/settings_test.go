@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -56,6 +57,34 @@ func TestCannotDeleteLastAdmin(t *testing.T) {
 	}
 	if n, _ := st.CountUsers(); n != 1 {
 		t.Fatal("admin must survive")
+	}
+}
+
+func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
+	srv, st := testServer(t)
+	// Seed a stored password, then load the settings page as admin.
+	st.SetSetting("pihole_password", "topsecret")
+	rec := authedGet(t, srv, st, "/settings")
+	if rec.Code != 200 {
+		t.Fatalf("settings page code=%d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "topsecret") {
+		t.Fatal("pihole_password must never be rendered into the settings form")
+	}
+	// Posting integrations with a blank pihole_password keeps the stored value.
+	authedPost(t, srv, st, "/settings/integrations", url.Values{
+		"pihole_url":      {"https://pi.hole"},
+		"pihole_password": {""},
+		"pihole_insecure": {"on"},
+	})
+	if v, _ := st.GetSetting("pihole_password"); v != "topsecret" {
+		t.Fatalf("blank password should keep stored value, got %q", v)
+	}
+	if v, _ := st.GetSetting("pihole_insecure"); v != "1" {
+		t.Fatalf("insecure checkbox should normalize to '1', got %q", v)
+	}
+	if v, _ := st.GetSetting("pihole_url"); v != "https://pi.hole" {
+		t.Fatalf("url not saved: %q", v)
 	}
 }
 

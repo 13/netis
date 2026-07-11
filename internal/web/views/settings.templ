@@ -12,8 +12,9 @@ var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 
 // SettingsData is the view-model for the settings page: current subnets,
 // users, and a flattened map of setting values for form defaults. Values
-// never contains proxmox_secret — the integrations form always renders that
-// field blank so the stored secret is never echoed back to the browser.
+// never contains proxmox_secret or pihole_password — the integrations form
+// always renders those fields blank so the stored secrets are never echoed
+// back to the browser.
 type SettingsData struct {
 	Subnets []store.Subnet
 	Users   []store.User
@@ -155,6 +156,26 @@ templ SettingsPage(username string, d SettingsData) {
 				<label>
 					Interface
 					<input type="text" name="wg_iface" value={ d.Values["wg_iface"] } placeholder="wg0"/>
+				</label>
+			</fieldset>
+			<fieldset>
+				<legend>Pi-hole (v6)</legend>
+				<label>
+					URL
+					<input type="text" name="pihole_url" value={ d.Values["pihole_url"] } placeholder="https://pi.hole"/>
+				</label>
+				<label>
+					App password
+					<input type="password" name="pihole_password" placeholder="leave blank to keep current password"/>
+				</label>
+				<label>
+					<input
+						type="checkbox" name="pihole_insecure"
+						if d.Values["pihole_insecure"] == "1" {
+							checked
+						}
+					/>
+					Skip TLS verification
 				</label>
 			</fieldset>
 			<button type="submit">Save integrations</button>

@@ -81,3 +81,52 @@ func TestRemoveIfaceIPsKeepsStatic(t *testing.T) {
 		t.Fatalf("ips after cleanup = %+v, want only static 10.0.0.5 kept", got)
 	}
 }
+
+func TestUpsertIPAssignment(t *testing.T) {
+	s := openTest(t)
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(Device{Name: "d", Kind: "other", Source: "pihole"})
+	ifID, _ := s.AddIface(devID, strp("aa:bb:cc:00:00:01"), nil)
+
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.5", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	// Re-run: no duplicate row.
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.5", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ := s.ListIPs(ifID)
+	if len(ips) != 1 {
+		t.Fatalf("want 1 assignment, got %d: %+v", len(ips), ips)
+	}
+	// Upgrade dhcp -> static.
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.5", "static"); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ = s.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].Kind != "static" {
+		t.Fatalf("want single static assignment, got %+v", ips)
+	}
+}
+
+func TestSetIfaceHostnameIfEmpty(t *testing.T) {
+	s := openTest(t)
+	devID, _ := s.CreateDevice(Device{Name: "d", Kind: "other", Source: "pihole"})
+	ifID, _ := s.AddIface(devID, strp("aa:bb:cc:00:00:02"), nil)
+
+	if err := s.SetIfaceHostnameIfEmpty(ifID, "nas.lan"); err != nil {
+		t.Fatal(err)
+	}
+	ifaces, _ := s.ListIfaces(devID)
+	if ifaces[0].Hostname == nil || *ifaces[0].Hostname != "nas.lan" {
+		t.Fatalf("hostname not set: %+v", ifaces[0])
+	}
+	// Must not overwrite an existing hostname.
+	if err := s.SetIfaceHostnameIfEmpty(ifID, "other.lan"); err != nil {
+		t.Fatal(err)
+	}
+	ifaces, _ = s.ListIfaces(devID)
+	if *ifaces[0].Hostname != "nas.lan" {
+		t.Fatalf("hostname was overwritten: %q", *ifaces[0].Hostname)
+	}
+}

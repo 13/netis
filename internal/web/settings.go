@@ -15,11 +15,13 @@ import (
 )
 
 // settingsKeys is the fixed set of settings written by the integrations
-// form. proxmox_secret is handled specially: it's never echoed back into the
-// form, and posting a blank value keeps the existing stored secret.
+// form. proxmox_secret and pihole_password are handled specially: they're
+// never echoed back into the form, and posting a blank value keeps the
+// existing stored secret.
 var settingsKeys = []string{
 	"proxmox_url", "proxmox_token_id", "proxmox_secret", "proxmox_insecure",
 	"wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path", "wg_iface",
+	"pihole_url", "pihole_password", "pihole_insecure",
 }
 
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
@@ -35,8 +37,8 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	values := make(map[string]string)
 	for _, k := range settingsKeys {
-		if k == "proxmox_secret" {
-			// Never echo the secret back into the form.
+		if k == "proxmox_secret" || k == "pihole_password" {
+			// Never echo secrets back into the form.
 			continue
 		}
 		v, err := s.store.GetSetting(k)
@@ -139,11 +141,11 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
 	for _, k := range settingsKeys {
 		v := r.FormValue(k)
-		if k == "proxmox_secret" && v == "" {
+		if (k == "proxmox_secret" || k == "pihole_password") && v == "" {
 			// Blank means "leave unchanged" — don't wipe the stored secret.
 			continue
 		}
-		if k == "proxmox_insecure" {
+		if k == "proxmox_insecure" || k == "pihole_insecure" {
 			// Normalize the checkbox ("on"/"") to the "1"/"" that main.go reads.
 			if v == "on" {
 				v = "1"
