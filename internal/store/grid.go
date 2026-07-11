@@ -11,7 +11,7 @@ type Occupant struct {
 }
 
 func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
-	rows, err := s.DB.Query(`SELECT a.ip, d.id, d.name,
+	rows, err := s.DB.Query(`SELECT a.ip, f.id, d.id, d.name,
 			COALESCE(f.mac,''), COALESCE(st.last_seen,''),
 			COALESCE(st.online,0), st.first_seen IS NOT NULL
 		FROM ip_assignment a
@@ -24,20 +24,29 @@ func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
 	}
 	defer rows.Close()
 	out := make(map[string]Occupant)
+	ifacesByIP := make(map[string]map[int64]bool) // distinct ifaces per IP → conflict count
 	for rows.Next() {
 		var o Occupant
 		var ip string
-		if err := rows.Scan(&ip, &o.DeviceID, &o.DeviceName, &o.MAC,
+		var ifaceID int64
+		if err := rows.Scan(&ip, &ifaceID, &o.DeviceID, &o.DeviceName, &o.MAC,
 			&o.LastSeen, &o.Online, &o.EverSeen); err != nil {
 			return nil, err
 		}
-		if prev, ok := out[ip]; ok {
-			prev.Count++
-			out[ip] = prev
-			continue
+		if ifacesByIP[ip] == nil {
+			ifacesByIP[ip] = make(map[int64]bool)
 		}
-		o.Count = 1
+		ifacesByIP[ip][ifaceID] = true
+		if _, ok := out[ip]; !ok {
+			out[ip] = o // first occupant's details represent the square
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for ip, o := range out {
+		o.Count = len(ifacesByIP[ip]) // conflict when >1 distinct iface claims the IP
 		out[ip] = o
 	}
-	return out, rows.Err()
+	return out, nil
 }

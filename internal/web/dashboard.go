@@ -23,7 +23,11 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		hosts, _ := scan.HostIPs(sn.CIDR)
-		row := views.DashRow{Subnet: sn, Used: len(occ), Free: len(hosts) - len(occ)}
+		free := len(hosts) - len(occ)
+		if free < 0 {
+			free = 0
+		}
+		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free}
 		seen := make(map[string]bool)
 		for _, o := range occ {
 			if o.Online {
