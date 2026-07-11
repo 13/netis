@@ -158,7 +158,12 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		s.recordStatus(s.runAndCount(ctx))
+		// Bound each cycle so a hung `wg show dump` over SSH can't stall the
+		// poller forever; a deadline surfaces as a RunOnce error and is
+		// recorded as a failing status.
+		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		s.recordStatus(s.runAndCount(cctx))
+		cancel()
 		select {
 		case <-ctx.Done():
 			return
