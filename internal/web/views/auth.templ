@@ -1,0 +1,44 @@
+package views
+
+templ authShell(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } — netis</title>
+			<link rel="stylesheet" href="/static/app.css"/>
+		</head>
+		<body class="auth">
+			{ children... }
+		</body>
+	</html>
+}
+
+templ LoginPage(errMsg string) {
+	@authShell("Login") {
+		<form method="post" action="/login" class="auth-card">
+			<h1>netis</h1>
+			if errMsg != "" {
+				<p class="error">{ errMsg }</p>
+			}
+			<input name="username" placeholder="username" autofocus required/>
+			<input name="password" type="password" placeholder="password" required/>
+			<button type="submit">Sign in</button>
+		</form>
+	}
+}
+
+templ SetupPage(errMsg string) {
+	@authShell("Setup") {
+		<form method="post" action="/setup" class="auth-card">
+			<h1>Create admin account</h1>
+			if errMsg != "" {
+				<p class="error">{ errMsg }</p>
+			}
+			<input name="username" placeholder="username" autofocus required/>
+			<input name="password" type="password" placeholder="password" required minlength="8"/>
+			<button type="submit">Create</button>
+		</form>
+	}
+}

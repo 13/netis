@@ -6,7 +6,7 @@ import (
 )
 
 func TestHealthz(t *testing.T) {
-	srv := NewServer()
+	srv, _ := testServer(t)
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
