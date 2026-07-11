@@ -3,7 +3,6 @@ package pihole
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/netip"
 	"time"
 
@@ -46,9 +45,9 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		return err
 	}
 
-	// (subnetID<<0, ip) pairs a reservation already claimed this run; leases
-	// for these skip assignment so a reservation's static kind is never
-	// downgraded to dhcp.
+	// claimed holds the "<subnetID>|<ip>" pairs a reservation assigned this
+	// run; a lease for one of these skips assignment so a reservation's static
+	// kind is never downgraded to dhcp.
 	claimed := make(map[string]bool)
 
 	for _, r := range reservations {
@@ -56,7 +55,9 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if !ok {
 			continue
 		}
-		s.upsertByMAC(r.MAC, r.IP, r.Hostname, snID, "static")
+		if err := s.upsertByMAC(r.MAC, r.IP, r.Hostname, snID, "static"); err != nil {
+			return err
+		}
 		claimed[fmt.Sprintf("%d|%s", snID, r.IP)] = true
 	}
 	for _, l := range leases {
@@ -67,12 +68,22 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if claimed[fmt.Sprintf("%d|%s", snID, l.IP)] {
 			// a reservation already assigned this IP as static; still enrich
 			// the hostname but do not touch the assignment kind
-			if iface, found, _ := s.store.FindIfaceByMAC(l.MAC); found && l.Hostname != "" {
-				s.store.SetIfaceHostnameIfEmpty(iface.ID, l.Hostname)
+			if l.Hostname != "" {
+				iface, found, err := s.store.FindIfaceByMAC(l.MAC)
+				if err != nil {
+					return err
+				}
+				if found {
+					if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, l.Hostname); err != nil {
+						return err
+					}
+				}
 			}
 			continue
 		}
-		s.upsertByMAC(l.MAC, l.IP, l.Hostname, snID, "dhcp")
+		if err := s.upsertByMAC(l.MAC, l.IP, l.Hostname, snID, "dhcp"); err != nil {
+			return err
+		}
 	}
 	for _, rec := range dns {
 		snID, ok := subnetForIP(subnets, rec.IP)
@@ -86,26 +97,33 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if !found {
 			continue // never create a device from a DNS record alone
 		}
-		s.store.SetIfaceHostnameIfEmpty(iface.ID, rec.Name)
-		s.store.SetCustomField(iface.DeviceID, "pihole_dns", rec.Name)
+		if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, rec.Name); err != nil {
+			return err
+		}
+		if err := s.store.SetCustomField(iface.DeviceID, "pihole_dns", rec.Name); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // upsertByMAC enriches an existing device (matched by MAC) or creates a new
-// pihole-sourced device, then assigns the IP with the given kind.
-func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string) {
+// pihole-sourced device, then assigns the IP with the given kind. A DB write
+// failure is returned so RunOnce surfaces it (and Start emits scan_error)
+// rather than silently reporting a healthy cycle.
+func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string) error {
 	iface, found, err := s.store.FindIfaceByMAC(mac)
 	if err != nil {
-		log.Printf("pihole: FindIfaceByMAC %s: %v", mac, err)
-		return
+		return err
 	}
 	if found {
-		s.store.UpsertIPAssignment(iface.ID, subnetID, ip, kind)
-		if hostname != "" {
-			s.store.SetIfaceHostnameIfEmpty(iface.ID, hostname)
+		if err := s.store.UpsertIPAssignment(iface.ID, subnetID, ip, kind); err != nil {
+			return err
 		}
-		return
+		if hostname != "" {
+			return s.store.SetIfaceHostnameIfEmpty(iface.ID, hostname)
+		}
+		return nil
 	}
 	name := hostname
 	if name == "" {
@@ -113,8 +131,7 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	}
 	devID, err := s.store.CreateDevice(store.Device{Name: name, Kind: "other", Source: "pihole"})
 	if err != nil {
-		log.Printf("pihole: CreateDevice: %v", err)
-		return
+		return err
 	}
 	m := mac
 	var hp *string
@@ -123,11 +140,13 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	}
 	ifID, err := s.store.AddIface(devID, &m, hp)
 	if err != nil {
-		log.Printf("pihole: AddIface: %v", err)
-		return
+		return err
 	}
-	s.store.UpsertIPAssignment(ifID, subnetID, ip, kind)
+	if err := s.store.UpsertIPAssignment(ifID, subnetID, ip, kind); err != nil {
+		return err
+	}
 	s.events.Emit("device_new", &devID, fmt.Sprintf("pihole device %s at %s", name, ip))
+	return nil
 }
 
 func subnetForIP(subnets []store.Subnet, ip string) (int64, bool) {
