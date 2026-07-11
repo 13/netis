@@ -143,6 +143,14 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 			// Blank means "leave unchanged" — don't wipe the stored secret.
 			continue
 		}
+		if k == "proxmox_insecure" {
+			// Normalize the checkbox ("on"/"") to the "1"/"" that main.go reads.
+			if v == "on" {
+				v = "1"
+			} else {
+				v = ""
+			}
+		}
 		if err := s.store.SetSetting(k, v); err != nil {
 			http.Error(w, err.Error(), 500)
 			return

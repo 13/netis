@@ -131,7 +131,7 @@ templ SettingsPage(username string, d SettingsData) {
 				<label>
 					<input
 						type="checkbox" name="proxmox_insecure"
-						if d.Values["proxmox_insecure"] == "on" {
+						if d.Values["proxmox_insecure"] == "1" {
 							checked
 						}
 					/>
