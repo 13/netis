@@ -39,6 +39,9 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("POST /setup", s.handleSetup)
 	s.mux.HandleFunc("GET /events/stream", s.handleSSE)
 	s.mux.HandleFunc("GET /{$}", s.handleDashboard)
+	s.mux.HandleFunc("GET /subnets/{id}", s.handleSubnetPage)
+	s.mux.HandleFunc("GET /subnets/{id}/grid", s.handleGridFrag)
+	s.mux.HandleFunc("POST /subnets/{id}/scan", s.requireAdmin(s.handleScanNow))
 	return s
 }
 

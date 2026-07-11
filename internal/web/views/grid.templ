@@ -1,0 +1,51 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+type GridCell struct {
+	IP       string
+	State    string
+	DeviceID int64
+	Title    string
+}
+
+templ GridPage(username string, sn store.Subnet, cells []GridCell) {
+	@Layout(sn.Name, username) {
+		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
+		<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-swap="none">Scan now</button>
+		<div
+			id="grid"
+			hx-get={ fmt.Sprintf("/subnets/%d/grid", sn.ID) }
+			hx-trigger={ fmt.Sprintf("sse:grid:%d", sn.ID) }
+		>
+			@GridFrag(sn, cells)
+		</div>
+		<p class="muted">
+			<span class="sq online"></span> online
+			<span class="sq offline"></span> offline
+			<span class="sq reserved"></span> reserved
+			<span class="sq"></span> free
+			<span class="sq conflict"></span> conflict
+		</p>
+	}
+}
+
+templ GridFrag(sn store.Subnet, cells []GridCell) {
+	<div class="grid">
+		for _, c := range cells {
+			if c.DeviceID > 0 {
+				<a
+					class={ "sq", c.State }
+					href={ templ.URL(fmt.Sprintf("/devices/%d", c.DeviceID)) }
+					title={ c.Title }
+				></a>
+			} else {
+				<span class={ "sq", c.State } title={ c.Title }></span>
+			}
+		}
+	</div>
+}
