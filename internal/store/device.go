@@ -209,6 +209,32 @@ func (s *Store) ListDevices() ([]DeviceRow, error) {
 	return out, nil
 }
 
+type SubnetIfaceIP struct {
+	IfaceID  int64
+	DeviceID int64
+	IP       string
+	MAC      *string
+}
+
+func (s *Store) ListSubnetIfaceIPs(subnetID int64) ([]SubnetIfaceIP, error) {
+	rows, err := s.DB.Query(`SELECT f.id, f.device_id, a.ip, f.mac
+		FROM ip_assignment a JOIN iface f ON f.id=a.iface_id
+		WHERE a.subnet_id=?`, subnetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SubnetIfaceIP
+	for rows.Next() {
+		var r SubnetIfaceIP
+		if err := rows.Scan(&r.IfaceID, &r.DeviceID, &r.IP, &r.MAC); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // ifaceOnline and deviceTagNames get real implementations in Task 4;
 // these stubs keep Task 3 self-contained.
 func (s *Store) ifaceOnline(ifaceID int64) (bool, *string, error) {
