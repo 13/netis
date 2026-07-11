@@ -5,9 +5,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"netis/internal/config"
 	"netis/internal/events"
+	"netis/internal/proxmox"
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web"
@@ -40,6 +42,14 @@ func main() {
 	sched := scan.NewScheduler(engine, st)
 	ctx := context.Background()
 	go sched.Start(ctx)
+
+	if pxURL, _ := st.GetSetting("proxmox_url"); pxURL != "" {
+		tokenID, _ := st.GetSetting("proxmox_token_id")
+		secret, _ := st.GetSetting("proxmox_secret")
+		insecure, _ := st.GetSetting("proxmox_insecure")
+		px := proxmox.NewSync(st, proxmox.NewClient(pxURL, tokenID, secret, insecure == "1"), evs)
+		go px.Start(ctx, time.Minute)
+	}
 
 	srv := web.NewServer(st)
 	log.Printf("netis listening on %s", cfg.Addr)
