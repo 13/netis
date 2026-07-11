@@ -1,6 +1,8 @@
 package web
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -75,6 +77,14 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if _, err := s.store.GetSubnet(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	sn, ok := parseSubnetForm(w, r)
 	if !ok {
 		return
@@ -88,10 +98,13 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseSubnetForm validates and builds a store.Subnet from the request form,
-// writing a 400 response and returning ok=false on validation failure.
+// writing a 400 response and returning ok=false on validation failure. The
+// CIDR is normalized to its masked form (e.g. "10.0.0.5/24" -> "10.0.0.0/24")
+// so stored subnets are always canonical regardless of what a user typed.
 func parseSubnetForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool) {
 	cidr := strings.TrimSpace(r.FormValue("cidr"))
-	if _, err := netip.ParsePrefix(cidr); err != nil {
+	prefix, err := netip.ParsePrefix(cidr)
+	if err != nil {
 		http.Error(w, "invalid CIDR", 400)
 		return store.Subnet{}, false
 	}
@@ -105,7 +118,7 @@ func parseSubnetForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool
 		interval = 120
 	}
 	return store.Subnet{
-		CIDR: cidr, Name: r.FormValue("name"), Kind: kind,
+		CIDR: prefix.Masked().String(), Name: r.FormValue("name"), Kind: kind,
 		ScanEnabled: r.FormValue("scan_enabled") == "on", ScanIntervalSec: interval,
 	}, true
 }
@@ -168,31 +181,36 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	users, err := s.store.ListUsers()
+	// DeleteUserGuarded performs the existence check, admin count, and
+	// delete atomically in a single SQL statement so two concurrent
+	// deletes of two different admins can't both succeed and leave zero
+	// admins (a TOCTOU race a separate ListUsers-then-DeleteUser sequence
+	// would be vulnerable to).
+	deleted, err := s.store.DeleteUserGuarded(id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	admins := 0
-	var target *store.User
-	for i, u := range users {
-		if u.Role == "admin" {
-			admins++
+	if !deleted {
+		// Distinguish "no such user" (404) from "refused: last admin"
+		// (400) for a useful error response.
+		users, err := s.store.ListUsers()
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
 		}
-		if u.ID == id {
-			target = &users[i]
+		exists := false
+		for _, u := range users {
+			if u.ID == id {
+				exists = true
+				break
+			}
 		}
-	}
-	if target == nil {
-		http.NotFound(w, r)
-		return
-	}
-	if target.Role == "admin" && admins <= 1 {
+		if !exists {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, "cannot delete the last admin", 400)
-		return
-	}
-	if err := s.store.DeleteUser(id); err != nil {
-		http.Error(w, err.Error(), 500)
 		return
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

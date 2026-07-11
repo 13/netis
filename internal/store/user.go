@@ -79,6 +79,26 @@ func (s *Store) DeleteUser(id int64) error {
 	return err
 }
 
+// DeleteUserGuarded deletes the user with the given id, refusing to do so if
+// it would remove the last remaining admin. The existence check, admin
+// count, and delete all happen within a single SQL statement so the guard
+// is atomic even under concurrent calls (unlike a separate
+// ListUsers-then-DeleteUser sequence, which is vulnerable to a TOCTOU race
+// where two concurrent admin deletions both pass the "admins > 1" check).
+// It reports whether a row was actually deleted.
+func (s *Store) DeleteUserGuarded(id int64) (deleted bool, err error) {
+	res, err := s.DB.Exec(`DELETE FROM user WHERE id=? AND
+		(role<>'admin' OR (SELECT COUNT(*) FROM user WHERE role='admin') > 1)`, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func (s *Store) CreateSession(token string, userID int64, expiresAt string) error {
 	_, err := s.DB.Exec(`INSERT INTO session (token,user_id,expires_at) VALUES (?,?,?)`,
 		token, userID, expiresAt)

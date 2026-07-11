@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -54,5 +56,50 @@ func TestCannotDeleteLastAdmin(t *testing.T) {
 	}
 	if n, _ := st.CountUsers(); n != 1 {
 		t.Fatal("admin must survive")
+	}
+}
+
+// TestConcurrentAdminDeleteKeepsOne guards against a TOCTOU race in the
+// last-admin delete check: two concurrent deletes of two different admins
+// must not both succeed, which would leave zero admins (a permanent
+// lockout, since /setup refuses once any user exists).
+func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
+	srv, st := testServer(t)
+	authedGet(t, srv, st, "/") // creates admin "ben" (id=1) + session "testtok"
+	ben, ok, err := st.GetUserByName("ben")
+	if err != nil || !ok {
+		t.Fatalf("ben=%+v ok=%v err=%v", ben, ok, err)
+	}
+	admin2ID, err := st.CreateUser("admin2", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := []int64{ben.ID, admin2ID}
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id int64) {
+			defer wg.Done()
+			req := httptest.NewRequest("POST", "/settings/users/"+strconv.FormatInt(id, 10)+"/delete", nil)
+			req.AddCookie(&http.Cookie{Name: "netis_session", Value: "testtok"})
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+		}(id)
+	}
+	wg.Wait()
+
+	users, err := st.ListUsers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	admins := 0
+	for _, u := range users {
+		if u.Role == "admin" {
+			admins++
+		}
+	}
+	if admins < 1 {
+		t.Fatalf("expected at least 1 admin remaining, got %d (users=%+v)", admins, users)
 	}
 }

@@ -67,3 +67,52 @@ func TestTagsFieldsLinksPortsUsersSettings(t *testing.T) {
 		t.Fatalf("setting=%q", v)
 	}
 }
+
+func TestDeleteUserGuardedKeepsLastAdmin(t *testing.T) {
+	s := openTest(t)
+
+	adminID, err := s.CreateUser("admin1", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Sole admin: guard must refuse.
+	deleted, err := s.DeleteUserGuarded(adminID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted {
+		t.Fatal("expected sole admin to survive DeleteUserGuarded")
+	}
+	if _, ok, _ := s.GetUserByName("admin1"); !ok {
+		t.Fatal("sole admin was deleted")
+	}
+
+	// Add a second admin: now one of them can be deleted.
+	admin2ID, err := s.CreateUser("admin2", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted, err = s.DeleteUserGuarded(admin2ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("expected second admin deletion to succeed")
+	}
+	if n, _ := s.CountUsers(); n != 1 {
+		t.Fatalf("expected 1 user remaining, got %d", n)
+	}
+
+	// Back down to a single admin: guard must refuse again.
+	deleted, err = s.DeleteUserGuarded(adminID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted {
+		t.Fatal("expected last remaining admin to survive DeleteUserGuarded")
+	}
+	if n, _ := s.CountUsers(); n != 1 {
+		t.Fatalf("expected 1 user remaining, got %d", n)
+	}
+}

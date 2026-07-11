@@ -53,6 +53,34 @@ templ SettingsPage(username string, d SettingsData) {
 						</form>
 					</td>
 				</tr>
+				<tr>
+					<td colspan="6">
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) } class="inline">
+							<input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/>
+							<input type="text" name="name" value={ sn.Name } required/>
+							<select name="kind">
+								for _, k := range subnetKinds {
+									if k == sn.Kind {
+										<option value={ k } selected>{ k }</option>
+									} else {
+										<option value={ k }>{ k }</option>
+									}
+								}
+							</select>
+							<input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/>
+							<label>
+								<input
+									type="checkbox" name="scan_enabled"
+									if sn.ScanEnabled {
+										checked
+									}
+								/>
+								Scan enabled
+							</label>
+							<button type="submit">save</button>
+						</form>
+					</td>
+				</tr>
 			}
 		</table>
 		<form method="post" action="/settings/subnets" class="auth-card">
