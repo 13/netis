@@ -104,6 +104,10 @@ func (s *Store) applyMigration(name, script string) error {
 	for rows.Next() {
 		violations++
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("migration %s fk check: %w", name, err)
+	}
 	rows.Close()
 	if violations > 0 {
 		return fmt.Errorf("migration %s: %d foreign key violation(s)", name, violations)
