@@ -31,3 +31,10 @@ input, select, button { padding:.5rem; border-radius:6px; border:1px solid var(-
                         background:var(--bg); color:var(--fg); }
 button { cursor:pointer; background:var(--free); }
 form.inline { display:inline-block; margin-right:.5rem; }
+.stats { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.stat { background:var(--card); border-radius:8px; padding:.6rem 1rem; }
+.stat .num { font-size:1.4rem; font-weight:700; display:block; }
+.stat .num.ok { color:var(--ok); } .stat .num.warn { color:var(--warn); }
+.band { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.panel { background:var(--card); border-radius:8px; padding:1rem; flex:1; min-width:280px; }
+.panel ul { margin:0; padding-left:1.1rem; }
