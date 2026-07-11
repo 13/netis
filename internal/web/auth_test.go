@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"netis/internal/events"
 	"netis/internal/store"
 )
 
@@ -20,7 +21,7 @@ func testServer(t *testing.T) (*Server, *store.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return NewServer(st), st
+	return NewServer(st, events.NewBroker(), nil), st
 }
 
 func addAdmin(t *testing.T, st *store.Store) {

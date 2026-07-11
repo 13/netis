@@ -1,0 +1,47 @@
+package views
+
+import (
+	"fmt"
+	"strings"
+
+	"netis/internal/store"
+)
+
+type DashRow struct {
+	Subnet    store.Subnet
+	Online    int
+	Used      int
+	Free      int
+	Occupants []string
+}
+
+templ Dashboard(username string, rows []DashRow, evs []store.Event) {
+	@Layout("Dashboard", username) {
+		<h1>Dashboard</h1>
+		<div class="cards">
+			for _, r := range rows {
+				<a class="card" href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>
+					<h2>{ r.Subnet.Name }</h2>
+					<p class="mono">{ r.Subnet.CIDR }</p>
+					<p>
+						<span class="ok">{ fmt.Sprint(r.Online) } online</span> ·
+						{ fmt.Sprint(r.Used) } used · { fmt.Sprint(r.Free) } free
+					</p>
+					if len(r.Occupants) > 0 {
+						<p class="mono occupants">{ strings.Join(r.Occupants, ", ") }</p>
+					}
+				</a>
+			}
+		</div>
+		<h2>Recent events</h2>
+		<table>
+			for _, e := range evs {
+				<tr>
+					<td class="mono">{ e.TS }</td>
+					<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+					<td>{ e.Details }</td>
+				</tr>
+			}
+		</table>
+	}
+}

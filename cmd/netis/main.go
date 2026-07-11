@@ -66,7 +66,7 @@ func main() {
 		}
 	}
 
-	srv := web.NewServer(st)
+	srv := web.NewServer(st, broker, sched)
 	log.Printf("netis listening on %s", cfg.Addr)
 	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
 }
