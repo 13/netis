@@ -30,3 +30,4 @@ td, th { padding:.35rem .5rem; border-bottom:1px solid var(--free); text-align:l
 input, select, button { padding:.5rem; border-radius:6px; border:1px solid var(--free);
                         background:var(--bg); color:var(--fg); }
 button { cursor:pointer; background:var(--free); }
+form.inline { display:inline-block; margin-right:.5rem; }

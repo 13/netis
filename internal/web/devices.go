@@ -337,6 +337,14 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if _, err := s.store.GetDevice(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	ifaces, err := s.store.ListIfaces(id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -362,6 +370,14 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	if _, err := s.store.GetDevice(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
 		return
 	}
 	ifaces, err := s.store.ListIfaces(id)

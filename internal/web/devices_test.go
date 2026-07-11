@@ -22,6 +22,27 @@ func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form ur
 	return rec
 }
 
+func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
+	srv, st := testServer(t)
+	for _, path := range []string{"/devices/999/wol", "/devices/999/portscan"} {
+		rec := authedPost(t, srv, st, path, url.Values{})
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s on unknown device = %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestWOLDeviceWithoutMAC400(t *testing.T) {
+	srv, st := testServer(t)
+	devID, _ := st.CreateDevice(store.Device{Name: "nomac", Kind: "other", Source: "manual"})
+	st.AddIface(devID, nil, nil) // iface but no MAC
+	rec := authedPost(t, srv, st, "/devices/1/wol", url.Values{})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("WOL on device without MAC = %d, want 400", rec.Code)
+	}
+	_ = devID
+}
+
 func TestCreateAndShowDevice(t *testing.T) {
 	srv, st := testServer(t)
 	rec := authedPost(t, srv, st, "/devices", url.Values{
