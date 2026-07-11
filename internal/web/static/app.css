@@ -1,6 +1,7 @@
 :root { --bg:#111418; --fg:#e6e6e6; --card:#1b2027; --ok:#3fb950; --bad:#f85149;
         --warn:#d29922; --muted:#8b949e; --free:#2d333b; }
 * { box-sizing: border-box; }
+.muted { color: var(--muted); }
 body { margin:0; background:var(--bg); color:var(--fg);
        font:15px/1.5 system-ui, sans-serif; }
 nav { display:flex; gap:1rem; align-items:center; padding:.6rem 1rem;
