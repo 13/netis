@@ -42,8 +42,10 @@ func TestDashboardShowsSubnetCounts(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The redesigned card shows the subnet name/CIDR and an occupancy bar +
-	// legend (online/reserved/free counts) rather than occupant device names.
-	for _, want := range []string{"lab", "10.0.0.0/30", "online"} {
+	// legend rather than occupant device names. `class="occ"` is unique to a
+	// rendered subnet card (the stats bar also says "online", so asserting
+	// that word alone would be vacuous).
+	for _, want := range []string{"lab", "10.0.0.0/30", `class="occ"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
