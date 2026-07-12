@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"netis/internal/events"
 	"netis/internal/store"
@@ -36,5 +38,40 @@ func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
 	// Unknown integration name → error.
 	if err := runner.Run(context.Background(), "bogus"); err == nil {
 		t.Fatal("bogus integration should error")
+	}
+}
+
+func TestRunIntegrationLoopRunsThenStops(t *testing.T) {
+	var calls int32
+	runner := integrationRunner{
+		"x": func(ctx context.Context) error {
+			atomic.AddInt32(&calls, 1)
+			return errNotConfigured
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		runIntegrationLoop(ctx, runner, "x", time.Hour) // long interval: only the immediate run fires
+		close(done)
+	}()
+	// The loop runs the closure once immediately, before waiting on the ticker.
+	deadline := time.After(2 * time.Second)
+	for atomic.LoadInt32(&calls) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("loop never ran the closure")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("loop did not return after context cancel")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("closure called %d times, want exactly 1 (immediate run only)", got)
 	}
 }

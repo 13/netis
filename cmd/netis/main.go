@@ -77,6 +77,35 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) integrationRunne
 	}
 }
 
+// integrationNames is the fixed set of integrations the periodic sync drives.
+var integrationNames = []string{"proxmox", "pihole", "wireguard"}
+
+// startIntegrationSyncs periodically runs each integration from the current
+// settings so changes take effect without a restart.
+func startIntegrationSyncs(ctx context.Context, runNow integrationRunner, interval time.Duration) {
+	for _, name := range integrationNames {
+		go runIntegrationLoop(ctx, runNow, name, interval)
+	}
+}
+
+// runIntegrationLoop runs one integration immediately, then every interval,
+// reading current settings each time. An unconfigured integration
+// (errNotConfigured) is skipped silently; other errors are logged.
+func runIntegrationLoop(ctx context.Context, runNow integrationRunner, name string, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		if err := runNow.Run(ctx, name); err != nil && !errors.Is(err, errNotConfigured) {
+			log.Printf("integration %s: %v", name, err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func main() {
 	cfg := config.Load()
 	st, err := store.Open(cfg.DBPath)
@@ -106,33 +135,7 @@ func main() {
 	go sched.Start(ctx)
 
 	runNow := newIntegrationRunner(st, evs)
-
-	if pxURL, _ := st.GetSetting("proxmox_url"); pxURL != "" {
-		tokenID, _ := st.GetSetting("proxmox_token_id")
-		secret, _ := st.GetSetting("proxmox_secret")
-		insecure, _ := st.GetSetting("proxmox_insecure")
-		go proxmox.NewSync(st, proxmox.NewClient(pxURL, tokenID, secret, insecure == "1"), evs).Start(ctx, time.Minute)
-	}
-
-	if wgAddr, _ := st.GetSetting("wg_ssh_addr"); wgAddr != "" {
-		wgUser, _ := st.GetSetting("wg_ssh_user")
-		wgKey, _ := st.GetSetting("wg_ssh_key_path")
-		wgIface, _ := st.GetSetting("wg_iface")
-		if wgIface == "" {
-			wgIface = "wg0"
-		}
-		if sshRunner, err := wireguard.NewSSHRunner(wgAddr, wgUser, wgKey); err != nil {
-			log.Printf("wireguard ssh setup: %v", err)
-		} else {
-			go wireguard.NewSync(st, sshRunner, evs, wgIface).Start(ctx, time.Minute)
-		}
-	}
-
-	if phURL, _ := st.GetSetting("pihole_url"); phURL != "" {
-		phPass, _ := st.GetSetting("pihole_password")
-		phInsecure, _ := st.GetSetting("pihole_insecure")
-		go pihole.NewSync(st, pihole.NewClient(phURL, phPass, phInsecure == "1"), evs).Start(ctx, time.Minute)
-	}
+	startIntegrationSyncs(ctx, runNow, time.Minute)
 
 	srv := web.NewServer(st, broker, sched, runNow)
 	log.Printf("netis listening on %s", cfg.Addr)
