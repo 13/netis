@@ -362,11 +362,6 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	allTags, err := s.store.ListTags()
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
 	fields, err := s.store.ListCustomFields(id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -397,7 +392,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 
 	u, _ := userFrom(r)
 	views.DevicePage(u.Username, views.DeviceDetail{
-		Device: d, Ifaces: ifaceDetails, Tags: tags, AllTags: allTags,
+		Device: d, Ifaces: ifaceDetails, Tags: tags,
 		Fields: fields, Links: links, Children: children, Parent: parent, Events: evs,
 	}).Render(r.Context(), w)
 }
@@ -425,46 +420,6 @@ func (s *Server) handleLinkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/devices/"+devID, http.StatusSeeOther)
-}
-
-func (s *Server) handleTagAdd(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name != "" {
-		tagID, err := s.findOrCreateTag(name)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		if err := s.store.TagDevice(id, tagID); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
-}
-
-func (s *Server) findOrCreateTag(name string) (int64, error) {
-	tags, err := s.store.ListTags()
-	if err != nil {
-		return 0, err
-	}
-	for _, t := range tags {
-		if t.Name == name {
-			return t.ID, nil
-		}
-	}
-	return s.store.CreateTag(name, "#888888")
-}
-
-func (s *Server) handleTagRemove(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	tagID, _ := strconv.ParseInt(r.PathValue("tagID"), 10, 64)
-	if err := s.store.UntagDevice(id, tagID); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
 func (s *Server) handleFieldSet(w http.ResponseWriter, r *http.Request) {

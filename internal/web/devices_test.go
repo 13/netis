@@ -46,6 +46,25 @@ func TestWOLDeviceWithoutMAC400(t *testing.T) {
 	_ = devID
 }
 
+func TestDetailPageHasEditButtonNoInlineForm(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", Source: "manual"})
+	body := authedGet(t, srv, st, "/devices/1").Body.String()
+
+	if !strings.Contains(body, `hx-get="/devices/1/edit"`) {
+		t.Error("detail page should have an Edit button targeting the edit fragment")
+	}
+	// The old inline edit form had a notes <textarea>; it now lives only in the dialog.
+	if strings.Contains(body, "<textarea") {
+		t.Error("detail page should no longer contain the inline edit form")
+	}
+	// The old per-tag add form posted to /devices/1/tags; it is gone.
+	if strings.Contains(body, `/devices/1/tags`) {
+		t.Error("detail page should no longer contain inline tag forms")
+	}
+}
+
 func TestCreateAndShowDevice(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
