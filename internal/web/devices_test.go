@@ -587,3 +587,19 @@ func TestDeviceIPKindBadKind(t *testing.T) {
 		t.Fatalf("bad kind code=%d, want 400", rec.Code)
 	}
 }
+
+func TestDeviceDetailRedesign(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual", Vendor: "TP-Link"})
+	ifID, _ := st.AddIface(devID, nil, nil)
+	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+
+	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)).Body.String()
+	for _, want := range []string{"dev-hero", "dev-cols", "gw", "TP-Link", "Interfaces", "/devices/" + strconv.FormatInt(devID, 10) + "/ip/kind"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail page missing %q", want)
+		}
+	}
+}
