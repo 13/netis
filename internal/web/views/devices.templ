@@ -277,6 +277,18 @@ templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, all
 						<input type="hidden" name="icon" value={ DeviceIcon(d.Icon, d.Kind) }/>
 					</div>
 					<label>
+						Vendor
+						<input type="text" name="vendor" value={ d.Vendor }/>
+					</label>
+					<label>
+						Model
+						<input type="text" name="model" value={ d.Model }/>
+					</label>
+					<label>
+						Function
+						<input type="text" name="function" value={ d.Function } placeholder="role, channel…"/>
+					</label>
+					<label>
 						Parent device
 						<select name="parent_device_id">
 							<option value="">— none —</option>

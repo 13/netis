@@ -196,6 +196,7 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	dev := store.Device{
 		Name: name, Kind: kind, Notes: r.FormValue("notes"),
 		Icon: r.FormValue("icon"), Source: "manual",
+		Vendor: r.FormValue("vendor"), Model: r.FormValue("model"), Function: r.FormValue("function"),
 	}
 	if p := r.FormValue("parent_device_id"); p != "" {
 		if pid, err := strconv.ParseInt(p, 10, 64); err == nil {
@@ -249,6 +250,9 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Notes = r.FormValue("notes")
 	d.Icon = r.FormValue("icon")
+	d.Vendor = r.FormValue("vendor")
+	d.Model = r.FormValue("model")
+	d.Function = r.FormValue("function")
 	if p := r.FormValue("parent_device_id"); p != "" {
 		if pid, err := strconv.ParseInt(p, 10, 64); err == nil && pid != d.ID {
 			d.ParentDeviceID = &pid

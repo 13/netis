@@ -23,6 +23,45 @@ func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form ur
 	return rec
 }
 
+func TestDialogPersistsVendorModelFunction(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+
+	// The dialog exposes the three inputs.
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`name="vendor"`, `name="model"`, `name="function"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog missing %q", want)
+		}
+	}
+
+	// Create persists all three.
+	rec := authedPost(t, srv, st, "/devices", url.Values{
+		"name": {"archera8"}, "kind": {"router"},
+		"vendor": {"TP-Link"}, "model": {"ARCHER-A8 v1"}, "function": {"AP Dachboden CH:1,36"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create code=%d", rec.Code)
+	}
+	d, _ := st.GetDevice(1)
+	if d.Vendor != "TP-Link" || d.Model != "ARCHER-A8 v1" || d.Function != "AP Dachboden CH:1,36" {
+		t.Fatalf("create persisted %+v", d)
+	}
+
+	// Update overwrites all three.
+	rec = authedPost(t, srv, st, "/devices/1", url.Values{
+		"name": {"archera8"}, "kind": {"router"},
+		"vendor": {"TP-Link Corp"}, "model": {"ARCHER-C7 v5"}, "function": {"AP Garten"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("update code=%d", rec.Code)
+	}
+	d2, _ := st.GetDevice(1)
+	if d2.Vendor != "TP-Link Corp" || d2.Model != "ARCHER-C7 v5" || d2.Function != "AP Garten" {
+		t.Fatalf("update persisted %+v", d2)
+	}
+}
+
 func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
