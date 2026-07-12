@@ -86,3 +86,23 @@ func TestDashboardPageHasFragmentContainer(t *testing.T) {
 		t.Fatalf("dashboard page missing fragment container (code=%d)", rec.Code)
 	}
 }
+
+func TestLayoutHasThemeToggleAndBootstrap(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	rec := authedGet(t, srv, st, "/")
+	body := rec.Body.String()
+	if rec.Code != 200 {
+		t.Fatalf("code=%d", rec.Code)
+	}
+	for _, want := range []string{
+		`id="theme-toggle"`, // the toggle control
+		`data-theme`,        // the no-flash bootstrap sets it
+		`/static/theme.js`,  // toggle + active-nav script
+		`class="brand"`,     // restyled nav
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard layout missing %q", want)
+		}
+	}
+}

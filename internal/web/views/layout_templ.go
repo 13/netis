@@ -42,20 +42,20 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — netis</title><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav><a href=\"/\" class=\"brand\">netis</a> <a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a><form method=\"post\" action=\"/logout\" class=\"logout\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — netis</title><script>\n\t\t\t\t// No-flash theme bootstrap: set data-theme before first paint.\n\t\t\t\t// Default dark unless a stored choice or an explicit OS light preference says otherwise.\n\t\t\t\t(function () {\n\t\t\t\t\ttry {\n\t\t\t\t\t\tvar t = localStorage.getItem('netis-theme');\n\t\t\t\t\t\tif (!t) { t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', t);\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', 'dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav class=\"top\"><a href=\"/\" class=\"brand\"><span class=\"dot\"></span> netis</a><div class=\"links\"><a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a></div><div class=\"right\"><span class=\"who\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 22, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 37, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</span> <button type=\"submit\">Logout</button></form></nav><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle theme\"><span class=\"tglabel\">Theme</span></button><form method=\"post\" action=\"/logout\" class=\"logout\"><button type=\"submit\">Logout</button></form></div></nav><main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -63,7 +63,7 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><script src=\"/static/theme.js\"></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

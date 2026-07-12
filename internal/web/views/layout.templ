@@ -7,25 +7,46 @@ templ Layout(title string, username string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } — netis</title>
+			<script>
+				// No-flash theme bootstrap: set data-theme before first paint.
+				// Default dark unless a stored choice or an explicit OS light preference says otherwise.
+				(function () {
+					try {
+						var t = localStorage.getItem('netis-theme');
+						if (!t) { t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+						document.documentElement.setAttribute('data-theme', t);
+					} catch (e) {
+						document.documentElement.setAttribute('data-theme', 'dark');
+					}
+				})();
+			</script>
 			<link rel="stylesheet" href="/static/app.css"/>
 			<script src="/static/htmx.min.js"></script>
 			<script src="/static/sse.js"></script>
 		</head>
 		<body hx-ext="sse" sse-connect="/events/stream">
-			<nav>
-				<a href="/" class="brand">netis</a>
-				<a href="/">Dashboard</a>
-				<a href="/devices">Devices</a>
-				<a href="/events">Events</a>
-				<a href="/settings">Settings</a>
-				<form method="post" action="/logout" class="logout">
-					<span>{ username }</span>
-					<button type="submit">Logout</button>
-				</form>
+			<nav class="top">
+				<a href="/" class="brand"><span class="dot"></span> netis</a>
+				<div class="links">
+					<a href="/">Dashboard</a>
+					<a href="/devices">Devices</a>
+					<a href="/events">Events</a>
+					<a href="/settings">Settings</a>
+				</div>
+				<div class="right">
+					<span class="who">{ username }</span>
+					<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+						<span class="tglabel">Theme</span>
+					</button>
+					<form method="post" action="/logout" class="logout">
+						<button type="submit">Logout</button>
+					</form>
+				</div>
 			</nav>
 			<main>
 				{ children... }
 			</main>
+			<script src="/static/theme.js"></script>
 		</body>
 	</html>
 }
