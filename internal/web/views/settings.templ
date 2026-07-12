@@ -80,7 +80,7 @@ templ integrationStatus(name string, configured bool, statuses map[string]store.
 		if st.OK {
 			<span class="status-line"><span class="pill online"><span class="d"></span>connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
 		} else {
-			<span class="status-line"><span class="pill offline"><span class="d"></span>failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
+			<span class="status-line"><span class="pill bad"><span class="d"></span>failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
 		}
 		if st.Detail != "" {
 			<p class="muted" style="margin:4px 0 0">{ st.Detail }</p>
