@@ -20,7 +20,7 @@ import (
 // deviceKinds is the fixed set of device kinds accepted by the schema's
 // CHECK constraint (see internal/store/migrations/0001_init.sql), in the
 // order shown in kind <select> elements.
-var deviceKinds = []string{"computer", "switch", "phone", "server", "printer",
+var deviceKinds = []string{"computer", "switch", "router", "modem", "phone", "server", "printer",
 	"iot", "vm", "lxc", "wg-peer", "other"}
 
 // IfaceDetail bundles an interface with everything the device detail page

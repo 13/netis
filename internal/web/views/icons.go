@@ -13,6 +13,8 @@ var kindIcons = map[string]string{
 	"vm":       "🧊",
 	"lxc":      "📦",
 	"wg-peer":  "🔒",
+	"router":   "🛜",
+	"modem":    "📶",
 	"other":    "❓",
 }
 
@@ -37,5 +39,5 @@ func DeviceIcon(icon, kind string) string {
 // picker. The first ten mirror the kind defaults; the rest are common extras.
 var IconChoices = []string{
 	"💻", "🔀", "📱", "🖥️", "🖨️", "💡", "🧊", "📦", "🔒", "❓",
-	"📡", "🗄️", "📷", "🔌", "🎮", "📺", "☎️", "🕹️", "🛰️", "⌚",
+	"🛜", "📶", "📡", "🗄️", "📷", "🔌", "🎮", "📺", "☎️", "🕹️", "🛰️", "⌚",
 }

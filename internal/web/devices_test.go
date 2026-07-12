@@ -388,3 +388,26 @@ func TestLayoutHasModalContainer(t *testing.T) {
 		}
 	}
 }
+
+func TestRouterModemKind(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+
+	// The dialog offers the new kinds.
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`<option value="router">`, `<option value="modem">`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog missing %q", want)
+		}
+	}
+
+	// A router device can be created (handler accepts the kind, store persists it).
+	rec := authedPost(t, srv, st, "/devices", url.Values{"name": {"ap"}, "kind": {"router"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create router code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	d, _ := st.GetDevice(1)
+	if d.Kind != "router" {
+		t.Fatalf("kind=%q, want router", d.Kind)
+	}
+}

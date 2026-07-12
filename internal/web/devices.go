@@ -18,7 +18,7 @@ import (
 
 var validKinds = map[string]bool{"computer": true, "switch": true, "phone": true,
 	"server": true, "printer": true, "iot": true, "vm": true, "lxc": true,
-	"wg-peer": true, "other": true}
+	"wg-peer": true, "router": true, "modem": true, "other": true}
 
 func normMAC(in string) string {
 	m := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(in, "-", ":")))
