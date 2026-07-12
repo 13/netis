@@ -64,6 +64,18 @@ func lowestIPStr(ips []store.IPInfo) string {
 	return bestStr
 }
 
+// joinNonEmpty joins the non-empty parts with sep, used for the device's
+// vendor/model/function facts line.
+func joinNonEmpty(sep string, parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, sep)
+}
+
 templ sortHeader(label, col, curSort, curDir, q string) {
 	<th>
 		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
@@ -104,6 +116,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						<th>Lease</th>
 						@sortHeader("Status", "status", sortKey, dir, q)
 						@sortHeader("Kind", "kind", sortKey, dir, q)
+						<th>Function</th>
 						<th>Tags</th>
 						@sortHeader("Last seen", "seen", sortKey, dir, q)
 						<th></th>
@@ -128,6 +141,9 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 											if i == 0 {
 												<div class="mono muted" style="font-size:11.5px">{ mac }</div>
 											}
+										}
+										if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
+											<div class="muted" style="font-size:11.5px">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
 										}
 									</div>
 								</div>
@@ -154,6 +170,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 								}
 							</td>
 							<td>{ row.Kind }</td>
+							<td>{ row.Function }</td>
 							<td>
 								for _, tn := range row.TagNames {
 									<span class="tag">{ tn }</span>{ " " }
@@ -372,8 +389,8 @@ templ DevicePage(username string, d DeviceDetail) {
 			}
 			<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
 		</h1>
-		if d.Device.Vendor != "" {
-			<p class="muted">{ d.Device.Vendor }</p>
+		if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
+			<p class="muted">{ joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) }</p>
 		}
 		if d.Device.Notes != "" {
 			<p>{ d.Device.Notes }</p>

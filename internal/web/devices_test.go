@@ -450,3 +450,27 @@ func TestRouterModemKind(t *testing.T) {
 		t.Fatalf("kind=%q, want router", d.Kind)
 	}
 }
+
+func TestListShowsAndFiltersNewFields(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "pv", Kind: "iot", Source: "manual",
+		Vendor: "Espressif Inc.", Model: "Shelly Plus Plug", Function: "PV Powermeter"})
+	st.CreateDevice(store.Device{Name: "printer0", Kind: "printer", Source: "manual",
+		Vendor: "Acme"})
+
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	// Function value and the "vendor · model" subline render.
+	if !strings.Contains(body, "PV Powermeter") {
+		t.Error("list missing function value")
+	}
+	if !strings.Contains(body, "Espressif Inc. · Shelly Plus Plug") {
+		t.Error("list missing vendor · model subline")
+	}
+
+	// ?q matches the vendor field.
+	filtered := authedGet(t, srv, st, "/devices?q=espressif").Body.String()
+	if !strings.Contains(filtered, "pv") || strings.Contains(filtered, "printer0") {
+		t.Error("?q=espressif should match by vendor and exclude the Acme device")
+	}
+}

@@ -54,7 +54,8 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 				ips = append(ips, ip.IP)
 			}
 			hay := strings.ToLower(row.Name + " " + strings.Join(ips, " ") + " " +
-				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " "))
+				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " ") + " " +
+				row.Vendor + " " + row.Model + " " + row.Function)
 			if strings.Contains(hay, q) {
 				filtered = append(filtered, row)
 			}
