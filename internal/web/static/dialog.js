@@ -2,8 +2,9 @@
 	// Per-kind default icons — mirrors views.kindIcons. Used to keep the icon
 	// picker's selection in sync with the Kind field until the user overrides.
 	var KIND_ICON = {
-		computer: '💻', switch: '🔀', phone: '📱', server: '🖥️', printer: '🖨️',
-		iot: '💡', vm: '🧊', lxc: '📦', 'wg-peer': '🔒', other: '❓'
+		computer: '💻', switch: '🔀', router: '🛜', modem: '📶', phone: '📱',
+		server: '🖥️', printer: '🖨️', iot: '💡', vm: '🧊', lxc: '📦',
+		'wg-peer': '🔒', other: '❓'
 	};
 
 	function closeModal() {

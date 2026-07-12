@@ -18,7 +18,7 @@ import (
 
 var validKinds = map[string]bool{"computer": true, "switch": true, "phone": true,
 	"server": true, "printer": true, "iot": true, "vm": true, "lxc": true,
-	"wg-peer": true, "other": true}
+	"wg-peer": true, "router": true, "modem": true, "other": true}
 
 func normMAC(in string) string {
 	m := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(in, "-", ":")))
@@ -54,7 +54,8 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 				ips = append(ips, ip.IP)
 			}
 			hay := strings.ToLower(row.Name + " " + strings.Join(ips, " ") + " " +
-				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " "))
+				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " ") + " " +
+				row.Vendor + " " + row.Model + " " + row.Function)
 			if strings.Contains(hay, q) {
 				filtered = append(filtered, row)
 			}
@@ -196,6 +197,7 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	dev := store.Device{
 		Name: name, Kind: kind, Notes: r.FormValue("notes"),
 		Icon: r.FormValue("icon"), Source: "manual",
+		Vendor: r.FormValue("vendor"), Model: r.FormValue("model"), Function: r.FormValue("function"),
 	}
 	if p := r.FormValue("parent_device_id"); p != "" {
 		if pid, err := strconv.ParseInt(p, 10, 64); err == nil {
@@ -249,6 +251,9 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Notes = r.FormValue("notes")
 	d.Icon = r.FormValue("icon")
+	d.Vendor = r.FormValue("vendor")
+	d.Model = r.FormValue("model")
+	d.Function = r.FormValue("function")
 	if p := r.FormValue("parent_device_id"); p != "" {
 		if pid, err := strconv.ParseInt(p, 10, 64); err == nil && pid != d.ID {
 			d.ParentDeviceID = &pid

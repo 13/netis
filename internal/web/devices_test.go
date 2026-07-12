@@ -23,6 +23,45 @@ func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form ur
 	return rec
 }
 
+func TestDialogPersistsVendorModelFunction(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+
+	// The dialog exposes the three inputs.
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`name="vendor"`, `name="model"`, `name="function"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog missing %q", want)
+		}
+	}
+
+	// Create persists all three.
+	rec := authedPost(t, srv, st, "/devices", url.Values{
+		"name": {"archera8"}, "kind": {"router"},
+		"vendor": {"TP-Link"}, "model": {"ARCHER-A8 v1"}, "function": {"AP Dachboden CH:1,36"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create code=%d", rec.Code)
+	}
+	d, _ := st.GetDevice(1)
+	if d.Vendor != "TP-Link" || d.Model != "ARCHER-A8 v1" || d.Function != "AP Dachboden CH:1,36" {
+		t.Fatalf("create persisted %+v", d)
+	}
+
+	// Update overwrites all three.
+	rec = authedPost(t, srv, st, "/devices/1", url.Values{
+		"name": {"archera8"}, "kind": {"router"},
+		"vendor": {"TP-Link Corp"}, "model": {"ARCHER-C7 v5"}, "function": {"AP Garten"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("update code=%d", rec.Code)
+	}
+	d2, _ := st.GetDevice(1)
+	if d2.Vendor != "TP-Link Corp" || d2.Model != "ARCHER-C7 v5" || d2.Function != "AP Garten" {
+		t.Fatalf("update persisted %+v", d2)
+	}
+}
+
 func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
@@ -386,5 +425,52 @@ func TestLayoutHasModalContainer(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("layout missing %q", want)
 		}
+	}
+}
+
+func TestRouterModemKind(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+
+	// The dialog offers the new kinds.
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`<option value="router">`, `<option value="modem">`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog missing %q", want)
+		}
+	}
+
+	// A router device can be created (handler accepts the kind, store persists it).
+	rec := authedPost(t, srv, st, "/devices", url.Values{"name": {"ap"}, "kind": {"router"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create router code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	d, _ := st.GetDevice(1)
+	if d.Kind != "router" {
+		t.Fatalf("kind=%q, want router", d.Kind)
+	}
+}
+
+func TestListShowsAndFiltersNewFields(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "pv", Kind: "iot", Source: "manual",
+		Vendor: "Espressif Inc.", Model: "Shelly Plus Plug", Function: "PV Powermeter"})
+	st.CreateDevice(store.Device{Name: "printer0", Kind: "printer", Source: "manual",
+		Vendor: "Acme"})
+
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	// Function value and the "vendor · model" subline render.
+	if !strings.Contains(body, "PV Powermeter") {
+		t.Error("list missing function value")
+	}
+	if !strings.Contains(body, "Espressif Inc. · Shelly Plus Plug") {
+		t.Error("list missing vendor · model subline")
+	}
+
+	// ?q matches the vendor field.
+	filtered := authedGet(t, srv, st, "/devices?q=espressif").Body.String()
+	if !strings.Contains(filtered, "pv") || strings.Contains(filtered, "printer0") {
+		t.Error("?q=espressif should match by vendor and exclude the Acme device")
 	}
 }

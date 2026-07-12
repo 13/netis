@@ -19,6 +19,7 @@ func TestKindIcon(t *testing.T) {
 		"phone": "📱", "computer": "💻", "server": "🖥️",
 		"switch": "🔀", "printer": "🖨️", "iot": "💡",
 		"vm": "🧊", "lxc": "📦", "wg-peer": "🔒", "other": "❓",
+		"router": "🛜", "modem": "📶",
 		"nonsense": "❓", "": "❓",
 	}
 	for kind, want := range cases {

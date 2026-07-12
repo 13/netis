@@ -13,6 +13,8 @@ var kindIcons = map[string]string{
 	"vm":       "🧊",
 	"lxc":      "📦",
 	"wg-peer":  "🔒",
+	"router":   "🛜",
+	"modem":    "📶",
 	"other":    "❓",
 }
 
@@ -34,8 +36,8 @@ func DeviceIcon(icon, kind string) string {
 }
 
 // IconChoices is the ordered emoji palette shown in the device dialog's icon
-// picker. The first ten mirror the kind defaults; the rest are common extras.
+// picker. It includes every kind default (see kindIcons) plus common extras.
 var IconChoices = []string{
 	"💻", "🔀", "📱", "🖥️", "🖨️", "💡", "🧊", "📦", "🔒", "❓",
-	"📡", "🗄️", "📷", "🔌", "🎮", "📺", "☎️", "🕹️", "🛰️", "⌚",
+	"🛜", "📶", "📡", "🗄️", "📷", "🔌", "🎮", "📺", "☎️", "🕹️", "🛰️", "⌚",
 }
