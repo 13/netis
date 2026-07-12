@@ -1,5 +1,64 @@
 package views
 
+import "fmt"
+
+templ onboardBrand() {
+	<div class="onboard-brand">
+		<span class="mark"><span class="dot"></span></span>
+		<div class="wm">netis</div>
+		<div class="tag">Your home network, organized.</div>
+	</div>
+}
+
+templ onboardStep(n, cur int, label string) {
+	if n < cur {
+		<div class="step done"><span class="num">✓</span><span class="lbl">{ label }</span></div>
+	} else if n == cur {
+		<div class="step active"><span class="num">{ fmt.Sprint(n) }</span><span class="lbl">{ label }</span></div>
+	} else {
+		<div class="step"><span class="num">{ fmt.Sprint(n) }</span><span class="lbl">{ label }</span></div>
+	}
+}
+
+templ onboardStepper(step int) {
+	<div class="stepper">
+		@onboardStep(1, step, "Account")
+		<i class="conn"></i>
+		@onboardStep(2, step, "Subnets")
+		<i class="conn"></i>
+		@onboardStep(3, step, "Integrations")
+	</div>
+}
+
+templ onboardShell(title string, step int) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } — netis</title>
+			<script>
+				(function () {
+					try {
+						document.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');
+					} catch (e) {
+						document.documentElement.setAttribute('data-theme', 'dark');
+					}
+				})();
+			</script>
+			<link rel="stylesheet" href="/static/app.css"/>
+		</head>
+		<body class="onboard">
+			@onboardBrand()
+			@onboardStepper(step)
+			<div class="onboard-card">
+				{ children... }
+			</div>
+			<script src="/static/theme.js"></script>
+		</body>
+	</html>
+}
+
 templ authShell(title string) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -30,28 +89,29 @@ templ authShell(title string) {
 
 templ LoginPage(errMsg string) {
 	@authShell("Login") {
+		@onboardBrand()
 		<form method="post" action="/login" class="auth-card">
-			<h1>netis</h1>
 			if errMsg != "" {
 				<p class="error">{ errMsg }</p>
 			}
 			<input name="username" placeholder="username" autofocus required/>
 			<input name="password" type="password" placeholder="password" required/>
-			<button type="submit">Sign in</button>
+			<button type="submit" class="primary">Sign in</button>
 		</form>
 	}
 }
 
 templ SetupPage(errMsg string) {
-	@authShell("Setup") {
-		<form method="post" action="/setup" class="auth-card">
-			<h1>Create admin account</h1>
-			if errMsg != "" {
-				<p class="error">{ errMsg }</p>
-			}
+	@onboardShell("Setup", 1) {
+		<h1>Create your admin account</h1>
+		<p class="muted">This is the login you'll use to manage netis.</p>
+		if errMsg != "" {
+			<p class="error">{ errMsg }</p>
+		}
+		<form method="post" action="/setup">
 			<input name="username" placeholder="username" autofocus required/>
-			<input name="password" type="password" placeholder="password" required minlength="8"/>
-			<button type="submit">Create</button>
+			<input name="password" type="password" placeholder="password (min 8 chars)" required minlength="8"/>
+			<button type="submit" class="primary">Create account</button>
 		</form>
 	}
 }

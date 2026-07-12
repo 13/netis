@@ -232,3 +232,31 @@ thead th a:hover { color:var(--fg); }
 .setting-card .sc-head h3 { margin:0; }
 .status-line { display:inline-flex; align-items:center; gap:8px; }
 label:has(> input[type="checkbox"]) { flex-direction:row; align-items:center; gap:7px; }
+
+/* ---- onboarding (E3) ---- */
+.onboard { min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:22px;
+  padding:48px 20px; background:radial-gradient(1100px 520px at 50% -8%, var(--accent-soft), transparent 70%), var(--bg); }
+.onboard-brand { display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; margin-top:6px; }
+.onboard-brand .mark { width:44px; height:44px; border-radius:13px; display:grid; place-items:center;
+  background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow); }
+.onboard-brand .mark .dot { width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 5px var(--accent-soft); }
+.onboard-brand .wm { font-size:22px; font-weight:680; letter-spacing:-.01em; }
+.onboard-brand .tag { color:var(--muted); font-size:13px; }
+.onboard-card { width:100%; max-width:420px; background:var(--surface); border:1px solid var(--border-strong);
+  border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:22px; display:flex; flex-direction:column; gap:12px;
+  animation:onboardin .22s ease-out; }
+.onboard-card h1 { font-size:19px; margin:0; }
+.onboard-card form { display:flex; flex-direction:column; gap:11px; margin:0; }
+@keyframes onboardin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.stepper { display:flex; align-items:center; gap:6px; }
+.stepper .step { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:12.5px; font-weight:540; }
+.stepper .step .num { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:11.5px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--muted); }
+.stepper .step.active { color:var(--fg); }
+.stepper .step.active .num { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.stepper .step.done .num { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); }
+.stepper .conn { width:26px; height:1px; background:var(--border); display:inline-block; }
+.toggle-row { flex-direction:row; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--border);
+  border-radius:var(--radius-sm); background:var(--surface-2); }
+.toggle-row:hover { border-color:var(--border-strong); }
+@media (prefers-reduced-motion: reduce) { .onboard-card { animation:none; } }
