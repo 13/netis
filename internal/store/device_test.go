@@ -195,6 +195,56 @@ func TestListDevicesCarriesLeaseKindAndReviewed(t *testing.T) {
 	}
 }
 
+func TestDeviceModelFunctionAndKinds(t *testing.T) {
+	s := openTest(t)
+
+	// New kinds accepted; model/function persist.
+	rID, err := s.CreateDevice(Device{Name: "ap", Kind: "router", Source: "manual",
+		Model: "ARCHER-A8 v1", Function: "AP Dachboden CH:1,36"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateDevice(Device{Name: "m", Kind: "modem", Source: "manual"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Garbage kind still rejected by the CHECK.
+	if _, err := s.CreateDevice(Device{Name: "x", Kind: "banana", Source: "manual"}); err == nil {
+		t.Fatal("expected CHECK to reject kind 'banana'")
+	}
+
+	// Round-trip through GetDevice.
+	d, err := s.GetDevice(rID)
+	if err != nil || d.Model != "ARCHER-A8 v1" || d.Function != "AP Dachboden CH:1,36" {
+		t.Fatalf("round-trip model/function: %+v err=%v", d, err)
+	}
+
+	// UpdateDevice persists new values.
+	d.Model = "ARCHER-C7 v5"
+	d.Function = "AP Garten"
+	if err := s.UpdateDevice(d); err != nil {
+		t.Fatal(err)
+	}
+	d2, _ := s.GetDevice(rID)
+	if d2.Model != "ARCHER-C7 v5" || d2.Function != "AP Garten" {
+		t.Fatalf("update model/function: %+v", d2)
+	}
+
+	// FK children still attach after the table rebuild.
+	fID, err := s.AddIface(rID, strp("aa:bb:cc:dd:ee:01"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	if _, err := s.AssignIP(fID, snID, "10.0.0.9", "static"); err != nil {
+		t.Fatal(err)
+	}
+	tID, _ := s.CreateTag("net", "#888888")
+	if err := s.TagDevice(rID, tID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMigration0004Backfill(t *testing.T) {
 	path := t.TempDir() + "/mig.db"
 	db, err := sql.Open("sqlite", path)
