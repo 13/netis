@@ -217,3 +217,9 @@ thead th a:hover { color:var(--fg); }
 .ghost { background:var(--surface-2); border:1px solid var(--border); color:var(--muted);
   border-radius:var(--radius-sm); padding:3px 9px; font-size:12.5px; font-weight:540; cursor:pointer; }
 .ghost:hover { color:var(--fg); border-color:var(--border-strong); }
+
+.setting-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:15px 16px; box-shadow:var(--shadow); margin:0 0 14px; }
+.setting-card .sc-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.setting-card .sc-head h3 { margin:0; }
+.status-line { display:inline-flex; align-items:center; gap:8px; }

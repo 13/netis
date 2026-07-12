@@ -18,6 +18,7 @@ type SettingsData struct {
 	Values    map[string]string
 	ActiveTab string
 	Detected  []netdetect.Detected
+	Statuses  map[string]store.IntegrationStatus
 }
 
 templ tabLink(active, tab, label string) {
@@ -28,33 +29,87 @@ templ tabLink(active, tab, label string) {
 	}
 }
 
+templ proxmoxFields(values map[string]string) {
+	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
+	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
+	<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>
+		<input type="checkbox" name="proxmox_insecure" if values["proxmox_insecure"] == "1" { checked }/>
+		Skip TLS verification
+	</label>
+}
+
+templ wireguardFields(values map[string]string) {
+	<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
+	<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
+	<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
+	<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+}
+
+templ piholeFields(values map[string]string) {
+	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
+	<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
+	<label>
+		<input type="checkbox" name="pihole_insecure" if values["pihole_insecure"] == "1" { checked }/>
+		Skip TLS verification
+	</label>
+}
+
+// integrationsFields renders the plain fieldsets used by the onboarding welcome
+// page; its output must stay identical to the pre-split version.
 templ integrationsFields(values map[string]string) {
 	<fieldset>
 		<legend>Proxmox</legend>
-		<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
-		<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-		<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
-		<label>
-			<input type="checkbox" name="proxmox_insecure" if values["proxmox_insecure"] == "1" { checked }/>
-			Skip TLS verification
-		</label>
+		@proxmoxFields(values)
 	</fieldset>
 	<fieldset>
 		<legend>WireGuard (via SSH)</legend>
-		<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
-		<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
-		<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
-		<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+		@wireguardFields(values)
 	</fieldset>
 	<fieldset>
 		<legend>Pi-hole (v6)</legend>
-		<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-		<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
-		<label>
-			<input type="checkbox" name="pihole_insecure" if values["pihole_insecure"] == "1" { checked }/>
-			Skip TLS verification
-		</label>
+		@piholeFields(values)
 	</fieldset>
+}
+
+// integrationStatus renders a connection-status pill (+ detail) for one
+// integration, resolved from the recorded poller status and whether the
+// integration is configured.
+templ integrationStatus(name string, configured bool, statuses map[string]store.IntegrationStatus) {
+	if st, ok := statuses[name]; ok {
+		if st.OK {
+			<span class="status-line"><span class="pill online"><span class="d"></span>connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
+		} else {
+			<span class="status-line"><span class="pill offline"><span class="d"></span>failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
+		}
+		if st.Detail != "" {
+			<p class="muted" style="margin:4px 0 0">{ st.Detail }</p>
+		}
+	} else if configured {
+		<span class="status-line"><span class="pill reserved"><span class="d"></span>configured · not run yet</span></span>
+	} else {
+		<span class="status-line"><span class="muted">not configured</span></span>
+	}
+}
+
+templ integrationsTab(d SettingsData) {
+	<h2>Integrations</h2>
+	<p class="muted">restart netis to apply integration changes</p>
+	<form method="post" action="/settings/integrations">
+		<div class="setting-card">
+			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)</div>
+			@proxmoxFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)</div>
+			@wireguardFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)</div>
+			@piholeFields(d.Values)
+		</div>
+		<button type="submit" class="primary">Save integrations</button>
+	</form>
 }
 
 templ SettingsPage(username string, d SettingsData) {
@@ -154,12 +209,7 @@ templ SettingsPage(username string, d SettingsData) {
 		}
 
 		if d.ActiveTab == "integrations" {
-			<h2>Integrations</h2>
-			<p class="muted">restart netis to apply integration changes</p>
-			<form method="post" action="/settings/integrations" class="auth-card">
-				@integrationsFields(d.Values)
-				<button type="submit">Save integrations</button>
-			</form>
+			@integrationsTab(d)
 		}
 
 		if d.ActiveTab == "users" {

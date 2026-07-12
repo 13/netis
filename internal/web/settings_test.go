@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -138,6 +139,33 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	}
 	if admins < 1 {
 		t.Fatalf("expected at least 1 admin remaining, got %d (users=%+v)", admins, users)
+	}
+}
+
+func TestIntegrationStatusRendered(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.SetSetting("pihole_url", "https://pi.hole")
+	st.SetSetting("proxmox_url", "https://pve:8006")
+	now := time.Now().UTC().Format(time.RFC3339)
+	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", OK: true, LastRun: now, Detail: "48 leases, 2 new"})
+	st.SetIntegrationStatus(store.IntegrationStatus{Name: "proxmox", OK: false, LastRun: now, Detail: "auth failed"})
+
+	body := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
+	for _, want := range []string{"Pi-hole", "connected", "48 leases, 2 new", "failing", "not configured"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("integrations tab missing %q", want)
+		}
+	}
+}
+
+func TestWelcomeIntegrationsStillRenders(t *testing.T) {
+	srv, st := testServer(t)
+	body := authedGet(t, srv, st, "/welcome/integrations").Body.String()
+	for _, want := range []string{`name="proxmox_url"`, `name="wg_ssh_addr"`, `name="pihole_url"`, "<legend>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("welcome integrations missing %q", want)
+		}
 	}
 }
 
