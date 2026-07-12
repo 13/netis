@@ -491,7 +491,7 @@ func integrationsTab(d SettingsData) templ.Component {
 			templ_7745c5c3_Var21 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<h2>Integrations</h2><p class=\"muted\">restart netis to apply integration changes</p><form method=\"post\" action=\"/settings/integrations\"><div class=\"setting-card\"><div class=\"sc-head\"><h3>Proxmox</h3>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<h2>Integrations</h2><p class=\"muted\">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p><form method=\"post\" action=\"/settings/integrations\"><div class=\"setting-card\"><div class=\"sc-head\"><h3>Proxmox</h3>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

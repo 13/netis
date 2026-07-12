@@ -94,7 +94,7 @@ templ integrationStatus(name string, configured bool, statuses map[string]store.
 
 templ integrationsTab(d SettingsData) {
 	<h2>Integrations</h2>
-	<p class="muted">restart netis to apply integration changes</p>
+	<p class="muted">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p>
 	<form method="post" action="/settings/integrations">
 		<div class="setting-card">
 			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)<button type="button" class="ghost" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
