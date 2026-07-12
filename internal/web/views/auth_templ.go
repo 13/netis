@@ -42,7 +42,7 @@ func authShell(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — netis</title><link rel=\"stylesheet\" href=\"/static/app.css\"></head><body class=\"auth\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — netis</title><script>\n\t\t\t\t// No-flash theme bootstrap (same as Layout): honor the user's stored\n\t\t\t\t// choice and default dark, so login/setup match the rest of the app.\n\t\t\t\t(function () {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t// Default to dark unless the user has explicitly chosen a theme.\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', 'dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"></head><body class=\"auth\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -50,7 +50,7 @@ func authShell(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script src=\"/static/theme.js\"></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -103,7 +103,7 @@ func LoginPage(errMsg string) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/auth.templ`, Line: 23, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/auth.templ`, Line: 36, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -173,7 +173,7 @@ func SetupPage(errMsg string) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(errMsg)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/auth.templ`, Line: 37, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/auth.templ`, Line: 50, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {

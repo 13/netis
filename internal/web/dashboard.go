@@ -44,23 +44,22 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 		if free < 0 {
 			free = 0
 		}
-		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free}
-		seen := make(map[string]bool)
+		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free, Hosts: len(hosts)}
 		for ip, o := range occ {
-			if o.Online {
+			switch {
+			case o.Online:
 				row.Online++
+			case !o.EverSeen:
+				row.Reserved++
+			default:
+				row.Offline++
 			}
 			if o.Count > 1 {
 				data.Conflicts = append(data.Conflicts, views.AttentionConflict{
 					IP: ip, SubnetID: sn.ID, SubnetName: sn.Name,
 				})
 			}
-			if !seen[o.DeviceName] {
-				seen[o.DeviceName] = true
-				row.Occupants = append(row.Occupants, o.DeviceName)
-			}
 		}
-		sort.Strings(row.Occupants)
 		data.Rows = append(data.Rows, row)
 	}
 	sort.Slice(data.Conflicts, func(i, j int) bool { return data.Conflicts[i].IP < data.Conflicts[j].IP })

@@ -24,3 +24,12 @@ func relTime(ts string) string {
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
 }
+
+// BarPct renders n as a whole-percent width of total (e.g. "25%"), 0% when
+// total is zero. Used for the dashboard subnet occupancy bar.
+func BarPct(n, total int) string {
+	if total <= 0 {
+		return "0%"
+	}
+	return fmt.Sprintf("%d%%", n*100/total)
+}
