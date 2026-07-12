@@ -84,8 +84,28 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if sn.Kind == "wireguard" {
+		views.ScanToast(sn.CIDR+" is WireGuard — not scannable").Render(r.Context(), w)
+		return
+	}
 	if s.trigger != nil {
 		s.trigger.Trigger(sn.ID)
 	}
-	w.WriteHeader(http.StatusNoContent)
+	views.ScanToast("Scanning "+sn.CIDR+"…").Render(r.Context(), w)
+}
+
+func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
+	subnets, err := s.store.ListSubnets()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if s.trigger != nil {
+		for _, sn := range subnets {
+			if sn.Kind != "wireguard" {
+				s.trigger.Trigger(sn.ID)
+			}
+		}
+	}
+	views.ScanToast("Scanning all subnets…").Render(r.Context(), w)
 }

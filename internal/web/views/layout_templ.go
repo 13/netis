@@ -63,7 +63,7 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><div id=\"modal\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><div id=\"modal\"></div><div id=\"toasts\" class=\"toasts\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script><script src=\"/static/toasts.js\"></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
