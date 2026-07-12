@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -141,6 +142,33 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	}
 }
 
+func TestIntegrationStatusRendered(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.SetSetting("pihole_url", "https://pi.hole")
+	st.SetSetting("proxmox_url", "https://pve:8006")
+	now := time.Now().UTC().Format(time.RFC3339)
+	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", OK: true, LastRun: now, Detail: "48 leases, 2 new"})
+	st.SetIntegrationStatus(store.IntegrationStatus{Name: "proxmox", OK: false, LastRun: now, Detail: "auth failed"})
+
+	body := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
+	for _, want := range []string{"Pi-hole", "connected", "48 leases, 2 new", "failing", "not configured"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("integrations tab missing %q", want)
+		}
+	}
+}
+
+func TestWelcomeIntegrationsStillRenders(t *testing.T) {
+	srv, st := testServer(t)
+	body := authedGet(t, srv, st, "/welcome/integrations").Body.String()
+	for _, want := range []string{`name="proxmox_url"`, `name="wg_ssh_addr"`, `name="pihole_url"`, "<legend>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("welcome integrations missing %q", want)
+		}
+	}
+}
+
 func TestSettingsTabsShowOneSection(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
@@ -157,6 +185,28 @@ func TestSettingsTabsShowOneSection(t *testing.T) {
 	rec = authedGet(t, srv, st, "/settings?tab=bogus")
 	if !strings.Contains(rec.Body.String(), "Add subnet") {
 		t.Fatal("unknown tab should fall back to subnets")
+	}
+}
+
+func TestSettingsTabsRender(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+
+	subnets := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
+	if !strings.Contains(subnets, "10.0.0.0/24") || !strings.Contains(subnets, "setting-card") {
+		t.Error("subnets tab should render the subnet as a card")
+	}
+	if !strings.Contains(subnets, `hx-post="/subnets/1/scan"`) {
+		t.Error("subnets tab should keep the per-subnet scan control")
+	}
+	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	if !strings.Contains(users, `name="username"`) {
+		t.Error("users tab missing add-user form")
+	}
+	gen := authedGet(t, srv, st, "/settings?tab=general").Body.String()
+	if !strings.Contains(gen, `name="offline_after"`) {
+		t.Error("general tab missing offline_after field")
 	}
 }
 

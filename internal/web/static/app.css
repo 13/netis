@@ -99,6 +99,7 @@ main { padding:20px; max-width:1080px; margin:0 auto; }
 .pill.online { color:var(--ok); background:var(--ok-soft); } .pill.online .d { background:var(--ok); }
 .pill.offline { color:var(--muted); background:var(--surface-2); } .pill.offline .d { background:var(--border-strong); }
 .pill.reserved { color:var(--warn); background:var(--warn-soft); } .pill.reserved .d { background:var(--warn); }
+.pill.bad { color:var(--bad); background:var(--bad-soft); } .pill.bad .d { background:var(--bad); }
 .chip { display:inline-flex; align-items:center; font-size:11px; font-weight:560; padding:1px 7px; border-radius:var(--radius-sm);
         border:1px solid var(--border); color:var(--muted); background:var(--surface-2); }
 .chip.static { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, var(--border)); background:var(--accent-soft); }
@@ -160,11 +161,18 @@ button.sq { padding:0; cursor:pointer; }
   background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, var(--border) 3px, var(--border) 4px); }
 
 /* ---- tabs (settings) ---- */
-.tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:18px; }
-.tab { padding:8px 14px; color:var(--muted); text-decoration:none; border-bottom:2px solid transparent; font-weight:520; font-size:13.5px; }
-.tab:hover { color:var(--fg); }
-.tab.active { color:var(--fg); border-bottom-color:var(--accent); }
-.detected { display:block; margin:.35rem 0; }
+
+/* ---- field layout (settings cards) ---- */
+.field-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:11px; margin-bottom:12px; }
+.field-grid label { display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--muted); }
+.field-grid label.chk { flex-direction:row; align-items:center; gap:7px; }
+.sc-actions { display:flex; gap:9px; align-items:center; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+.chip-add { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:4px 11px; cursor:pointer; font-size:12.5px; }
+.chip-add:hover { border-color:var(--accent); }
+nav.tabs { display:inline-flex; gap:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:3px; margin:0 0 16px; }
+nav.tabs .tab { text-decoration:none; color:var(--muted); font-size:13px; font-weight:520; padding:5px 13px; border-radius:999px; }
+nav.tabs .tab.active { background:var(--accent-soft); color:var(--accent); }
 
 /* ---- auth / wizard card ---- */
 .auth { display:grid; place-items:center; min-height:100vh; }
@@ -217,3 +225,9 @@ thead th a:hover { color:var(--fg); }
 .ghost { background:var(--surface-2); border:1px solid var(--border); color:var(--muted);
   border-radius:var(--radius-sm); padding:3px 9px; font-size:12.5px; font-weight:540; cursor:pointer; }
 .ghost:hover { color:var(--fg); border-color:var(--border-strong); }
+
+.setting-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:15px 16px; box-shadow:var(--shadow); margin:0 0 14px; }
+.setting-card .sc-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.setting-card .sc-head h3 { margin:0; }
+.status-line { display:inline-flex; align-items:center; gap:8px; }

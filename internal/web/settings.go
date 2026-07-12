@@ -76,10 +76,23 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var statuses map[string]store.IntegrationStatus
+	if tab == "integrations" {
+		list, err := s.store.ListIntegrationStatus()
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		statuses = make(map[string]store.IntegrationStatus, len(list))
+		for _, it := range list {
+			statuses[it.Name] = it
+		}
+	}
+
 	u, _ := userFrom(r)
 	views.SettingsPage(u.Username, views.SettingsData{
 		Subnets: subnets, Users: users, Values: values,
-		ActiveTab: tab, Detected: newDetected,
+		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
 	}).Render(r.Context(), w)
 }
 

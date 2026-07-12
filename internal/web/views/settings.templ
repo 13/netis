@@ -18,6 +18,7 @@ type SettingsData struct {
 	Values    map[string]string
 	ActiveTab string
 	Detected  []netdetect.Detected
+	Statuses  map[string]store.IntegrationStatus
 }
 
 templ tabLink(active, tab, label string) {
@@ -28,33 +29,219 @@ templ tabLink(active, tab, label string) {
 	}
 }
 
+templ proxmoxFields(values map[string]string) {
+	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
+	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
+	<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>
+		<input type="checkbox" name="proxmox_insecure" if values["proxmox_insecure"] == "1" { checked }/>
+		Skip TLS verification
+	</label>
+}
+
+templ wireguardFields(values map[string]string) {
+	<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
+	<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
+	<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
+	<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+}
+
+templ piholeFields(values map[string]string) {
+	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
+	<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
+	<label>
+		<input type="checkbox" name="pihole_insecure" if values["pihole_insecure"] == "1" { checked }/>
+		Skip TLS verification
+	</label>
+}
+
+// integrationsFields renders the plain fieldsets used by the onboarding welcome
+// page; its output must stay identical to the pre-split version.
 templ integrationsFields(values map[string]string) {
 	<fieldset>
 		<legend>Proxmox</legend>
-		<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
-		<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-		<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
-		<label>
-			<input type="checkbox" name="proxmox_insecure" if values["proxmox_insecure"] == "1" { checked }/>
-			Skip TLS verification
-		</label>
+		@proxmoxFields(values)
 	</fieldset>
 	<fieldset>
 		<legend>WireGuard (via SSH)</legend>
-		<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
-		<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
-		<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
-		<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+		@wireguardFields(values)
 	</fieldset>
 	<fieldset>
 		<legend>Pi-hole (v6)</legend>
-		<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-		<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
-		<label>
-			<input type="checkbox" name="pihole_insecure" if values["pihole_insecure"] == "1" { checked }/>
-			Skip TLS verification
-		</label>
+		@piholeFields(values)
 	</fieldset>
+}
+
+// integrationStatus renders a connection-status pill (+ detail) for one
+// integration, resolved from the recorded poller status and whether the
+// integration is configured.
+templ integrationStatus(name string, configured bool, statuses map[string]store.IntegrationStatus) {
+	if st, ok := statuses[name]; ok {
+		if st.OK {
+			<span class="status-line"><span class="pill online"><span class="d"></span>connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
+		} else {
+			<span class="status-line"><span class="pill bad"><span class="d"></span>failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
+		}
+		if st.Detail != "" {
+			<p class="muted" style="margin:4px 0 0">{ st.Detail }</p>
+		}
+	} else if configured {
+		<span class="status-line"><span class="pill reserved"><span class="d"></span>configured · not run yet</span></span>
+	} else {
+		<span class="status-line"><span class="muted">not configured</span></span>
+	}
+}
+
+templ integrationsTab(d SettingsData) {
+	<h2>Integrations</h2>
+	<p class="muted">restart netis to apply integration changes</p>
+	<form method="post" action="/settings/integrations">
+		<div class="setting-card">
+			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)</div>
+			@proxmoxFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)</div>
+			@wireguardFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)</div>
+			@piholeFields(d.Values)
+		</div>
+		<button type="submit" class="primary">Save integrations</button>
+	</form>
+}
+
+templ subnetsTab(d SettingsData) {
+	<h2>Subnets</h2>
+	for _, sn := range d.Subnets {
+		<div class="setting-card">
+			<div class="sc-head">
+				<h3>{ sn.Name }</h3>
+				<span class="mono muted">{ sn.CIDR }</span>
+				<span class="badge">{ sn.Kind }</span>
+				if sn.ScanEnabled {
+					<span class="badge online">auto-scan on</span>
+				} else {
+					<span class="badge">auto-scan off</span>
+				}
+			</div>
+			<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
+				<div class="field-grid">
+					<label>CIDR <input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/></label>
+					<label>Name <input type="text" name="name" value={ sn.Name } required/></label>
+					<label>Kind
+						<select name="kind">
+							for _, k := range subnetKinds {
+								if k == sn.Kind {
+									<option value={ k } selected>{ k }</option>
+								} else {
+									<option value={ k }>{ k }</option>
+								}
+							}
+						</select>
+					</label>
+					<label>Interval (s) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
+					<label class="chk"><input type="checkbox" name="scan_enabled" if sn.ScanEnabled { checked }/> Auto-scan (periodic)</label>
+				</div>
+				<div class="sc-actions">
+					<button type="submit" class="primary">Save</button>
+					if sn.Kind != "wireguard" {
+						<button type="button" class="ghost" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan</button>
+					}
+				</div>
+			</form>
+			<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
+				<button type="submit" class="ghost">Delete</button>
+			</form>
+		</div>
+	}
+
+	<h3>Detected subnets</h3>
+	if len(d.Detected) == 0 {
+		<p class="muted">no new subnets detected</p>
+	} else {
+		<div class="chips">
+			for _, det := range d.Detected {
+				<form method="post" action="/settings/subnets" class="inline">
+					<input type="hidden" name="cidr" value={ det.CIDR }/>
+					<input type="hidden" name="name" value={ det.Iface }/>
+					<input type="hidden" name="kind" value="lan"/>
+					<input type="hidden" name="scan_interval_sec" value="120"/>
+					<input type="hidden" name="scan_enabled" value="on"/>
+					<button type="submit" class="chip-add"><span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span> +</button>
+				</form>
+			}
+		</div>
+	}
+
+	<div class="setting-card">
+		<div class="sc-head"><h3>Add subnet</h3></div>
+		<form method="post" action="/settings/subnets">
+			<div class="field-grid">
+				<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required/></label>
+				<label>Name <input type="text" name="name" required/></label>
+				<label>Kind
+					<select name="kind">
+						for _, k := range subnetKinds {
+							<option value={ k }>{ k }</option>
+						}
+					</select>
+				</label>
+				<label>Interval (s) <input type="number" name="scan_interval_sec" value="120" min="30"/></label>
+				<label class="chk"><input type="checkbox" name="scan_enabled" checked/> Auto-scan (periodic)</label>
+			</div>
+			<button type="submit" class="primary">Add subnet</button>
+		</form>
+	</div>
+}
+
+templ usersTab(d SettingsData) {
+	<h2>Users</h2>
+	<div class="setting-card">
+		<table>
+			<tr><th>Username</th><th>Role</th><th></th></tr>
+			for _, u := range d.Users {
+				<tr>
+					<td>{ u.Username }</td>
+					<td><span class="badge">{ u.Role }</span></td>
+					<td>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline">
+							<button type="submit" class="ghost">delete</button>
+						</form>
+					</td>
+				</tr>
+			}
+		</table>
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>Add user</h3></div>
+		<form method="post" action="/settings/users">
+			<div class="field-grid">
+				<label>Username <input type="text" name="username" required/></label>
+				<label>Password <input type="password" name="password" minlength="6" required/></label>
+				<label>Role
+					<select name="role">
+						<option value="viewer">viewer</option>
+						<option value="admin">admin</option>
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="primary">Add user</button>
+		</form>
+	</div>
+}
+
+templ generalTab(d SettingsData) {
+	<h2>General</h2>
+	<div class="setting-card">
+		<div class="sc-head"><h3>Availability</h3></div>
+		<form method="post" action="/settings/general">
+			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
+			<p class="muted" style="margin:6px 0 10px">A device is marked offline after this many consecutive missed scans.</p>
+			<button type="submit" class="primary">Save</button>
+		</form>
+	</div>
 }
 
 templ SettingsPage(username string, d SettingsData) {
@@ -68,135 +255,13 @@ templ SettingsPage(username string, d SettingsData) {
 		</nav>
 
 		if d.ActiveTab == "subnets" {
-			<h2>Subnets</h2>
-			<table>
-				<tr><th>CIDR</th><th>Name</th><th>Kind</th><th>Auto-scan</th><th>Interval (s)</th><th></th></tr>
-				for _, sn := range d.Subnets {
-					<tr>
-						<td class="mono">{ sn.CIDR }</td>
-						<td>{ sn.Name }</td>
-						<td>{ sn.Kind }</td>
-						<td>
-							if sn.ScanEnabled {
-								<span class="ok">yes</span>
-							} else {
-								<span class="muted">no</span>
-							}
-						</td>
-						<td>{ fmt.Sprint(sn.ScanIntervalSec) }</td>
-						<td>
-							if sn.Kind != "wireguard" {
-								<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">scan</button>
-							}
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
-								<button type="submit">delete</button>
-							</form>
-						</td>
-					</tr>
-					<tr>
-						<td colspan="6">
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) } class="inline">
-								<input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/>
-								<input type="text" name="name" value={ sn.Name } required/>
-								<select name="kind">
-									for _, k := range subnetKinds {
-										if k == sn.Kind {
-											<option value={ k } selected>{ k }</option>
-										} else {
-											<option value={ k }>{ k }</option>
-										}
-									}
-								</select>
-								<input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/>
-								<label>
-									<input type="checkbox" name="scan_enabled" if sn.ScanEnabled { checked }/>
-									Auto-scan (periodic)
-								</label>
-								<button type="submit">save</button>
-							</form>
-						</td>
-					</tr>
-				}
-			</table>
-
-			<h3>Detected subnets</h3>
-			if len(d.Detected) == 0 {
-				<p class="muted">no new subnets detected</p>
-			} else {
-				for _, det := range d.Detected {
-					<form method="post" action="/settings/subnets" class="inline detected">
-						<input type="hidden" name="cidr" value={ det.CIDR }/>
-						<input type="hidden" name="name" value={ det.Iface }/>
-						<input type="hidden" name="kind" value="lan"/>
-						<input type="hidden" name="scan_interval_sec" value="120"/>
-						<input type="hidden" name="scan_enabled" value="on"/>
-						<span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span>
-						<button type="submit">add</button>
-					</form>
-				}
-			}
-
-			<h3>Add subnet</h3>
-			<form method="post" action="/settings/subnets" class="auth-card">
-				<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required/></label>
-				<label>Name <input type="text" name="name" required/></label>
-				<label>Kind
-					<select name="kind">
-						for _, k := range subnetKinds {
-							<option value={ k }>{ k }</option>
-						}
-					</select>
-				</label>
-				<label>Scan interval (s) <input type="number" name="scan_interval_sec" value="120" min="30"/></label>
-				<label><input type="checkbox" name="scan_enabled" checked/> Auto-scan (periodic)</label>
-				<button type="submit">Add subnet</button>
-			</form>
-		}
-
-		if d.ActiveTab == "integrations" {
-			<h2>Integrations</h2>
-			<p class="muted">restart netis to apply integration changes</p>
-			<form method="post" action="/settings/integrations" class="auth-card">
-				@integrationsFields(d.Values)
-				<button type="submit">Save integrations</button>
-			</form>
-		}
-
-		if d.ActiveTab == "users" {
-			<h2>Users</h2>
-			<table>
-				<tr><th>Username</th><th>Role</th><th></th></tr>
-				for _, u := range d.Users {
-					<tr>
-						<td>{ u.Username }</td>
-						<td>{ u.Role }</td>
-						<td>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline">
-								<button type="submit">delete</button>
-							</form>
-						</td>
-					</tr>
-				}
-			</table>
-			<form method="post" action="/settings/users" class="auth-card">
-				<label>Username <input type="text" name="username" required/></label>
-				<label>Password <input type="password" name="password" minlength="6" required/></label>
-				<label>Role
-					<select name="role">
-						<option value="viewer">viewer</option>
-						<option value="admin">admin</option>
-					</select>
-				</label>
-				<button type="submit">Add user</button>
-			</form>
-		}
-
-		if d.ActiveTab == "general" {
-			<h2>General</h2>
-			<form method="post" action="/settings/general" class="auth-card">
-				<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
-				<button type="submit">Save</button>
-			</form>
+			@subnetsTab(d)
+		} else if d.ActiveTab == "integrations" {
+			@integrationsTab(d)
+		} else if d.ActiveTab == "users" {
+			@usersTab(d)
+		} else if d.ActiveTab == "general" {
+			@generalTab(d)
 		}
 	}
 }
