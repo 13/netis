@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -307,6 +308,54 @@ func TestDeviceEditDialogBadID404(t *testing.T) {
 	st.SetSetting("onboarded", "1")
 	if rec := authedGet(t, srv, st, "/devices/999/edit"); rec.Code != http.StatusNotFound {
 		t.Fatalf("edit unknown device = %d, want 404", rec.Code)
+	}
+}
+
+func TestCreateDeviceWithIconParentTags(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	parentID, _ := st.CreateDevice(store.Device{Name: "rack", Kind: "switch", Source: "manual"})
+
+	rec := authedPost(t, srv, st, "/devices", url.Values{
+		"name": {"nas"}, "kind": {"server"}, "icon": {"🗄️"},
+		"parent_device_id": {strconv.FormatInt(parentID, 10)},
+		"tags":             {"storage, media"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// The new device is id 2 (parent is id 1).
+	d, err := st.GetDevice(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Icon != "🗄️" {
+		t.Errorf("icon=%q, want 🗄️", d.Icon)
+	}
+	if d.ParentDeviceID == nil || *d.ParentDeviceID != parentID {
+		t.Errorf("parent=%v, want %d", d.ParentDeviceID, parentID)
+	}
+	tags, _ := st.DeviceTags(2)
+	if len(tags) != 2 {
+		t.Fatalf("tags=%v, want 2", tags)
+	}
+}
+
+func TestUpdateDeviceSyncsTags(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(devID, []string{"a", "b"})
+
+	rec := authedPost(t, srv, st, "/devices/1", url.Values{
+		"name": {"nas"}, "kind": {"server"}, "tags": {"a"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("update code=%d", rec.Code)
+	}
+	tags, _ := st.DeviceTags(devID)
+	if len(tags) != 1 || tags[0].Name != "a" {
+		t.Fatalf("after update tags=%v, want [a]", tags)
 	}
 }
 

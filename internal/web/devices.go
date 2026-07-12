@@ -28,6 +28,17 @@ func normMAC(in string) string {
 	return m
 }
 
+// parseTags splits a comma-separated tags field into trimmed, non-empty names.
+func parseTags(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.ListDevices()
 	if err != nil {
@@ -182,10 +193,21 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name required", 400)
 		return
 	}
-	devID, err := s.store.CreateDevice(store.Device{
-		Name: name, Kind: kind, Notes: r.FormValue("notes"), Source: "manual",
-	})
+	dev := store.Device{
+		Name: name, Kind: kind, Notes: r.FormValue("notes"),
+		Icon: r.FormValue("icon"), Source: "manual",
+	}
+	if p := r.FormValue("parent_device_id"); p != "" {
+		if pid, err := strconv.ParseInt(p, 10, 64); err == nil {
+			dev.ParentDeviceID = &pid
+		}
+	}
+	devID, err := s.store.CreateDevice(dev)
 	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if err := s.store.SetDeviceTags(devID, parseTags(r.FormValue("tags"))); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -235,6 +257,10 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(d); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if err := s.store.SetDeviceTags(d.ID, parseTags(r.FormValue("tags"))); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
