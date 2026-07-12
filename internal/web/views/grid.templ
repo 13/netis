@@ -63,6 +63,14 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 					hx-target="#modal"
 					title={ c.Title }
 				></button>
+			} else if c.State == "free" {
+				<button
+					type="button"
+					class={ "sq", c.State }
+					hx-get={ fmt.Sprintf("/devices/new?subnet=%d&ip=%s", sn.ID, c.IP) }
+					hx-target="#modal"
+					title={ c.Title + " — click to add a device" }
+				></button>
 			} else {
 				<span class={ "sq", c.State } title={ c.Title }></span>
 			}
@@ -96,6 +104,8 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 			</div>
 			if o.DeviceID > 0 {
 				<div class="df">
+					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
+					<button type="button" hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</button>
 					@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
 					@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
 				</div>

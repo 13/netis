@@ -627,6 +627,22 @@ func TestDeviceListParentChildGrouping(t *testing.T) {
 	}
 }
 
+func TestNewDevicePrefillsIP(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+
+	body := authedGet(t, srv, st, "/devices/new?subnet=1&ip=10.0.0.5").Body.String()
+	if !strings.Contains(body, `name="ip"`) || !strings.Contains(body, `value="10.0.0.5"`) {
+		t.Fatalf("new dialog should prefill ip: %q", body)
+	}
+	// No ip param → empty IP field.
+	plain := authedGet(t, srv, st, "/devices/new").Body.String()
+	if !strings.Contains(plain, `name="ip"`) || !strings.Contains(plain, `value=""`) {
+		t.Fatalf("plain new dialog should have empty ip field")
+	}
+}
+
 func TestDeviceListOrphanChildIsRoot(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

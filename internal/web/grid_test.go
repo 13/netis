@@ -141,6 +141,45 @@ func TestSetKindBadKind(t *testing.T) {
 	}
 }
 
+func TestGridFreeCellOpensNewDevice(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	dev, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	f, _ := st.AddIface(dev, nil, nil)
+	st.AssignIP(f, snID, "10.0.0.1", "static")
+
+	body := authedGet(t, srv, st, "/subnets/"+strconv.FormatInt(snID, 10)+"/grid").Body.String()
+	// A free host IP is a clickable new-device button. templ HTML-escapes the
+	// "&" query separator in attribute values (see TestDeviceIPKindToggle for
+	// the same convention with escaped quotes).
+	if !strings.Contains(body, `hx-get="/devices/new?subnet=`+strconv.FormatInt(snID, 10)+`&amp;ip=10.0.0.2"`) {
+		t.Fatalf("free cell should open new-device dialog: %q", body)
+	}
+	// The network/broadcast edges are NOT new-device buttons.
+	if strings.Contains(body, `ip=10.0.0.0"`) || strings.Contains(body, `ip=10.0.0.7"`) {
+		t.Fatalf("edge cells must not be clickable new-device buttons")
+	}
+}
+
+func TestCellDetailHasOpenAndEdit(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	dev, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	f, _ := st.AddIface(dev, nil, nil)
+	st.AssignIP(f, snID, "10.0.0.1", "static")
+
+	body := authedGet(t, srv, st, "/subnets/"+strconv.FormatInt(snID, 10)+"/cell?ip=10.0.0.1").Body.String()
+	did := strconv.FormatInt(dev, 10)
+	if !strings.Contains(body, `href="/devices/`+did+`"`) {
+		t.Fatalf("cell popup missing Open link: %q", body)
+	}
+	if !strings.Contains(body, `hx-get="/devices/`+did+`/edit"`) {
+		t.Fatalf("cell popup missing Edit action: %q", body)
+	}
+}
+
 func TestSetKindRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

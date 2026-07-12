@@ -159,7 +159,8 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("subnet"); v != "" {
 		subnetID, _ = strconv.ParseInt(v, 10, 64)
 	}
-	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID).Render(r.Context(), w)
+	preIP := r.URL.Query().Get("ip")
+	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID, preIP).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
