@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,33 @@ func TestSubnetPageDevicesList(t *testing.T) {
 	}
 	_ = snA
 	_ = snB
+}
+
+func TestSubnetDeviceListSortable(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "A", Kind: "lan", ScanIntervalSec: 120})
+	for _, x := range []struct {
+		name, ip string
+	}{{"beta", "10.0.0.9"}, {"alpha", "10.0.0.3"}} {
+		d, _ := st.CreateDevice(store.Device{Name: x.name, Kind: "server", Source: "manual"})
+		f, _ := st.AddIface(d, nil, nil)
+		st.AssignIP(f, snID, x.ip, "static")
+	}
+	base := "/subnets/" + strconv.FormatInt(snID, 10)
+
+	// The table is the sortable component: sort-header links target this subnet.
+	body := authedGet(t, srv, st, base).Body.String()
+	if !strings.Contains(body, `href="`+base+`?`) {
+		t.Fatalf("subnet device list is not sortable (no %s sort links): %q", base, body)
+	}
+
+	// Sorting by name orders alpha before beta.
+	sorted := authedGet(t, srv, st, base+"?sort=name&dir=asc").Body.String()
+	ia, ib := strings.Index(sorted, "alpha"), strings.Index(sorted, "beta")
+	if ia < 0 || ib < 0 || ia > ib {
+		t.Fatalf("name sort failed: alpha=%d beta=%d", ia, ib)
+	}
 }
 
 func TestCellDetailAndSetKind(t *testing.T) {

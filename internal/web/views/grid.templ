@@ -14,7 +14,7 @@ type GridCell struct {
 	Kind     string
 }
 
-templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow) {
+templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow, sortKey, dir string) {
 	@Layout(sn.Name, username) {
 		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
 		if sn.Kind != "wireguard" {
@@ -47,16 +47,7 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		if len(devices) == 0 {
 			<p class="muted">No devices with an IP in this subnet yet.</p>
 		} else {
-			<table>
-				<thead>
-					<tr><th>Device</th><th>IP</th><th>Lease</th><th>Status</th><th>Kind</th><th>Function</th><th>Tags</th><th>Last seen</th><th></th></tr>
-				</thead>
-				<tbody>
-					for _, d := range devices {
-						@deviceRow(d)
-					}
-				</tbody>
-			</table>
+			@deviceTable(devices, "", sortKey, dir, fmt.Sprintf("/subnets/%d", sn.ID), false)
 		}
 	}
 }
