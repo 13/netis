@@ -84,7 +84,6 @@ func TestSetKindBadKind(t *testing.T) {
 	if rec := authedPost(t, srv, st, "/subnets/1/cell", url.Values{"ip": {"10.0.0.1"}, "kind": {"bogus"}}); rec.Code != 400 {
 		t.Fatalf("bad kind code=%d, want 400", rec.Code)
 	}
-	_ = snID
 }
 
 func TestSetKindRequiresAdmin(t *testing.T) {
@@ -105,5 +104,4 @@ func TestSetKindRequiresAdmin(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("viewer code=%d, want 403", rec.Code)
 	}
-	_ = snID
 }

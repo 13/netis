@@ -147,7 +147,8 @@ label input, label select { color:var(--fg); }
 /* ---- subnet grid squares ---- */
 .grid { display:grid; grid-template-columns:repeat(auto-fill, 20px); gap:3px; }
 .grid .sq { width:20px; height:20px; }
-.sq { border-radius:5px; background:var(--surface-2); border:1px solid var(--border); display:block; }
+.sq { width:26px; height:26px; border-radius:5px; background:var(--surface-2); border:1px solid var(--border);
+  display:inline-block; vertical-align:middle; }
 .sq.online { background:var(--ok); border-color:var(--ok); }
 .sq.offline { background:var(--border-strong); border-color:var(--border-strong); }
 .sq.reserved { background:var(--warn); border-color:var(--warn); }
