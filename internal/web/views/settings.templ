@@ -97,15 +97,15 @@ templ integrationsTab(d SettingsData) {
 	<p class="muted">restart netis to apply integration changes</p>
 	<form method="post" action="/settings/integrations">
 		<div class="setting-card">
-			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)</div>
+			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)<button type="button" class="ghost" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
 			@proxmoxFields(d.Values)
 		</div>
 		<div class="setting-card">
-			<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)</div>
+			<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)<button type="button" class="ghost" hx-post="/settings/integrations/wireguard/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
 			@wireguardFields(d.Values)
 		</div>
 		<div class="setting-card">
-			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)</div>
+			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)<button type="button" class="ghost" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
 			@piholeFields(d.Values)
 		</div>
 		<button type="submit" class="primary">Save integrations</button>
@@ -126,7 +126,7 @@ templ subnetsTab(d SettingsData) {
 					<span class="badge">auto-scan off</span>
 				}
 			</div>
-			<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
+			<form id={ fmt.Sprintf("sn-edit-%d", sn.ID) } method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
 				<div class="field-grid">
 					<label>CIDR <input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/></label>
 					<label>Name <input type="text" name="name" value={ sn.Name } required/></label>
@@ -144,16 +144,16 @@ templ subnetsTab(d SettingsData) {
 					<label>Interval (s) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
 					<label class="chk"><input type="checkbox" name="scan_enabled" if sn.ScanEnabled { checked }/> Auto-scan (periodic)</label>
 				</div>
-				<div class="sc-actions">
-					<button type="submit" class="primary">Save</button>
-					if sn.Kind != "wireguard" {
-						<button type="button" class="ghost" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan</button>
-					}
-				</div>
 			</form>
-			<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
-				<button type="submit" class="ghost">Delete</button>
-			</form>
+			<div class="sc-actions">
+				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="primary">Save</button>
+				if sn.Kind != "wireguard" {
+					<button type="button" class="ghost" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan</button>
+				}
+				<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
+					<button type="submit" class="ghost">Delete</button>
+				</form>
+			</div>
 		</div>
 	}
 

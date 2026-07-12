@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -16,6 +17,16 @@ import (
 	"netis/internal/web"
 	"netis/internal/wireguard"
 )
+
+type integrationRunner map[string]func(context.Context) error
+
+func (r integrationRunner) Run(ctx context.Context, name string) error {
+	fn, ok := r[name]
+	if !ok {
+		return fmt.Errorf("%s not configured", name)
+	}
+	return fn(ctx)
+}
 
 func main() {
 	cfg := config.Load()
@@ -45,11 +56,14 @@ func main() {
 	ctx := context.Background()
 	go sched.Start(ctx)
 
+	runNow := integrationRunner{}
+
 	if pxURL, _ := st.GetSetting("proxmox_url"); pxURL != "" {
 		tokenID, _ := st.GetSetting("proxmox_token_id")
 		secret, _ := st.GetSetting("proxmox_secret")
 		insecure, _ := st.GetSetting("proxmox_insecure")
 		px := proxmox.NewSync(st, proxmox.NewClient(pxURL, tokenID, secret, insecure == "1"), evs)
+		runNow["proxmox"] = func(ctx context.Context) error { _, err := px.RunOnce(ctx); return err }
 		go px.Start(ctx, time.Minute)
 	}
 
@@ -60,10 +74,12 @@ func main() {
 		if wgIface == "" {
 			wgIface = "wg0"
 		}
-		if runner, err := wireguard.NewSSHRunner(wgAddr, wgUser, wgKey); err != nil {
+		if sshRunner, err := wireguard.NewSSHRunner(wgAddr, wgUser, wgKey); err != nil {
 			log.Printf("wireguard ssh setup: %v", err)
 		} else {
-			go wireguard.NewSync(st, runner, evs, wgIface).Start(ctx, time.Minute)
+			wgSync := wireguard.NewSync(st, sshRunner, evs, wgIface)
+			runNow["wireguard"] = func(ctx context.Context) error { _, err := wgSync.RunOnce(ctx); return err }
+			go wgSync.Start(ctx, time.Minute)
 		}
 	}
 
@@ -71,10 +87,11 @@ func main() {
 		phPass, _ := st.GetSetting("pihole_password")
 		phInsecure, _ := st.GetSetting("pihole_insecure")
 		ph := pihole.NewSync(st, pihole.NewClient(phURL, phPass, phInsecure == "1"), evs)
+		runNow["pihole"] = func(ctx context.Context) error { _, err := ph.RunOnce(ctx); return err }
 		go ph.Start(ctx, time.Minute)
 	}
 
-	srv := web.NewServer(st, broker, sched)
+	srv := web.NewServer(st, broker, sched, runNow)
 	log.Printf("netis listening on %s", cfg.Addr)
 	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
 }

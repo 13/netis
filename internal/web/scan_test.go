@@ -40,7 +40,7 @@ func testServerTrig(t *testing.T) (*Server, *store.Store, *recordingTrigger) {
 	}
 	t.Cleanup(func() { st.Close() })
 	trig := &recordingTrigger{}
-	return NewServer(st, events.NewBroker(), trig), st, trig
+	return NewServer(st, events.NewBroker(), trig, nil), st, trig
 }
 
 func TestScanNowLanTriggersAndToasts(t *testing.T) {
