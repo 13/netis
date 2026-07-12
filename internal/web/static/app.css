@@ -160,11 +160,19 @@ button.sq { padding:0; cursor:pointer; }
   background-image:repeating-linear-gradient(45deg, transparent, transparent 3px, var(--border) 3px, var(--border) 4px); }
 
 /* ---- tabs (settings) ---- */
-.tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:18px; }
-.tab { padding:8px 14px; color:var(--muted); text-decoration:none; border-bottom:2px solid transparent; font-weight:520; font-size:13.5px; }
-.tab:hover { color:var(--fg); }
-.tab.active { color:var(--fg); border-bottom-color:var(--accent); }
 .detected { display:block; margin:.35rem 0; }
+
+/* ---- field layout (settings cards) ---- */
+.field-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:11px; margin-bottom:12px; }
+.field-grid label { display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--muted); }
+.field-grid label.chk { flex-direction:row; align-items:center; gap:7px; }
+.sc-actions { display:flex; gap:9px; align-items:center; }
+.chips { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+.chip-add { background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:4px 11px; cursor:pointer; font-size:12.5px; }
+.chip-add:hover { border-color:var(--accent); }
+nav.tabs { display:inline-flex; gap:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:3px; margin:0 0 16px; }
+nav.tabs .tab { text-decoration:none; color:var(--muted); font-size:13px; font-weight:520; padding:5px 13px; border-radius:999px; }
+nav.tabs .tab.active { background:var(--accent-soft); color:var(--accent); }
 
 /* ---- auth / wizard card ---- */
 .auth { display:grid; place-items:center; min-height:100vh; }

@@ -188,6 +188,28 @@ func TestSettingsTabsShowOneSection(t *testing.T) {
 	}
 }
 
+func TestSettingsTabsRender(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+
+	subnets := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
+	if !strings.Contains(subnets, "10.0.0.0/24") || !strings.Contains(subnets, "setting-card") {
+		t.Error("subnets tab should render the subnet as a card")
+	}
+	if !strings.Contains(subnets, `hx-post="/subnets/1/scan"`) {
+		t.Error("subnets tab should keep the per-subnet scan control")
+	}
+	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	if !strings.Contains(users, `name="username"`) {
+		t.Error("users tab missing add-user form")
+	}
+	gen := authedGet(t, srv, st, "/settings?tab=general").Body.String()
+	if !strings.Contains(gen, `name="offline_after"`) {
+		t.Error("general tab missing offline_after field")
+	}
+}
+
 func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
