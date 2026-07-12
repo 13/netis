@@ -18,7 +18,10 @@ type Scheduler struct {
 }
 
 func NewScheduler(e *Engine, st *store.Store) *Scheduler {
-	return &Scheduler{engine: e, store: st, lastRun: make(map[int64]time.Time), trigger: make(chan int64, 8)}
+	// Buffer generously so a single "Scan all" fan-out across many subnets is
+	// never silently dropped (Trigger is non-blocking and the scheduler runs
+	// scans one at a time). 256 is far above any realistic subnet count.
+	return &Scheduler{engine: e, store: st, lastRun: make(map[int64]time.Time), trigger: make(chan int64, 256)}
 }
 
 func (s *Scheduler) Trigger(subnetID int64) {

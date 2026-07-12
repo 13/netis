@@ -2,8 +2,8 @@
 	function arm(el) {
 		if (el.getAttribute('data-armed')) { return; }
 		el.setAttribute('data-armed', '1');
-		el.addEventListener('click', function () { el.remove(); });
-		setTimeout(function () { el.remove(); }, 4000);
+		var timer = setTimeout(function () { el.remove(); }, 4000);
+		el.addEventListener('click', function () { clearTimeout(timer); el.remove(); });
 	}
 	function init() {
 		var box = document.getElementById('toasts');
