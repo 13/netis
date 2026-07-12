@@ -166,12 +166,13 @@ label input, label select { color:var(--fg); }
 
 /* ---- dialog shell (used by C) ---- */
 .dialog-scrim { position:fixed; inset:0; background:var(--scrim); display:grid; place-items:center; padding:20px; z-index:50; }
-.dialog { width:100%; max-width:460px; background:var(--surface); border:1px solid var(--border-strong);
-          border-radius:var(--radius); box-shadow:var(--shadow-lg); overflow:hidden; }
-.dialog .dh { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
+.dialog { width:100%; max-width:460px; max-height:calc(100vh - 40px); background:var(--surface); border:1px solid var(--border-strong);
+          border-radius:var(--radius); box-shadow:var(--shadow-lg); overflow:hidden; display:flex; flex-direction:column; }
+.dialog form { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+.dialog .dh { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); flex:none; }
 .dialog .dh h3 { margin:0; font-size:15px; }
-.dialog .db { padding:16px; display:flex; flex-direction:column; gap:13px; }
-.dialog .df { display:flex; justify-content:flex-end; gap:9px; padding:13px 16px; border-top:1px solid var(--border); background:var(--surface-2); }
+.dialog .db { padding:16px; display:flex; flex-direction:column; gap:13px; overflow-y:auto; min-height:0; }
+.dialog .df { display:flex; justify-content:flex-end; gap:9px; padding:13px 16px; border-top:1px solid var(--border); background:var(--surface-2); flex:none; }
 
 @media (prefers-reduced-motion: reduce) {
   a.card, .theme-toggle, .btn, button { transition:none; }

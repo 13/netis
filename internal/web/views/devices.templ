@@ -92,7 +92,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 				<button type="button" data-view="list">List</button>
 				<button type="button" data-view="grid">Grid</button>
 			</div>
-			<a href="/devices/new"><button type="button" class="primary">New device</button></a>
+			<button type="button" class="primary" hx-get="/devices/new" hx-target="#modal">New device</button>
 		</div>
 
 		<div id="dev-list">

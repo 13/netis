@@ -213,7 +213,7 @@ func DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"><div class=\"seg\" id=\"dev-view\"><button type=\"button\" data-view=\"list\">List</button> <button type=\"button\" data-view=\"grid\">Grid</button></div><a href=\"/devices/new\"><button type=\"button\" class=\"primary\">New device</button></a></div><div id=\"dev-list\"><table><thead><tr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"><div class=\"seg\" id=\"dev-view\"><button type=\"button\" data-view=\"list\">List</button> <button type=\"button\" data-view=\"grid\">Grid</button></div><button type=\"button\" class=\"primary\" hx-get=\"/devices/new\" hx-target=\"#modal\">New device</button></div><div id=\"dev-list\"><table><thead><tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
