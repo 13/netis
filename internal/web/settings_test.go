@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"netis/internal/netdetect"
+	"netis/internal/store"
 )
 
 func TestCreateSubnetViaSettings(t *testing.T) {
@@ -64,7 +67,7 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	srv, st := testServer(t)
 	// Seed a stored password, then load the settings page as admin.
 	st.SetSetting("pihole_password", "topsecret")
-	rec := authedGet(t, srv, st, "/settings")
+	rec := authedGet(t, srv, st, "/settings?tab=integrations")
 	if rec.Code != 200 {
 		t.Fatalf("settings page code=%d", rec.Code)
 	}
@@ -130,5 +133,42 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	}
 	if admins < 1 {
 		t.Fatalf("expected at least 1 admin remaining, got %d (users=%+v)", admins, users)
+	}
+}
+
+func TestSettingsTabsShowOneSection(t *testing.T) {
+	srv, st := testServer(t)
+	// Users tab shows the users section, not the subnet "Add subnet" form.
+	rec := authedGet(t, srv, st, "/settings?tab=users")
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "Add user") {
+		t.Fatalf("users tab: code=%d", rec.Code)
+	}
+	if strings.Contains(body, "Add subnet") {
+		t.Fatal("users tab must not render the subnet create form")
+	}
+	// Unknown tab falls back to subnets.
+	rec = authedGet(t, srv, st, "/settings?tab=bogus")
+	if !strings.Contains(rec.Body.String(), "Add subnet") {
+		t.Fatal("unknown tab should fall back to subnets")
+	}
+}
+
+func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
+	srv, st := testServer(t)
+	// Inject a detected subnet not yet configured.
+	srv.detect = func() ([]netdetect.Detected, error) {
+		return []netdetect.Detected{{CIDR: "192.168.7.0/24", Iface: "eth0"}}, nil
+	}
+	rec := authedGet(t, srv, st, "/settings?tab=subnets")
+	if !strings.Contains(rec.Body.String(), "192.168.7.0/24") {
+		t.Fatal("detected subnet should appear on the subnets tab")
+	}
+	// Once configured, it is no longer offered.
+	st.CreateSubnet(store.Subnet{CIDR: "192.168.7.0/24", Name: "eth0", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	rec = authedGet(t, srv, st, "/settings?tab=subnets")
+	// The configured subnet shows in the table, but not as a fresh "add" row.
+	if strings.Contains(rec.Body.String(), "no new subnets detected") == false {
+		t.Fatal("expected 'no new subnets detected' once all detected subnets exist")
 	}
 }

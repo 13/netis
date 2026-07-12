@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"netis/internal/events"
+	"netis/internal/netdetect"
 	"netis/internal/store"
 )
 
@@ -21,12 +22,14 @@ type Server struct {
 	broker  *events.Broker
 	trigger ScanTrigger
 	limiter *rateLimiter
+	detect  func() ([]netdetect.Detected, error)
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Server {
 	s := &Server{
 		mux: http.NewServeMux(), store: st, broker: broker,
 		trigger: trigger, limiter: newRateLimiter(),
+		detect: netdetect.DetectSubnets,
 	}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
