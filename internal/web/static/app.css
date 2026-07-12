@@ -6,6 +6,8 @@
   --ok:#1a7f37; --ok-soft:#d6f2dd; --bad:#c8202f; --bad-soft:#fbe0e2;
   --warn:#8a5a00; --warn-soft:#f7ead0;
   --shadow:0 1px 2px rgba(16,24,32,.06), 0 4px 16px rgba(16,24,32,.06);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.35);
+  --scrim:rgba(4,10,16,.55);
   --radius:10px; --radius-sm:6px;
 }
 @media (prefers-color-scheme: dark) {
@@ -163,9 +165,9 @@ label input, label select { color:var(--fg); }
              padding:22px; border-radius:var(--radius); display:flex; flex-direction:column; gap:12px; width:320px; max-width:100%; }
 
 /* ---- dialog shell (used by C) ---- */
-.dialog-scrim { position:fixed; inset:0; background:rgba(4,10,16,.55); display:grid; place-items:center; padding:20px; z-index:50; }
+.dialog-scrim { position:fixed; inset:0; background:var(--scrim); display:grid; place-items:center; padding:20px; z-index:50; }
 .dialog { width:100%; max-width:460px; background:var(--surface); border:1px solid var(--border-strong);
-          border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+          border-radius:var(--radius); box-shadow:var(--shadow-lg); overflow:hidden; }
 .dialog .dh { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
 .dialog .dh h3 { margin:0; font-size:15px; }
 .dialog .db { padding:16px; display:flex; flex-direction:column; gap:13px; }
