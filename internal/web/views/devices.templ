@@ -92,6 +92,74 @@ templ sortHeader(label, col, curSort, curDir, q string) {
 	</th>
 }
 
+templ deviceRow(row store.DeviceRow) {
+	<tr>
+		<td>
+			<div class="dev">
+				<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
+				<div>
+					<div>
+						<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
+						if row.Reviewed {
+							<span class="muted" title="reviewed">✓</span>
+						} else {
+							<span class="pill reserved"><span class="d"></span>new</span>
+						}
+					</div>
+					for i, mac := range row.MACs {
+						if i == 0 {
+							<div class="mono muted" style="font-size:11.5px">{ mac }</div>
+						}
+					}
+					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
+						<div class="muted" style="font-size:11.5px">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
+					}
+				</div>
+			</div>
+		</td>
+		<td class="mono">
+			for _, ip := range row.IPs {
+				<span>{ ip.IP }</span>{ " " }
+			}
+		</td>
+		<td>
+			for _, ip := range row.IPs {
+				if ip.Kind == "static" {
+					<span class="chip static">static</span>{ " " }
+				} else {
+					<span class="chip">dhcp</span>{ " " }
+				}
+			}
+		</td>
+		<td>
+			if row.Online {
+				<span class="pill online"><span class="d"></span>online</span>
+			} else {
+				<span class="pill offline"><span class="d"></span>offline</span>
+			}
+		</td>
+		<td>{ row.Kind }</td>
+		<td>{ row.Function }</td>
+		<td>
+			for _, tn := range row.TagNames {
+				<span class="tag">{ tn }</span>{ " " }
+			}
+		</td>
+		<td class="mono muted">
+			if row.LastSeen != nil {
+				{ *row.LastSeen }
+			}
+		</td>
+		<td>
+			if !row.Reviewed {
+				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
+					<button type="submit">Approve</button>
+				</form>
+			}
+		</td>
+	</tr>
+}
+
 templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string) {
 	@Layout("Devices", username) {
 		<h1>Devices</h1>
@@ -126,71 +194,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 				</thead>
 				<tbody>
 					for _, row := range rows {
-						<tr>
-							<td>
-								<div class="dev">
-									<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
-									<div>
-										<div>
-											<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
-											if row.Reviewed {
-												<span class="muted" title="reviewed">✓</span>
-											} else {
-												<span class="pill reserved"><span class="d"></span>new</span>
-											}
-										</div>
-										for i, mac := range row.MACs {
-											if i == 0 {
-												<div class="mono muted" style="font-size:11.5px">{ mac }</div>
-											}
-										}
-										if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
-											<div class="muted" style="font-size:11.5px">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
-										}
-									</div>
-								</div>
-							</td>
-							<td class="mono">
-								for _, ip := range row.IPs {
-									<span>{ ip.IP }</span>{ " " }
-								}
-							</td>
-							<td>
-								for _, ip := range row.IPs {
-									if ip.Kind == "static" {
-										<span class="chip static">static</span>{ " " }
-									} else {
-										<span class="chip">dhcp</span>{ " " }
-									}
-								}
-							</td>
-							<td>
-								if row.Online {
-									<span class="pill online"><span class="d"></span>online</span>
-								} else {
-									<span class="pill offline"><span class="d"></span>offline</span>
-								}
-							</td>
-							<td>{ row.Kind }</td>
-							<td>{ row.Function }</td>
-							<td>
-								for _, tn := range row.TagNames {
-									<span class="tag">{ tn }</span>{ " " }
-								}
-							</td>
-							<td class="mono muted">
-								if row.LastSeen != nil {
-									{ *row.LastSeen }
-								}
-							</td>
-							<td>
-								if !row.Reviewed {
-									<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
-										<button type="submit">Approve</button>
-									</form>
-								}
-							</td>
-						</tr>
+						@deviceRow(row)
 					}
 				</tbody>
 			</table>
@@ -246,7 +250,7 @@ func tagNamesJoin(tags []store.Tag) string {
 	return strings.Join(names, ", ")
 }
 
-templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool) {
+templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64) {
 	<div class="dialog-scrim">
 		<div class="dialog">
 			<div class="dh">
@@ -346,7 +350,11 @@ templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, all
 								<select name="subnet_id">
 									<option value="">—</option>
 									for _, sn := range subnets {
-										<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
+										if sn.ID == preselectSubnet {
+											<option value={ fmt.Sprint(sn.ID) } selected>{ sn.Name } { sn.CIDR }</option>
+										} else {
+											<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
+										}
 									}
 								</select>
 							</label>

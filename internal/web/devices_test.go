@@ -474,3 +474,26 @@ func TestListShowsAndFiltersNewFields(t *testing.T) {
 		t.Error("?q=espressif should match by vendor and exclude the Acme device")
 	}
 }
+
+func TestDeviceRowRegression(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(d, nil, nil)
+	st.AssignIP(f, snID, "10.0.0.5", "static")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "nas") || !strings.Contains(body, "chip static") {
+		t.Fatal("devices list should still render device rows after deviceRow extraction")
+	}
+}
+
+func TestNewDeviceSubnetPreselect(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+	body := authedGet(t, srv, st, "/devices/new?subnet=1").Body.String()
+	if !strings.Contains(body, `value="1" selected`) {
+		t.Fatalf("new device dialog should preselect subnet 1: %s", body)
+	}
+}
