@@ -259,3 +259,14 @@ func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 		t.Fatal("device must still exist")
 	}
 }
+
+func TestLayoutHasModalContainer(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	for _, want := range []string{`id="modal"`, "/static/dialog.js"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout missing %q", want)
+		}
+	}
+}
