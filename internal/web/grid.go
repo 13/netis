@@ -107,8 +107,10 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	sortKey, dir := parseDeviceSort(r)
+	sortDeviceRows(devices, sortKey, dir)
 	u, _ := userFrom(r)
-	views.GridPage(u.Username, sn, cells, devices).Render(r.Context(), w)
+	views.GridPage(u.Username, sn, cells, devices, sortKey, dir).Render(r.Context(), w)
 }
 
 func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {

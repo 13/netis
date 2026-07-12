@@ -39,6 +39,23 @@ func parseTags(s string) []string {
 	return out
 }
 
+// parseDeviceSort reads and normalizes the ?sort=&dir= query used by the
+// devices table (whitelist ip/name/status/kind/seen, default ip; dir asc unless
+// desc). Shared by the devices list and the subnet page.
+func parseDeviceSort(r *http.Request) (sortKey, dir string) {
+	sortKey = r.URL.Query().Get("sort")
+	switch sortKey {
+	case "ip", "name", "status", "kind", "seen":
+	default:
+		sortKey = "ip"
+	}
+	dir = r.URL.Query().Get("dir")
+	if dir != "desc" {
+		dir = "asc"
+	}
+	return sortKey, dir
+}
+
 func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.ListDevices()
 	if err != nil {
@@ -63,16 +80,7 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 		rows = filtered
 	}
 
-	sortKey := r.URL.Query().Get("sort")
-	switch sortKey {
-	case "ip", "name", "status", "kind", "seen":
-	default:
-		sortKey = "ip"
-	}
-	dir := r.URL.Query().Get("dir")
-	if dir != "desc" {
-		dir = "asc"
-	}
+	sortKey, dir := parseDeviceSort(r)
 	sortDeviceRows(rows, sortKey, dir)
 
 	u, _ := userFrom(r)
