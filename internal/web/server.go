@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"netis/internal/events"
+	"netis/internal/netdetect"
 	"netis/internal/store"
 )
 
@@ -21,12 +22,14 @@ type Server struct {
 	broker  *events.Broker
 	trigger ScanTrigger
 	limiter *rateLimiter
+	detect  func() ([]netdetect.Detected, error)
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Server {
 	s := &Server{
 		mux: http.NewServeMux(), store: st, broker: broker,
 		trigger: trigger, limiter: newRateLimiter(),
+		detect: netdetect.DetectSubnets,
 	}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -38,6 +41,11 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("GET /setup", s.handleSetupPage)
 	s.mux.HandleFunc("POST /setup", s.handleSetup)
 	s.mux.HandleFunc("GET /events/stream", s.handleSSE)
+	s.mux.HandleFunc("GET /welcome", s.handleWelcome)
+	s.mux.HandleFunc("POST /welcome/subnets", s.requireAdmin(s.handleWelcomeSubnets))
+	s.mux.HandleFunc("GET /welcome/integrations", s.handleWelcomeIntegrationsPage)
+	s.mux.HandleFunc("POST /welcome/integrations", s.requireAdmin(s.handleWelcomeIntegrations))
+	s.mux.HandleFunc("POST /welcome/skip", s.requireAdmin(s.handleWelcomeSkip))
 	s.mux.HandleFunc("GET /{$}", s.handleDashboard)
 	s.mux.HandleFunc("GET /dashboard/widgets", s.handleDashboardWidgets)
 	s.mux.HandleFunc("GET /subnets/{id}", s.handleSubnetPage)

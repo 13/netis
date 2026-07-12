@@ -39,3 +39,7 @@ form.inline { display:inline-block; margin-right:.5rem; }
 .band { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
 .panel { background:var(--card); border-radius:8px; padding:1rem; flex:1; min-width:280px; }
 .panel ul { margin:0; padding-left:1.1rem; }
+.tabs { display:flex; gap:.25rem; border-bottom:1px solid var(--free); margin-bottom:1rem; }
+.tab { padding:.5rem 1rem; color:var(--muted); text-decoration:none; border-bottom:2px solid transparent; }
+.tab.active { color:var(--fg); border-bottom-color:var(--ok); }
+.detected { display:block; margin:.25rem 0; }

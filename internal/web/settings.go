@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"netis/internal/netdetect"
 	"netis/internal/store"
 	"netis/internal/web/views"
 )
@@ -55,9 +56,30 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	values["offline_after"] = offlineAfter
 
+	tab := r.URL.Query().Get("tab")
+	switch tab {
+	case "subnets", "integrations", "users", "general":
+	default:
+		tab = "subnets"
+	}
+
+	var newDetected []netdetect.Detected
+	if detected, err := s.detect(); err == nil {
+		have := make(map[string]bool, len(subnets))
+		for _, sn := range subnets {
+			have[sn.CIDR] = true
+		}
+		for _, d := range detected {
+			if !have[d.CIDR] {
+				newDetected = append(newDetected, d)
+			}
+		}
+	}
+
 	u, _ := userFrom(r)
 	views.SettingsPage(u.Username, views.SettingsData{
 		Subnets: subnets, Users: users, Values: values,
+		ActiveTab: tab, Detected: newDetected,
 	}).Render(r.Context(), w)
 }
 
@@ -70,7 +92,7 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
 }
 
 func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +118,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
 }
 
 // parseSubnetForm validates and builds a store.Subnet from the request form,
@@ -135,10 +157,13 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
 }
 
-func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
+// saveIntegrationSettings writes the integration settings from a submitted
+// form: a blank secret keeps the stored value, and the *_insecure checkboxes
+// normalize "on" to "1". Shared by the settings page and the setup wizard.
+func (s *Server) saveIntegrationSettings(r *http.Request) error {
 	for _, k := range settingsKeys {
 		v := r.FormValue(k)
 		if (k == "proxmox_secret" || k == "pihole_password") && v == "" {
@@ -154,11 +179,18 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 		if err := s.store.SetSetting(k, v); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
+			return err
 		}
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	return nil
+}
+
+func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
+	if err := s.saveIntegrationSettings(r); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	http.Redirect(w, r, "/settings?tab=integrations", http.StatusSeeOther)
 }
 
 func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +214,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 
 func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +255,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot delete the last admin", 400)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 
 func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
@@ -236,5 +268,5 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?tab=general", http.StatusSeeOther)
 }

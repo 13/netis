@@ -8,10 +8,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"netis/internal/netdetect"
+	"netis/internal/store"
 )
 
 func TestCreateSubnetViaSettings(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/subnets", url.Values{
 		"cidr": {"192.168.1.0/24"}, "name": {"main"}, "kind": {"lan"},
 		"scan_interval_sec": {"120"}, "scan_enabled": {"on"},
@@ -34,6 +38,7 @@ func TestCreateSubnetViaSettings(t *testing.T) {
 
 func TestViewerCannotPostSettings(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	addAdmin(t, st)
 	uID, _ := st.CreateUser("eve", "h", "viewer")
 	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
@@ -49,6 +54,7 @@ func TestViewerCannotPostSettings(t *testing.T) {
 
 func TestCannotDeleteLastAdmin(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedGet(t, srv, st, "/") // creates admin "ben" id=1
 	_ = rec
 	del := authedPost(t, srv, st, "/settings/users/1/delete", url.Values{})
@@ -62,9 +68,10 @@ func TestCannotDeleteLastAdmin(t *testing.T) {
 
 func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	// Seed a stored password, then load the settings page as admin.
 	st.SetSetting("pihole_password", "topsecret")
-	rec := authedGet(t, srv, st, "/settings")
+	rec := authedGet(t, srv, st, "/settings?tab=integrations")
 	if rec.Code != 200 {
 		t.Fatalf("settings page code=%d", rec.Code)
 	}
@@ -94,6 +101,7 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 // lockout, since /setup refuses once any user exists).
 func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	authedGet(t, srv, st, "/") // creates admin "ben" (id=1) + session "testtok"
 	ben, ok, err := st.GetUserByName("ben")
 	if err != nil || !ok {
@@ -130,5 +138,44 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	}
 	if admins < 1 {
 		t.Fatalf("expected at least 1 admin remaining, got %d (users=%+v)", admins, users)
+	}
+}
+
+func TestSettingsTabsShowOneSection(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	// Users tab shows the users section, not the subnet "Add subnet" form.
+	rec := authedGet(t, srv, st, "/settings?tab=users")
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "Add user") {
+		t.Fatalf("users tab: code=%d", rec.Code)
+	}
+	if strings.Contains(body, "Add subnet") {
+		t.Fatal("users tab must not render the subnet create form")
+	}
+	// Unknown tab falls back to subnets.
+	rec = authedGet(t, srv, st, "/settings?tab=bogus")
+	if !strings.Contains(rec.Body.String(), "Add subnet") {
+		t.Fatal("unknown tab should fall back to subnets")
+	}
+}
+
+func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	// Inject a detected subnet not yet configured.
+	srv.detect = func() ([]netdetect.Detected, error) {
+		return []netdetect.Detected{{CIDR: "192.168.7.0/24", Iface: "eth0"}}, nil
+	}
+	rec := authedGet(t, srv, st, "/settings?tab=subnets")
+	if !strings.Contains(rec.Body.String(), "192.168.7.0/24") {
+		t.Fatal("detected subnet should appear on the subnets tab")
+	}
+	// Once configured, it is no longer offered.
+	st.CreateSubnet(store.Subnet{CIDR: "192.168.7.0/24", Name: "eth0", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	rec = authedGet(t, srv, st, "/settings?tab=subnets")
+	// The configured subnet shows in the table, but not as a fresh "add" row.
+	if strings.Contains(rec.Body.String(), "no new subnets detected") == false {
+		t.Fatal("expected 'no new subnets detected' once all detected subnets exist")
 	}
 }
