@@ -85,3 +85,17 @@ func TestWelcomeSkipSetsOnboarded(t *testing.T) {
 		t.Fatalf("onboarded not set: %q", v)
 	}
 }
+
+func TestWelcomeOnboardingChrome(t *testing.T) {
+	srv, st := testServer(t)
+	sub := authedGet(t, srv, st, "/welcome").Body.String()
+	for _, want := range []string{`class="stepper"`, "Continue", "Which subnets"} {
+		if !strings.Contains(sub, want) {
+			t.Errorf("welcome subnets missing %q", want)
+		}
+	}
+	integ := authedGet(t, srv, st, "/welcome/integrations").Body.String()
+	if !strings.Contains(integ, `class="stepper"`) || !strings.Contains(integ, `name="pihole_url"`) {
+		t.Errorf("welcome integrations missing stepper/fields: %s", integ)
+	}
+}
