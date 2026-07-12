@@ -3,37 +3,36 @@ package views
 import "netis/internal/netdetect"
 
 templ WelcomeSubnets(username string, detected []netdetect.Detected) {
-	@Layout("Welcome", username) {
-		<h1>Welcome to netis</h1>
-		<p>Step 1 of 2 — pick the subnets to scan.</p>
-		<form method="post" action="/welcome/subnets" class="auth-card">
+	@onboardShell("Welcome", 2) {
+		<h1>Which subnets should netis scan?</h1>
+		<p class="muted">Pick the networks to watch. You can change these later in Settings.</p>
+		<form method="post" action="/welcome/subnets">
 			if len(detected) == 0 {
 				<p class="muted">No subnets auto-detected. Add one manually below.</p>
 			} else {
-				<p>Detected on this host:</p>
 				for _, d := range detected {
-					<label>
+					<label class="toggle-row">
 						<input type="checkbox" name="subnet" value={ d.CIDR + "|" + d.Iface } checked/>
-						<span class="mono">{ d.CIDR }</span> <span class="muted">({ d.Iface })</span>
+						<span class="mono">{ d.CIDR }</span> <span class="muted">{ d.Iface }</span>
 					</label>
 				}
 			}
 			<label>Add another CIDR <input type="text" name="manual_cidr" placeholder="192.168.1.0/24"/></label>
-			<button type="submit">Continue</button>
+			<button type="submit" class="primary">Continue</button>
 		</form>
 	}
 }
 
 templ WelcomeIntegrations(username string, values map[string]string) {
-	@Layout("Welcome", username) {
-		<h1>Welcome to netis</h1>
-		<p>Step 2 of 2 — connect an integration (optional).</p>
-		<form method="post" action="/welcome/integrations" class="auth-card">
+	@onboardShell("Welcome", 3) {
+		<h1>Connect an integration</h1>
+		<p class="muted">Optional — link Proxmox, WireGuard, or Pi-hole. You can do this later in Settings.</p>
+		<form method="post" action="/welcome/integrations">
 			@integrationsFields(values)
-			<button type="submit">Save &amp; finish</button>
+			<button type="submit" class="primary">Save &amp; finish</button>
 		</form>
 		<form method="post" action="/welcome/skip">
-			<button type="submit">Skip for now</button>
+			<button type="submit" class="ghost">Skip for now</button>
 		</form>
 	}
 }

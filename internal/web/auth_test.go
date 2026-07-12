@@ -120,6 +120,34 @@ func TestLoginSetsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestSetupOnboardingChrome(t *testing.T) {
+	srv, _ := testServer(t) // no users → /setup renders
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/setup", nil))
+	if rec.Code != 200 {
+		t.Fatalf("setup code=%d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`name="username"`, `name="password"`, `class="stepper"`, "onboard-brand", "Integrations"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("setup page missing %q", want)
+		}
+	}
+}
+
+func TestLoginBrand(t *testing.T) {
+	srv, st := testServer(t)
+	addAdmin(t, st) // users exist → /login renders
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	body := rec.Body.String()
+	for _, want := range []string{`name="username"`, "onboard-brand"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("login page missing %q", want)
+		}
+	}
+}
+
 func TestLoginRateLimit(t *testing.T) {
 	srv, st := testServer(t)
 	addAdmin(t, st)
