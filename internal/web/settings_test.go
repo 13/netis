@@ -210,6 +210,28 @@ func TestSettingsTabsRender(t *testing.T) {
 	}
 }
 
+func TestSettingsRunButtonAndAlignment(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+
+	integ := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
+	for _, want := range []string{
+		`hx-post="/settings/integrations/proxmox/run"`,
+		`hx-post="/settings/integrations/wireguard/run"`,
+		`hx-post="/settings/integrations/pihole/run"`,
+	} {
+		if !strings.Contains(integ, want) {
+			t.Errorf("integrations tab missing %q", want)
+		}
+	}
+
+	subs := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
+	if !strings.Contains(subs, `form="sn-edit-1"`) {
+		t.Error("subnet card Save button should link to the edit form via form=")
+	}
+}
+
 func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
