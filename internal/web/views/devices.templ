@@ -348,7 +348,7 @@ func tagNamesJoin(tags []store.Tag) string {
 
 // deviceFormInner is the shared header + form used by both the centered create
 // dialog and the right-side edit drawer.
-templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64) {
+templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64, preIP string) {
 	<div class="dh">
 		if isEdit {
 			<h3>Edit device</h3>
@@ -439,7 +439,7 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 					</label>
 					<label>
 						IP
-						<input type="text" name="ip" placeholder="10.0.0.5"/>
+						<input type="text" name="ip" placeholder="10.0.0.5" value={ preIP }/>
 					</label>
 					<label>
 						Subnet
@@ -469,10 +469,10 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 }
 
 // DeviceDialog is the centered modal used for creating a device.
-templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64) {
+templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64, preIP string) {
 	<div class="dialog-scrim">
 		<div class="dialog">
-			@deviceFormInner(d, tags, subnets, allDevices, isEdit, preselectSubnet)
+			@deviceFormInner(d, tags, subnets, allDevices, isEdit, preselectSubnet, preIP)
 		</div>
 	</div>
 }
@@ -481,7 +481,7 @@ templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, all
 templ DeviceDrawer(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, preselectSubnet int64) {
 	<div class="dialog-scrim drawer-scrim">
 		<div class="dialog drawer">
-			@deviceFormInner(d, tags, subnets, allDevices, true, preselectSubnet)
+			@deviceFormInner(d, tags, subnets, allDevices, true, preselectSubnet, "")
 		</div>
 	</div>
 }
