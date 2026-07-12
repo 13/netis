@@ -53,7 +53,7 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 				</thead>
 				<tbody>
 					for _, d := range devices {
-						@deviceRow(d)
+						@deviceRow(d, 0)
 					}
 				</tbody>
 			</table>

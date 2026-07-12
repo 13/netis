@@ -603,3 +603,50 @@ func TestDeviceDetailRedesign(t *testing.T) {
 		}
 	}
 }
+
+func TestDeviceListParentChildGrouping(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	pid, _ := st.CreateDevice(store.Device{Name: "aaa-parent", Kind: "switch", Source: "manual"})
+	st.CreateDevice(store.Device{Name: "mmm-mid", Kind: "computer", Source: "manual"})
+	st.CreateDevice(store.Device{Name: "zzz-child", Kind: "computer", Source: "manual", ParentDeviceID: &pid})
+
+	body := authedGet(t, srv, st, "/devices?sort=name&dir=asc").Body.String()
+	iParent := strings.Index(body, "aaa-parent")
+	iMid := strings.Index(body, "mmm-mid")
+	iChild := strings.Index(body, "zzz-child")
+	if iParent < 0 || iMid < 0 || iChild < 0 {
+		t.Fatalf("rows missing: parent=%d mid=%d child=%d", iParent, iMid, iChild)
+	}
+	// Grouping pulls the child up under its parent, ahead of the later root.
+	if !(iParent < iChild && iChild < iMid) {
+		t.Fatalf("expected parent<child<mid, got parent=%d child=%d mid=%d", iParent, iChild, iMid)
+	}
+	if !strings.Contains(body, "tree-branch") {
+		t.Fatalf("child row missing tree-branch marker")
+	}
+}
+
+func TestDeviceListOrphanChildIsRoot(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	// A parent_device_id with no matching row (e.g. a parent excluded from
+	// this result set). The device table's parent_device_id FK is enforced
+	// immediately, so st.CreateDevice would reject a literally nonexistent
+	// parent id outright; insert directly (bypassing FK, the same way
+	// store.go's own migration path does) to model a row whose parent is
+	// simply absent from the fetched rows.
+	if _, err := st.DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO device (name, kind, source, parent_device_id, reviewed) VALUES ('orphan', 'computer', 'manual', 9999, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		t.Fatal(err)
+	}
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "orphan") {
+		t.Fatalf("orphan (parent absent) should still render as a root")
+	}
+}

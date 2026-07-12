@@ -85,9 +85,58 @@ func oppositeKind(kind string) string {
 	return "static"
 }
 
-templ sortHeader(label, col, curSort, curDir, q string) {
+// DeviceGroupRow is a device row plus its nesting depth for the tree list.
+type DeviceGroupRow struct {
+	Row   store.DeviceRow
+	Depth int
+}
+
+// GroupByParent reorders rows so each child immediately follows its parent,
+// indented one level deeper, while preserving the incoming sort within each
+// sibling set. A child whose parent is absent from rows is treated as a root
+// (never dropped); a cyclic parent_device_id is broken by the visited guard.
+func GroupByParent(rows []store.DeviceRow) []DeviceGroupRow {
+	present := make(map[int64]bool, len(rows))
+	for _, r := range rows {
+		present[r.ID] = true
+	}
+	byParent := make(map[int64][]store.DeviceRow)
+	var roots []store.DeviceRow
+	for _, r := range rows {
+		if r.ParentDeviceID != nil && present[*r.ParentDeviceID] {
+			byParent[*r.ParentDeviceID] = append(byParent[*r.ParentDeviceID], r)
+		} else {
+			roots = append(roots, r)
+		}
+	}
+	out := make([]DeviceGroupRow, 0, len(rows))
+	visited := make(map[int64]bool, len(rows))
+	var walk func(r store.DeviceRow, depth int)
+	walk = func(r store.DeviceRow, depth int) {
+		if visited[r.ID] {
+			return
+		}
+		visited[r.ID] = true
+		out = append(out, DeviceGroupRow{Row: r, Depth: depth})
+		for _, c := range byParent[r.ID] {
+			walk(c, depth+1)
+		}
+	}
+	for _, r := range roots {
+		walk(r, 0)
+	}
+	// Any rows unreached (e.g. a cycle among non-roots) are appended flat.
+	for _, r := range rows {
+		if !visited[r.ID] {
+			out = append(out, DeviceGroupRow{Row: r, Depth: 0})
+		}
+	}
+	return out
+}
+
+templ sortHeader(label, col, curSort, curDir, q, base string) {
 	<th>
-		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
+		<a href={ templ.URL(sortURL(base, q, col, curSort, curDir)) }>
 			{ label }
 			if curSort == col {
 				if curDir == "asc" {
@@ -120,10 +169,16 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 	</span>
 }
 
-templ deviceRow(row store.DeviceRow) {
+templ deviceRow(row store.DeviceRow, depth int) {
 	<tr>
 		<td>
 			<div class="dev">
+				for i := 0; i < depth; i++ {
+					<span class="tree-indent"></span>
+				}
+				if depth > 0 {
+					<span class="tree-branch">↳</span>
+				}
 				<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
 				<div>
 					<div>
@@ -188,6 +243,38 @@ templ deviceRow(row store.DeviceRow) {
 	</tr>
 }
 
+// deviceTable renders the sortable devices table. `base` is the page hosting
+// the table (its sort links point there); when `grouped`, child rows are nested
+// under their parent.
+templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped bool) {
+	<table>
+		<thead>
+			<tr>
+				@sortHeader("Device", "name", sortKey, dir, q, base)
+				@sortHeader("IP", "ip", sortKey, dir, q, base)
+				<th>Lease</th>
+				@sortHeader("Status", "status", sortKey, dir, q, base)
+				@sortHeader("Kind", "kind", sortKey, dir, q, base)
+				<th>Function</th>
+				<th>Tags</th>
+				@sortHeader("Last seen", "seen", sortKey, dir, q, base)
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			if grouped {
+				for _, g := range GroupByParent(rows) {
+					@deviceRow(g.Row, g.Depth)
+				}
+			} else {
+				for _, row := range rows {
+					@deviceRow(row, 0)
+				}
+			}
+		</tbody>
+	</table>
+}
+
 templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string) {
 	@Layout("Devices", username) {
 		<h1>Devices</h1>
@@ -206,26 +293,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 		</div>
 
 		<div id="dev-list">
-			<table>
-				<thead>
-					<tr>
-						@sortHeader("Device", "name", sortKey, dir, q)
-						@sortHeader("IP", "ip", sortKey, dir, q)
-						<th>Lease</th>
-						@sortHeader("Status", "status", sortKey, dir, q)
-						@sortHeader("Kind", "kind", sortKey, dir, q)
-						<th>Function</th>
-						<th>Tags</th>
-						@sortHeader("Last seen", "seen", sortKey, dir, q)
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range rows {
-						@deviceRow(row)
-					}
-				</tbody>
-			</table>
+			@deviceTable(rows, q, sortKey, dir, "/devices", true)
 		</div>
 
 		<div id="dev-grid" class="devgrid" style="display:none">
@@ -262,10 +330,10 @@ func nextDir(col, curSort, curDir string) string {
 	return "asc"
 }
 
-// sortURL builds a /devices link that preserves the filter (URL-encoded) and
+// sortURL builds a link on `base` that preserves the filter (URL-encoded) and
 // toggles the sort direction for the clicked column.
-func sortURL(q, col, curSort, curDir string) string {
-	return "/devices?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
+func sortURL(base, q, col, curSort, curDir string) string {
+	return base + "?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
 }
 
 // tagNamesJoin renders a device's tags as a comma-separated string for the

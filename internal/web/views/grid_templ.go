@@ -179,7 +179,7 @@ func GridPage(username string, sn store.Subnet, cells []GridCell, devices []stor
 					return templ_7745c5c3_Err
 				}
 				for _, d := range devices {
-					templ_7745c5c3_Err = deviceRow(d).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = deviceRow(d, 0).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
