@@ -260,6 +260,56 @@ func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	}
 }
 
+func TestDeviceNewDialogFragment(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`class="dialog"`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<nav") {
+		t.Error("new dialog should be a fragment, not a full page with <nav>")
+	}
+}
+
+func TestDeviceEditDialogPrefilled(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	parentID, _ := st.CreateDevice(store.Device{Name: "core-switch", Kind: "switch", Source: "manual"})
+	pid := parentID
+	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", ParentDeviceID: &pid, Source: "manual"})
+	st.SetDeviceTags(devID, []string{"storage"})
+
+	body := authedGet(t, srv, st, "/devices/2/edit").Body.String()
+	if !strings.Contains(body, `value="nas"`) {
+		t.Error("edit dialog missing prefilled name")
+	}
+	if !strings.Contains(body, `value="storage"`) {
+		t.Error("edit dialog missing prefilled tags")
+	}
+	// Parent device (id 1) must be the pre-selected option. Kind-select
+	// "selected" options carry string values (e.g. "server"), so match the
+	// numeric parent value specifically.
+	if !strings.Contains(body, "core-switch") || !strings.Contains(body, `value="1" selected`) {
+		t.Error("edit dialog should pre-select the parent device")
+	}
+	// The edited device must not appear as a selectable parent of itself.
+	if strings.Contains(body, "nas — ") || strings.Contains(body, ">nas<") {
+		t.Error("edit dialog should exclude the device itself from parent options")
+	}
+	_ = devID
+}
+
+func TestDeviceEditDialogBadID404(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	if rec := authedGet(t, srv, st, "/devices/999/edit"); rec.Code != http.StatusNotFound {
+		t.Fatalf("edit unknown device = %d, want 404", rec.Code)
+	}
+}
+
 func TestLayoutHasModalContainer(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

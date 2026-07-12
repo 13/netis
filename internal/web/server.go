@@ -53,6 +53,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("POST /subnets/{id}/scan", s.requireAdmin(s.handleScanNow))
 	s.mux.HandleFunc("GET /devices", s.handleDeviceList)
 	s.mux.HandleFunc("GET /devices/new", s.handleDeviceForm)
+	s.mux.HandleFunc("GET /devices/{id}/edit", s.handleDeviceEditForm)
 	s.mux.HandleFunc("POST /devices", s.requireAdmin(s.handleDeviceCreate))
 	s.mux.HandleFunc("GET /devices/{id}", s.handleDevicePage)
 	s.mux.HandleFunc("POST /devices/{id}", s.requireAdmin(s.handleDeviceUpdate))

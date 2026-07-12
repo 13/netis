@@ -130,8 +130,45 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	u, _ := userFrom(r)
-	views.DeviceForm(u.Username, subnets).Render(r.Context(), w)
+	all, err := s.store.ListDevices()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false).Render(r.Context(), w)
+}
+
+func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	d, err := s.store.GetDevice(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	tags, err := s.store.DeviceTags(id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	subnets, err := s.store.ListSubnets()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	all, err := s.store.ListDevices()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.DeviceDialog(d, tags, subnets, all, true).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
