@@ -8,12 +8,13 @@ type Occupant struct {
 	Online     bool
 	EverSeen   bool
 	Count      int
+	Kind       string
 }
 
 func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
 	rows, err := s.DB.Query(`SELECT a.ip, f.id, d.id, d.name,
 			COALESCE(f.mac,''), COALESCE(st.last_seen,''),
-			COALESCE(st.online,0), st.first_seen IS NOT NULL
+			COALESCE(st.online,0), st.first_seen IS NOT NULL, a.kind
 		FROM ip_assignment a
 		JOIN iface f ON f.id=a.iface_id
 		JOIN device d ON d.id=f.device_id
@@ -30,7 +31,7 @@ func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
 		var ip string
 		var ifaceID int64
 		if err := rows.Scan(&ip, &ifaceID, &o.DeviceID, &o.DeviceName, &o.MAC,
-			&o.LastSeen, &o.Online, &o.EverSeen); err != nil {
+			&o.LastSeen, &o.Online, &o.EverSeen, &o.Kind); err != nil {
 			return nil, err
 		}
 		if ifacesByIP[ip] == nil {
@@ -49,4 +50,13 @@ func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
 		out[ip] = o
 	}
 	return out, nil
+}
+
+// SetIPKind updates the lease kind (static/dhcp) of an assignment identified by
+// its subnet and IP. Callers validate the kind; a 0-row update (no such
+// assignment) is not an error.
+func (s *Store) SetIPKind(subnetID int64, ip, kind string) error {
+	_, err := s.DB.Exec(`UPDATE ip_assignment SET kind=? WHERE subnet_id=? AND ip=?`,
+		kind, subnetID, ip)
+	return err
 }

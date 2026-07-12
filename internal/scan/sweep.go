@@ -20,20 +20,32 @@ type Sweeper interface {
 	Sweep(ctx context.Context, cidr string) ([]Result, error)
 }
 
-func HostIPs(cidr string) ([]string, error) {
+// AllIPs returns every address in cidr from the network address to the
+// broadcast address inclusive.
+func AllIPs(cidr string) ([]string, error) {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return nil, err
 	}
 	prefix = prefix.Masked()
 	var out []string
-	skipEdges := prefix.Addr().Is4() && prefix.Bits() < 31
-	first := prefix.Addr()
-	for addr := first; prefix.Contains(addr); addr = addr.Next() {
+	for addr := prefix.Addr(); prefix.Contains(addr); addr = addr.Next() {
 		out = append(out, addr.String())
 	}
-	if skipEdges && len(out) >= 2 {
-		out = out[1 : len(out)-1] // drop network + broadcast
+	return out, nil
+}
+
+// HostIPs returns the usable host addresses in cidr: the full range with the
+// network and broadcast addresses trimmed for IPv4 subnets shorter than /31.
+func HostIPs(cidr string) ([]string, error) {
+	out, err := AllIPs(cidr)
+	if err != nil {
+		return nil, err
+	}
+	prefix, _ := netip.ParsePrefix(cidr) // already validated by AllIPs
+	prefix = prefix.Masked()
+	if prefix.Addr().Is4() && prefix.Bits() < 31 && len(out) >= 2 {
+		out = out[1 : len(out)-1]
 	}
 	return out, nil
 }

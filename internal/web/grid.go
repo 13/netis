@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
 
 	"netis/internal/scan"
@@ -15,15 +16,32 @@ func (s *Server) gridCells(sn store.Subnet) ([]views.GridCell, error) {
 	if err != nil {
 		return nil, err
 	}
-	ips, err := scan.HostIPs(sn.CIDR)
+	ips, err := scan.AllIPs(sn.CIDR)
 	if err != nil {
 		return nil, err
 	}
+	prefix, err := netip.ParsePrefix(sn.CIDR)
+	if err != nil {
+		return nil, err
+	}
+	prefix = prefix.Masked()
+	hasEdges := prefix.Addr().Is4() && prefix.Bits() < 31
 	cells := make([]views.GridCell, 0, len(ips))
-	for _, ip := range ips {
+	for i, ip := range ips {
 		c := views.GridCell{IP: ip, State: "free", Title: ip}
+		if hasEdges && (i == 0 || i == len(ips)-1) {
+			c.State = "edge"
+			if i == 0 {
+				c.Title = ip + " — network address"
+			} else {
+				c.Title = ip + " — broadcast address"
+			}
+			cells = append(cells, c)
+			continue
+		}
 		if o, ok := occ[ip]; ok {
 			c.DeviceID = o.DeviceID
+			c.Kind = o.Kind
 			c.Title = fmt.Sprintf("%s — %s %s last seen %s", ip, o.DeviceName, o.MAC, o.LastSeen)
 			switch {
 			case o.Count > 1:
@@ -92,6 +110,41 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 		s.trigger.Trigger(sn.ID)
 	}
 	views.ScanToast("Scanning "+sn.CIDR+"…").Render(r.Context(), w)
+}
+
+func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
+	sn, err := s.subnetFromPath(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ip := r.URL.Query().Get("ip")
+	occ, err := s.store.SubnetOccupancy(sn.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.CellDetail(sn, ip, occ[ip]).Render(r.Context(), w)
+}
+
+func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
+	sn, err := s.subnetFromPath(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ip := r.FormValue("ip")
+	kind := r.FormValue("kind")
+	if kind != "static" && kind != "dhcp" {
+		http.Error(w, "bad kind", 400)
+		return
+	}
+	if err := s.store.SetIPKind(sn.ID, ip, kind); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	s.broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
+	views.ScanToast(ip+" → "+kind).Render(r.Context(), w)
 }
 
 func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
