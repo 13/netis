@@ -76,6 +76,52 @@ func TestDeviceListFilter(t *testing.T) {
 	}
 }
 
+func TestDeviceListDefaultSortIPNumeric(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	mk := func(name, ip string) {
+		d, _ := st.CreateDevice(store.Device{Name: name, Kind: "other", Source: "manual"})
+		f, _ := st.AddIface(d, nil, nil)
+		st.AssignIP(f, snID, ip, "dhcp")
+	}
+	mk("c", "10.0.0.100")
+	mk("a", "10.0.0.2")
+	mk("b", "10.0.0.10")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	// Numeric IP order: .2 before .10 before .100 (string sort would flip .10/.100/.2).
+	i2, i10, i100 := strings.Index(body, "10.0.0.2<"), strings.Index(body, "10.0.0.10<"), strings.Index(body, "10.0.0.100<")
+	if !(i2 >= 0 && i10 > i2 && i100 > i10) {
+		t.Fatalf("IP order wrong: .2@%d .10@%d .100@%d", i2, i10, i100)
+	}
+}
+
+func TestDeviceListLeaseChipsAndGrid(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(d, nil, nil)
+	st.AssignIP(f, snID, "10.0.0.5", "static")
+	st.AssignIP(f, snID, "10.0.0.6", "dhcp")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	for _, want := range []string{"chip static", "chip", `id="dev-grid"`, `id="dev-list"`, `class="seg"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("device list missing %q", want)
+		}
+	}
+}
+
+func TestDeviceListNewMarker(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "new") {
+		t.Fatal("unreviewed scan device should show a 'new' marker")
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

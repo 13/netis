@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,8 +50,78 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = filtered
 	}
+
+	sortKey := r.URL.Query().Get("sort")
+	switch sortKey {
+	case "ip", "name", "status", "kind", "seen":
+	default:
+		sortKey = "ip"
+	}
+	dir := r.URL.Query().Get("dir")
+	if dir != "desc" {
+		dir = "asc"
+	}
+	sortDeviceRows(rows, sortKey, dir)
+
 	u, _ := userFrom(r)
-	views.DeviceList(u.Username, rows, r.URL.Query().Get("q")).Render(r.Context(), w)
+	views.DeviceList(u.Username, rows, r.URL.Query().Get("q"), sortKey, dir).Render(r.Context(), w)
+}
+
+// lowestIP returns the device's numerically smallest IP, or the zero Addr
+// (which sorts before all real addresses) when it has none; callers push
+// no-IP devices to the end explicitly.
+func lowestIP(row store.DeviceRow) (netip.Addr, bool) {
+	var best netip.Addr
+	found := false
+	for _, ip := range row.IPs {
+		a, err := netip.ParseAddr(ip.IP)
+		if err != nil {
+			continue
+		}
+		if !found || a.Compare(best) < 0 {
+			best, found = a, true
+		}
+	}
+	return best, found
+}
+
+func sortDeviceRows(rows []store.DeviceRow, key, dir string) {
+	less := func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		switch key {
+		case "name":
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		case "kind":
+			return a.Kind < b.Kind
+		case "status":
+			return a.Online && !b.Online // online first
+		case "seen":
+			as, bs := "", ""
+			if a.LastSeen != nil {
+				as = *a.LastSeen
+			}
+			if b.LastSeen != nil {
+				bs = *b.LastSeen
+			}
+			return as > bs // most-recent first; never-seen ("") last
+		default: // ip
+			ai, aok := lowestIP(a)
+			bi, bok := lowestIP(b)
+			if aok != bok {
+				return aok // devices with an IP sort before those without
+			}
+			if !aok {
+				return false
+			}
+			return ai.Compare(bi) < 0
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if dir == "desc" {
+			return less(j, i)
+		}
+		return less(i, j)
+	})
 }
 
 func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {

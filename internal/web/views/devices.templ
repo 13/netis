@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"net/url"
 
 	"netis/internal/store"
 )
@@ -36,68 +37,152 @@ type DeviceDetail struct {
 	Events   []store.Event
 }
 
-templ DeviceList(username string, rows []store.DeviceRow, q string) {
+templ sortHeader(label, col, curSort, curDir, q string) {
+	<th>
+		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
+			{ label }
+			if curSort == col {
+				if curDir == "asc" {
+					{ " ▲" }
+				} else {
+					{ " ▼" }
+				}
+			}
+		</a>
+	</th>
+}
+
+templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string) {
 	@Layout("Devices", username) {
 		<h1>Devices</h1>
-		<p>
+		<div class="toolbar">
 			<input
-				type="search" name="q" value={ q } placeholder="filter…"
-				hx-get="/devices" hx-trigger="input changed delay:300ms"
-				hx-target="body" hx-push-url="true"
+				class="grow" type="search" name="q" value={ q } placeholder="filter devices, IP, MAC, tag…"
+				hx-get="/devices" hx-trigger="input changed delay:300ms" hx-target="body" hx-push-url="true"
 			/>
-			<a href="/devices/new"><button type="button">New device</button></a>
-		</p>
-		<table>
-			<tr>
-				<th></th>
-				<th>Name</th>
-				<th>Kind</th>
-				<th>IPs</th>
-				<th>MACs</th>
-				<th>Vendor</th>
-				<th>Tags</th>
-				<th>Last seen</th>
-			</tr>
+			<div class="seg" id="dev-view">
+				<button type="button" data-view="list">List</button>
+				<button type="button" data-view="grid">Grid</button>
+			</div>
+			<a href="/devices/new"><button type="button" class="primary">New device</button></a>
+		</div>
+
+		<div id="dev-list">
+			<table>
+				<thead>
+					<tr>
+						@sortHeader("Device", "name", sortKey, dir, q)
+						@sortHeader("IP", "ip", sortKey, dir, q)
+						<th>Lease</th>
+						@sortHeader("Status", "status", sortKey, dir, q)
+						@sortHeader("Kind", "kind", sortKey, dir, q)
+						<th>Tags</th>
+						@sortHeader("Last seen", "seen", sortKey, dir, q)
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range rows {
+						<tr>
+							<td>
+								<div class="dev">
+									<span class="ic">{ KindIcon(row.Kind) }</span>
+									<div>
+										<div>
+											<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
+											if row.Reviewed {
+												<span class="muted" title="reviewed">✓</span>
+											} else {
+												<span class="pill reserved"><span class="d"></span>new</span>
+											}
+										</div>
+										for i, mac := range row.MACs {
+											if i == 0 {
+												<div class="mono muted" style="font-size:11.5px">{ mac }</div>
+											}
+										}
+									</div>
+								</div>
+							</td>
+							<td class="mono">
+								for _, ip := range row.IPs {
+									<span>{ ip.IP }</span>{ " " }
+								}
+							</td>
+							<td>
+								for _, ip := range row.IPs {
+									if ip.Kind == "static" {
+										<span class="chip static">static</span>{ " " }
+									} else {
+										<span class="chip">dhcp</span>{ " " }
+									}
+								}
+							</td>
+							<td>
+								if row.Online {
+									<span class="pill online"><span class="d"></span>online</span>
+								} else {
+									<span class="pill offline"><span class="d"></span>offline</span>
+								}
+							</td>
+							<td>{ row.Kind }</td>
+							<td>
+								for _, tn := range row.TagNames {
+									<span class="tag">{ tn }</span>{ " " }
+								}
+							</td>
+							<td class="mono muted">
+								if row.LastSeen != nil {
+									{ *row.LastSeen }
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+
+		<div id="dev-grid" class="devgrid" style="display:none">
 			for _, row := range rows {
-				<tr>
-					<td>
+				<a class="devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
+					<span class="st">
 						if row.Online {
-							<span class="ok">●</span>
+							<span class="pill online"><span class="d"></span></span>
+						} else {
+							<span class="pill offline"><span class="d"></span></span>
 						}
-					</td>
-					<td><a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a></td>
-					<td>{ row.Kind }</td>
-					<td class="mono">
+					</span>
+					<span class="ic">{ KindIcon(row.Kind) }</span>
+					<div class="nm">
+						{ row.Name }
+						if !row.Reviewed {
+							<span class="pill reserved" style="margin-left:4px"><span class="d"></span>new</span>
+						}
+					</div>
+					<div class="ip mono">
 						for i, ip := range row.IPs {
-							if i > 0 {
-								{ ", " }
+							if i == 0 {
+								{ ip.IP }
 							}
-							{ ip.IP }
 						}
-					</td>
-					<td class="mono">
-						for i, mac := range row.MACs {
-							if i > 0 {
-								{ ", " }
-							}
-							{ mac }
-						}
-					</td>
-					<td>{ row.Vendor }</td>
-					<td>
-						for _, tn := range row.TagNames {
-							<span class="badge">{ tn }</span>
-						}
-					</td>
-					<td class="mono">
-						if row.LastSeen != nil {
-							{ *row.LastSeen }
-						}
-					</td>
-				</tr>
+					</div>
+				</a>
 			}
-		</table>
+		</div>
+		<script src="/static/devices.js"></script>
 	}
+}
+
+func nextDir(col, curSort, curDir string) string {
+	if curSort == col && curDir == "asc" {
+		return "desc"
+	}
+	return "asc"
+}
+
+// sortURL builds a /devices link that preserves the filter (URL-encoded) and
+// toggles the sort direction for the clicked column.
+func sortURL(q, col, curSort, curDir string) string {
+	return "/devices?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
 }
 
 templ DeviceForm(username string, subnets []store.Subnet) {
