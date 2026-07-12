@@ -67,6 +67,30 @@ func (s *Server) subnetFromPath(r *http.Request) (store.Subnet, error) {
 	return s.store.GetSubnet(id)
 }
 
+// devicesInSubnet returns the DeviceRows that have an IP assigned in subnetID,
+// in ListDevices order.
+func (s *Server) devicesInSubnet(subnetID int64) ([]store.DeviceRow, error) {
+	all, err := s.store.ListDevices()
+	if err != nil {
+		return nil, err
+	}
+	links, err := s.store.ListSubnetIfaceIPs(subnetID)
+	if err != nil {
+		return nil, err
+	}
+	inSubnet := make(map[int64]bool, len(links))
+	for _, l := range links {
+		inSubnet[l.DeviceID] = true
+	}
+	var out []store.DeviceRow
+	for _, d := range all {
+		if inSubnet[d.ID] {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 	sn, err := s.subnetFromPath(r)
 	if err != nil {
@@ -78,8 +102,13 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	devices, err := s.devicesInSubnet(sn.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	u, _ := userFrom(r)
-	views.GridPage(u.Username, sn, cells).Render(r.Context(), w)
+	views.GridPage(u.Username, sn, cells, devices).Render(r.Context(), w)
 }
 
 func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {

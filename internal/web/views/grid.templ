@@ -14,7 +14,7 @@ type GridCell struct {
 	Kind     string
 }
 
-templ GridPage(username string, sn store.Subnet, cells []GridCell) {
+templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow) {
 	@Layout(sn.Name, username) {
 		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
 		if sn.Kind != "wireguard" {
@@ -37,6 +37,27 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell) {
 			· border: <span class="sq static"></span> static
 			<span class="sq dhcp"></span> dhcp
 		</p>
+		<p class="muted">
+			The grid shows every IP assigned in this subnet. Devices without an IP here (or on other subnets) aren't listed — see the full <a href="/devices">Devices</a> page.
+		</p>
+		<h2>
+			{ "Devices in this subnet (" + fmt.Sprint(len(devices)) + ")" }
+			<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</button>
+		</h2>
+		if len(devices) == 0 {
+			<p class="muted">No devices with an IP in this subnet yet.</p>
+		} else {
+			<table>
+				<thead>
+					<tr><th>Device</th><th>IP</th><th>Lease</th><th>Status</th><th>Kind</th><th>Function</th><th>Tags</th><th>Last seen</th><th></th></tr>
+				</thead>
+				<tbody>
+					for _, d := range devices {
+						@deviceRow(d)
+					}
+				</tbody>
+			</table>
+		}
 	}
 }
 

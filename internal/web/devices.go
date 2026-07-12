@@ -147,7 +147,11 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false).Render(r.Context(), w)
+	var subnetID int64
+	if v := r.URL.Query().Get("subnet"); v != "" {
+		subnetID, _ = strconv.ParseInt(v, 10, 64)
+	}
+	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +184,7 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	views.DeviceDialog(d, tags, subnets, all, true).Render(r.Context(), w)
+	views.DeviceDialog(d, tags, subnets, all, true, 0).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
