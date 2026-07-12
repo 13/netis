@@ -70,7 +70,7 @@ templ SettingsPage(username string, d SettingsData) {
 		if d.ActiveTab == "subnets" {
 			<h2>Subnets</h2>
 			<table>
-				<tr><th>CIDR</th><th>Name</th><th>Kind</th><th>Scan enabled</th><th>Interval (s)</th><th></th></tr>
+				<tr><th>CIDR</th><th>Name</th><th>Kind</th><th>Auto-scan</th><th>Interval (s)</th><th></th></tr>
 				for _, sn := range d.Subnets {
 					<tr>
 						<td class="mono">{ sn.CIDR }</td>
@@ -85,6 +85,9 @@ templ SettingsPage(username string, d SettingsData) {
 						</td>
 						<td>{ fmt.Sprint(sn.ScanIntervalSec) }</td>
 						<td>
+							if sn.Kind != "wireguard" {
+								<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">scan</button>
+							}
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline">
 								<button type="submit">delete</button>
 							</form>
@@ -107,7 +110,7 @@ templ SettingsPage(username string, d SettingsData) {
 								<input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/>
 								<label>
 									<input type="checkbox" name="scan_enabled" if sn.ScanEnabled { checked }/>
-									Scan enabled
+									Auto-scan (periodic)
 								</label>
 								<button type="submit">save</button>
 							</form>
@@ -145,7 +148,7 @@ templ SettingsPage(username string, d SettingsData) {
 					</select>
 				</label>
 				<label>Scan interval (s) <input type="number" name="scan_interval_sec" value="120" min="30"/></label>
-				<label><input type="checkbox" name="scan_enabled" checked/> Scan enabled</label>
+				<label><input type="checkbox" name="scan_enabled" checked/> Auto-scan (periodic)</label>
 				<button type="submit">Add subnet</button>
 			</form>
 		}

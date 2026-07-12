@@ -16,7 +16,9 @@ type GridCell struct {
 templ GridPage(username string, sn store.Subnet, cells []GridCell) {
 	@Layout(sn.Name, username) {
 		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
-		<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-swap="none">Scan now</button>
+		if sn.Kind != "wireguard" {
+			<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan now</button>
+		}
 		<div
 			id="grid"
 			hx-get={ fmt.Sprintf("/subnets/%d/grid", sn.ID) }
@@ -48,4 +50,8 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 			}
 		}
 	</div>
+}
+
+templ ScanToast(msg string) {
+	<div class="toast">{ msg }</div>
 }

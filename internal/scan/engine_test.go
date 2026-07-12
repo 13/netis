@@ -44,6 +44,28 @@ func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
 	return e, st, fs, snID
 }
 
+func TestShouldRunScan(t *testing.T) {
+	cases := []struct {
+		name    string
+		kind    string
+		enabled bool
+		manual  bool
+		want    bool
+	}{
+		{"auto enabled lan", "lan", true, false, true},
+		{"auto disabled lan", "lan", false, false, false},
+		{"manual disabled lan", "lan", false, true, true},
+		{"manual wireguard", "wireguard", true, true, false},
+		{"auto wireguard", "wireguard", true, false, false},
+	}
+	for _, c := range cases {
+		sn := store.Subnet{Kind: c.kind, ScanEnabled: c.enabled}
+		if got := shouldRunScan(sn, c.manual); got != c.want {
+			t.Errorf("%s: shouldRunScan=%v want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestAutoCreatesUnknownDevice(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.2}}
@@ -174,10 +196,10 @@ func TestAvailabilityStableAcrossIPChange(t *testing.T) {
 	}
 }
 
-// TestTriggerSkipsDisabledSubnet ensures the manual Trigger path is subject
-// to the same scan_enabled/wireguard guard as the periodic tick path: a
-// triggered scan on a disabled subnet must not sweep or create side effects.
-func TestTriggerSkipsDisabledSubnet(t *testing.T) {
+// TestManualTriggerRunsDisabledSubnet verifies the manual Trigger path bypasses
+// the auto-scan flag: a disabled (non-WireGuard) subnet is still scanned on
+// demand.
+func TestManualTriggerRunsDisabledSubnet(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
 	sn, _ := st.GetSubnet(snID)
 	sn.ScanEnabled = false
@@ -198,15 +220,15 @@ func TestTriggerSkipsDisabledSubnet(t *testing.T) {
 	sched.Trigger(snID)
 	<-done // wait for Start to return; establishes happens-before for fs.calls
 
-	if fs.calls != 0 {
-		t.Fatalf("sweeper called %d times for a disabled subnet", fs.calls)
+	if fs.calls == 0 {
+		t.Fatal("sweeper was not called for a manually-triggered disabled subnet")
 	}
 	rows, err := st.ListDevices()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 0 {
-		t.Fatalf("devices created for a disabled subnet: %+v", rows)
+	if len(rows) == 0 {
+		t.Fatal("manual scan of a disabled subnet created no devices")
 	}
 }
 
@@ -215,7 +237,7 @@ func TestSchedulerRecordsScanStatus(t *testing.T) {
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
 	sn, _ := st.GetSubnet(snID)
 	sched := NewScheduler(e, st)
-	sched.run(context.Background(), sn) // one sweep
+	sched.run(context.Background(), sn, false) // one sweep
 	list, _ := st.ListIntegrationStatus()
 	if len(list) != 1 || list[0].Name != "scan" || !list[0].OK {
 		t.Fatalf("scan status=%+v", list)

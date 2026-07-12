@@ -110,13 +110,16 @@ templ DashboardBody(d DashboardData) {
 			}
 		</section>
 	</div>
-	<h2>Subnets</h2>
+	<h2>Subnets <button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan all</button></h2>
 	<div class="cards">
 		for _, r := range d.Rows {
-			<a class="card" href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>
+			<div class="card">
 				<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
-					<h3>{ r.Subnet.Name }</h3>
+					<h3><a href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a></h3>
 					<span class="mono muted">{ r.Subnet.CIDR }</span>
+					if r.Subnet.Kind != "wireguard" {
+						<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan</button>
+					}
 				</div>
 				<div class="occ">
 					<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
@@ -128,7 +131,7 @@ templ DashboardBody(d DashboardData) {
 					<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
 					<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
 				</div>
-			</a>
+			</div>
 		}
 	</div>
 	<h2>Recent events</h2>

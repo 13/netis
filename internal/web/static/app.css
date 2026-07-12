@@ -72,8 +72,8 @@ main { padding:20px; max-width:1080px; margin:0 auto; }
 .cards, .grid2 { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
 .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
         padding:15px 16px; box-shadow:var(--shadow); color:inherit; text-decoration:none; display:block; }
-a.card { transition:border-color .12s, transform .12s; }
-a.card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.card h3 a { color:inherit; text-decoration:none; }
+.card h3 a:hover { color:var(--accent); }
 .card h2, .card h3 { margin:0 0 2px; font-size:15px; }
 .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
 .stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:13px 15px; box-shadow:var(--shadow); }
@@ -175,7 +175,7 @@ label input, label select { color:var(--fg); }
 .dialog .df { display:flex; justify-content:flex-end; gap:9px; padding:13px 16px; border-top:1px solid var(--border); background:var(--surface-2); flex:none; }
 
 @media (prefers-reduced-motion: reduce) {
-  a.card, .theme-toggle, .btn, button { transition:none; }
+  .theme-toggle, .btn, button { transition:none; }
 }
 
 /* ---- device list toolbar + grid view (sub-project B) ---- */
@@ -201,3 +201,12 @@ thead th a:hover { color:var(--fg); }
   background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; }
 .iconpick .ic-swatch.selected { border-color:var(--accent); background:var(--accent-soft); box-shadow:0 0 0 1px var(--accent) inset; }
 .ifgroup { border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 13px; display:flex; flex-direction:column; gap:11px; }
+
+.toasts { position:fixed; top:64px; right:18px; z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, 90vw); }
+.toast { background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lg); padding:9px 13px; font-size:13px; color:var(--fg); cursor:pointer;
+  animation:toastin .15s ease-out; }
+@keyframes toastin { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+.ghost { background:var(--surface-2); border:1px solid var(--border); color:var(--muted);
+  border-radius:var(--radius-sm); padding:3px 9px; font-size:12.5px; font-weight:540; cursor:pointer; }
+.ghost:hover { color:var(--fg); border-color:var(--border-strong); }
