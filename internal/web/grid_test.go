@@ -49,6 +49,33 @@ func TestGridStates(t *testing.T) {
 	}
 }
 
+func TestSubnetPageDevicesList(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snA, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "A", Kind: "lan", ScanIntervalSec: 120})
+	snB, _ := st.CreateSubnet(store.Subnet{CIDR: "10.1.0.0/24", Name: "B", Kind: "lan", ScanIntervalSec: 120})
+
+	din, _ := st.CreateDevice(store.Device{Name: "insub", Kind: "server", Source: "manual"})
+	fin, _ := st.AddIface(din, nil, nil)
+	st.AssignIP(fin, snA, "10.0.0.5", "static")
+
+	dout, _ := st.CreateDevice(store.Device{Name: "outsub", Kind: "server", Source: "manual"})
+	fout, _ := st.AddIface(dout, nil, nil)
+	st.AssignIP(fout, snB, "10.1.0.5", "static")
+
+	body := authedGet(t, srv, st, "/subnets/1").Body.String()
+	for _, want := range []string{"Devices in this subnet", "insub", `hx-get="/devices/new?subnet=1"`, "Devices without an IP here"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("subnet page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "outsub") {
+		t.Error("subnet page should not list a device from another subnet")
+	}
+	_ = snA
+	_ = snB
+}
+
 func TestCellDetailAndSetKind(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
