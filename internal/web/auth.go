@@ -111,9 +111,11 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 }
 
 // onboardingAllowed reports whether a path is reachable before onboarding is
-// complete (so the wizard and logout don't get caught by the redirect).
+// complete (so the wizard, logout, and the SSE stream the layout always opens
+// don't get caught by the redirect).
 func onboardingAllowed(path string) bool {
-	return path == "/welcome" || strings.HasPrefix(path, "/welcome/") || path == "/logout"
+	return path == "/welcome" || strings.HasPrefix(path, "/welcome/") ||
+		path == "/logout" || path == "/events/stream"
 }
 
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
