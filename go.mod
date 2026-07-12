@@ -3,7 +3,7 @@ module netis
 go 1.26.5
 
 require (
-	github.com/a-h/templ v0.3.887
+	github.com/a-h/templ v0.3.1020
 	github.com/prometheus-community/pro-bing v0.9.1
 	golang.org/x/crypto v0.54.0
 	modernc.org/sqlite v1.53.0
