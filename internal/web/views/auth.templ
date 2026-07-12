@@ -7,10 +7,24 @@ templ authShell(title string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } — netis</title>
+			<script>
+				// No-flash theme bootstrap (same as Layout): honor the user's stored
+				// choice and default dark, so login/setup match the rest of the app.
+				(function () {
+					try {
+						var t = localStorage.getItem('netis-theme');
+						if (!t) { t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+						document.documentElement.setAttribute('data-theme', t);
+					} catch (e) {
+						document.documentElement.setAttribute('data-theme', 'dark');
+					}
+				})();
+			</script>
 			<link rel="stylesheet" href="/static/app.css"/>
 		</head>
 		<body class="auth">
 			{ children... }
+			<script src="/static/theme.js"></script>
 		</body>
 	</html>
 }

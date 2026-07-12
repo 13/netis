@@ -126,7 +126,7 @@ templ DashboardBody(d DashboardData) {
 				<div class="legend">
 					<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
 					<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
-					<span><span class="sw" style="background:var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+					<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
 				</div>
 			</a>
 		}

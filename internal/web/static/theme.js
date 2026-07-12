@@ -3,15 +3,20 @@
 		return document.documentElement.getAttribute('data-theme') ||
 			(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 	}
-	function apply(t) {
-		document.documentElement.setAttribute('data-theme', t);
-		try { localStorage.setItem('netis-theme', t); } catch (e) {}
+	function label(t) {
 		var l = document.querySelector('#theme-toggle .tglabel');
 		if (l) { l.textContent = t === 'dark' ? 'Dark' : 'Light'; }
 	}
+	function apply(t) {
+		document.documentElement.setAttribute('data-theme', t);
+		try { localStorage.setItem('netis-theme', t); } catch (e) {}
+		label(t);
+	}
 	var btn = document.getElementById('theme-toggle');
 	if (btn) {
-		apply(current());
+		// Reflect the current theme in the label without writing storage — the OS
+		// preference keeps being followed until the user explicitly toggles.
+		label(current());
 		btn.addEventListener('click', function () { apply(current() === 'dark' ? 'light' : 'dark'); });
 	}
 	// active-nav: longest-prefix match ("/" only exact) so no server change is needed.
