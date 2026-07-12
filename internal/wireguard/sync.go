@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"strings"
 	"time"
@@ -27,26 +28,56 @@ func NewSync(st *store.Store, r Runner, ev *events.Service, iface string) *Sync 
 	return &Sync{store: st, runner: r, events: ev, iface: iface}
 }
 
-func (s *Sync) RunOnce(ctx context.Context) error {
+type Stats struct {
+	Peers int
+}
+
+func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	out, err := s.runner.Run(ctx, "wg show "+s.iface+" dump")
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	peers, err := ParseDump(out)
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	subnets, err := s.store.ListSubnets()
 	if err != nil {
-		return err
+		return Stats{}, err
 	}
 	now := time.Now().UTC()
 	for _, p := range peers {
 		if err := s.upsertPeer(p, subnets, now); err != nil {
-			return err
+			return Stats{}, err
 		}
 	}
-	return nil
+	return Stats{Peers: len(peers)}, nil
+}
+
+func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
+	return s.RunOnce(ctx)
+}
+
+func (s *Sync) recordStatus(stats Stats, err error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	st := store.IntegrationStatus{Name: "wireguard", LastRun: now}
+	if err != nil {
+		if !s.failing {
+			s.failing = true
+			s.events.Emit("scan_error", nil, "wireguard sync failing: "+err.Error())
+		}
+		st.OK = false
+		st.Detail = err.Error()
+	} else {
+		s.failing = false
+		st.OK = true
+		st.ItemCount = stats.Peers
+		st.Detail = fmt.Sprintf("%d peers", stats.Peers)
+	}
+	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+		log.Printf("wireguard status write: %v", serr)
+	}
+	s.events.Broker().Publish("dashboard", "refresh")
 }
 
 func (s *Sync) upsertPeer(p Peer, subnets []store.Subnet, now time.Time) error {
@@ -127,17 +158,12 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
+		// Bound each cycle so a hung `wg show dump` over SSH can't stall the
+		// poller forever; a deadline surfaces as a RunOnce error and is
+		// recorded as a failing status.
 		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := s.RunOnce(cctx)
+		s.recordStatus(s.runAndCount(cctx))
 		cancel()
-		if err != nil {
-			if !s.failing {
-				s.failing = true
-				s.events.Emit("scan_error", nil, "wireguard sync failing: "+err.Error())
-			}
-		} else {
-			s.failing = false
-		}
 		select {
 		case <-ctx.Done():
 			return

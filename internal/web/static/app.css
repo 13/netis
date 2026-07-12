@@ -1,6 +1,7 @@
 :root { --bg:#111418; --fg:#e6e6e6; --card:#1b2027; --ok:#3fb950; --bad:#f85149;
         --warn:#d29922; --muted:#8b949e; --free:#2d333b; }
 * { box-sizing: border-box; }
+.muted { color: var(--muted); }
 body { margin:0; background:var(--bg); color:var(--fg);
        font:15px/1.5 system-ui, sans-serif; }
 nav { display:flex; gap:1rem; align-items:center; padding:.6rem 1rem;
@@ -31,3 +32,10 @@ input, select, button { padding:.5rem; border-radius:6px; border:1px solid var(-
                         background:var(--bg); color:var(--fg); }
 button { cursor:pointer; background:var(--free); }
 form.inline { display:inline-block; margin-right:.5rem; }
+.stats { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.stat { background:var(--card); border-radius:8px; padding:.6rem 1rem; }
+.stat .num { font-size:1.4rem; font-weight:700; display:block; }
+.stat .num.ok { color:var(--ok); } .stat .num.warn { color:var(--warn); }
+.band { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.panel { background:var(--card); border-radius:8px; padding:1rem; flex:1; min-width:280px; }
+.panel ul { margin:0; padding-left:1.1rem; }

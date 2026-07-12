@@ -68,7 +68,21 @@ func (s *Scheduler) run(ctx context.Context, sn store.Subnet) {
 	s.mu.Lock()
 	s.lastRun[sn.ID] = time.Now()
 	s.mu.Unlock()
-	if err := s.engine.RunSubnet(ctx, sn); err != nil {
+	err := s.engine.RunSubnet(ctx, sn)
+	if err != nil {
 		log.Printf("scan %s: %v", sn.CIDR, err)
 	}
+	st := store.IntegrationStatus{
+		Name:    "scan",
+		LastRun: time.Now().UTC().Format(time.RFC3339),
+		OK:      err == nil,
+		Detail:  "scanned " + sn.CIDR,
+	}
+	if err != nil {
+		st.Detail = sn.CIDR + ": " + err.Error()
+	}
+	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+		log.Printf("scan status write: %v", serr)
+	}
+	s.engine.Broker.Publish("dashboard", "refresh")
 }

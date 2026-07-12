@@ -16,7 +16,7 @@ func TestSyncUpsertsGuestsIdempotently(t *testing.T) {
 	sync := NewSync(st, c, events.NewService(st, events.NewBroker()))
 
 	for i := 0; i < 2; i++ { // idempotent
-		if err := sync.RunOnce(context.Background()); err != nil {
+		if _, err := sync.RunOnce(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -47,5 +47,20 @@ func TestSyncUpsertsGuestsIdempotently(t *testing.T) {
 	cfs, _ := st.ListCustomFields(vm.ID)
 	if len(cfs) != 1 || cfs[0].Key != "proxmox_status" || cfs[0].Value != "running" {
 		t.Fatalf("cfs=%+v", cfs)
+	}
+}
+
+func TestProxmoxRunOnceStats(t *testing.T) {
+	srv := fixtureServer(t)
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	c := NewClient(srv.URL, "root@pam!netis", "s3cret", false)
+	sync := NewSync(st, c, events.NewService(st, events.NewBroker()))
+	stats, err := sync.RunOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Guests != 2 || stats.Nodes != 1 {
+		t.Fatalf("stats=%+v", stats)
 	}
 }

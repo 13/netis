@@ -45,3 +45,41 @@ func TestDashboardShowsSubnetCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
+	srv, st := testServer(t)
+	// a subnet + an online device + an unknown scan device + a conflict
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	on, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "other", Source: "manual"})
+	onIf, _ := st.AddIface(on, nil, nil)
+	st.AssignIP(onIf, snID, "10.0.0.1", "static")
+	st.MarkSeen(onIf, 1, time.Now())
+	unk, _ := st.CreateDevice(store.Device{Name: "unknown-aa:bb:cc:00:00:09", Kind: "other", Source: "scan"})
+	unkIf, _ := st.AddIface(unk, nil, nil)
+	st.AssignIP(unkIf, snID, "10.0.0.2", "dhcp")
+	// conflict: a second device claims .1
+	ghost, _ := st.CreateDevice(store.Device{Name: "ghost", Kind: "other", Source: "manual"})
+	ghostIf, _ := st.AddIface(ghost, nil, nil)
+	st.AssignIP(ghostIf, snID, "10.0.0.1", "static")
+	// an integration status row
+	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", LastRun: time.Now().UTC().Format(time.RFC3339), OK: true, Detail: "48 leases, 2 new", ItemCount: 48})
+
+	rec := authedGet(t, srv, st, "/dashboard/widgets")
+	if rec.Code != 200 {
+		t.Fatalf("code=%d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"pihole", "48 leases, 2 new", "unknown-aa:bb:cc:00:00:09", "10.0.0.1"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("widgets missing %q", want)
+		}
+	}
+}
+
+func TestDashboardPageHasFragmentContainer(t *testing.T) {
+	srv, st := testServer(t)
+	rec := authedGet(t, srv, st, "/")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `hx-get="/dashboard/widgets"`) {
+		t.Fatalf("dashboard page missing fragment container (code=%d)", rec.Code)
+	}
+}

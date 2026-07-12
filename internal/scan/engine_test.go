@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,5 +207,20 @@ func TestTriggerSkipsDisabledSubnet(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("devices created for a disabled subnet: %+v", rows)
+	}
+}
+
+func TestSchedulerRecordsScanStatus(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	sn, _ := st.GetSubnet(snID)
+	sched := NewScheduler(e, st)
+	sched.run(context.Background(), sn) // one sweep
+	list, _ := st.ListIntegrationStatus()
+	if len(list) != 1 || list[0].Name != "scan" || !list[0].OK {
+		t.Fatalf("scan status=%+v", list)
+	}
+	if !strings.Contains(list[0].Detail, sn.CIDR) {
+		t.Fatalf("detail should mention the subnet: %q", list[0].Detail)
 	}
 }

@@ -26,7 +26,7 @@ func TestSyncCreatesPeersAndStatus(t *testing.T) {
 
 	sync := NewSync(st, &fakeRunner{out: []byte(dump)}, events.NewService(st, events.NewBroker()), "wg0")
 	for i := 0; i < 2; i++ { // idempotent
-		if err := sync.RunOnce(context.Background()); err != nil {
+		if _, err := sync.RunOnce(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -68,7 +68,8 @@ func TestRunOnceRespectsContextCancellation(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- sync.RunOnce(ctx)
+		_, err := sync.RunOnce(ctx)
+		done <- err
 	}()
 
 	select {
@@ -78,5 +79,20 @@ func TestRunOnceRespectsContextCancellation(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("RunOnce did not return within 1s of context cancellation")
+	}
+}
+
+func TestWireguardRunOnceStats(t *testing.T) {
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	st.CreateSubnet(store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
+	fresh := time.Now().Unix()
+	dump := "priv\tpub\t51820\toff\n" +
+		fmt.Sprintf("peerA=\t(none)\t1.2.3.4:51820\t10.6.0.2/32\t%d\t1\t1\toff\n", fresh) +
+		"peerB=\t(none)\t(none)\t10.6.0.3/32\t0\t0\t0\toff\n"
+	sync := NewSync(st, &fakeRunner{out: []byte(dump)}, events.NewService(st, events.NewBroker()), "wg0")
+	stats, err := sync.RunOnce(context.Background())
+	if err != nil || stats.Peers != 2 {
+		t.Fatalf("stats=%+v err=%v", stats, err)
 	}
 }
