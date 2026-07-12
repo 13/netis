@@ -179,3 +179,22 @@ func TestPiholeStartRecordsStatus(t *testing.T) {
 		t.Fatalf("status=%+v", list)
 	}
 }
+
+func TestPiholeLeaseKeepsManualStatic(t *testing.T) {
+	st, f, sync := testSync(t)
+	subnets, _ := st.ListSubnets()
+	snID := subnets[0].ID
+	// A device the user marked static, whose MAC pihole will report as a lease.
+	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(devID, strpP("aa:bb:cc:00:00:40"), nil)
+	st.AssignIP(ifID, snID, "10.0.0.40", "static")
+
+	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:40", IP: "10.0.0.40", Hostname: "gw"}}
+	if _, err := sync.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ := st.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].Kind != "static" {
+		t.Fatalf("pihole lease must not downgrade a manual static, got %+v", ips)
+	}
+}

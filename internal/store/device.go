@@ -185,7 +185,11 @@ func (s *Store) UpsertIPAssignment(ifaceID, subnetID int64, ip, kind string) err
 		}
 		return err
 	}
-	_, err = s.DB.Exec(`UPDATE ip_assignment SET kind=? WHERE id=?`, kind, id)
+	// Never downgrade a static assignment to dhcp: a user (or a reservation)
+	// marked this IP static, and a dhcp-lease observation must not clobber it.
+	_, err = s.DB.Exec(
+		`UPDATE ip_assignment SET kind=? WHERE id=? AND NOT (kind='static' AND ?='dhcp')`,
+		kind, id, kind)
 	return err
 }
 

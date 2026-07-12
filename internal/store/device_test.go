@@ -245,6 +245,57 @@ func TestDeviceModelFunctionAndKinds(t *testing.T) {
 	}
 }
 
+func TestUpsertIPAssignmentNeverDowngradesStatic(t *testing.T) {
+	s := openTest(t)
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := s.AddIface(devID, strp("aa:bb:cc:00:00:30"), nil)
+	// User manually set this IP static.
+	if _, err := s.AssignIP(ifID, snID, "10.0.0.30", "static"); err != nil {
+		t.Fatal(err)
+	}
+	// A pihole dhcp-lease upsert must NOT downgrade it.
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.30", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ := s.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].Kind != "static" {
+		t.Fatalf("static must survive a dhcp upsert, got %+v", ips)
+	}
+}
+
+func TestUpsertIPAssignmentUpgradesDhcpToStatic(t *testing.T) {
+	s := openTest(t)
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := s.AddIface(devID, strp("aa:bb:cc:00:00:31"), nil)
+	if _, err := s.AssignIP(ifID, snID, "10.0.0.31", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	// A reservation upgrade dhcp -> static must still work.
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.31", "static"); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ := s.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].Kind != "static" {
+		t.Fatalf("dhcp should upgrade to static, got %+v", ips)
+	}
+}
+
+func TestUpsertIPAssignmentInsertsWhenAbsent(t *testing.T) {
+	s := openTest(t)
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := s.AddIface(devID, strp("aa:bb:cc:00:00:32"), nil)
+	if err := s.UpsertIPAssignment(ifID, snID, "10.0.0.32", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	ips, _ := s.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].IP != "10.0.0.32" || ips[0].Kind != "dhcp" {
+		t.Fatalf("absent IP should be inserted as dhcp, got %+v", ips)
+	}
+}
+
 func TestMigration0004Backfill(t *testing.T) {
 	path := t.TempDir() + "/mig.db"
 	db, err := sql.Open("sqlite", path)
