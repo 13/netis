@@ -231,6 +231,16 @@ func TestApproveNonexistentDevice404(t *testing.T) {
 	}
 }
 
+func TestDeviceListShowsStoredIcon(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "console", Kind: "other", Icon: "🎮", Source: "manual"})
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "🎮") {
+		t.Fatal("device list should render the stored icon")
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

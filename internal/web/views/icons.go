@@ -23,3 +23,19 @@ func KindIcon(kind string) string {
 	}
 	return "❓"
 }
+
+// DeviceIcon returns the device's chosen icon, or the kind default when the
+// device has no explicit icon set.
+func DeviceIcon(icon, kind string) string {
+	if icon != "" {
+		return icon
+	}
+	return KindIcon(kind)
+}
+
+// IconChoices is the ordered emoji palette shown in the device dialog's icon
+// picker. The first ten mirror the kind defaults; the rest are common extras.
+var IconChoices = []string{
+	"💻", "🔀", "📱", "🖥️", "🖨️", "💡", "🧊", "📦", "🔒", "❓",
+	"📡", "🗄️", "📷", "🔌", "🎮", "📺", "☎️", "🕹️", "🛰️", "⌚",
+}

@@ -114,7 +114,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						<tr>
 							<td>
 								<div class="dev">
-									<span class="ic">{ KindIcon(row.Kind) }</span>
+									<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
 									<div>
 										<div>
 											<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
@@ -187,7 +187,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 							<span class="pill offline"><span class="d"></span></span>
 						}
 					</span>
-					<span class="ic">{ KindIcon(row.Kind) }</span>
+					<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
 					<div class="nm">
 						{ row.Name }
 						if !row.Reviewed {
