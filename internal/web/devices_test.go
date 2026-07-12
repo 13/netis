@@ -497,3 +497,17 @@ func TestNewDeviceSubnetPreselect(t *testing.T) {
 		t.Fatalf("new device dialog should preselect subnet 1: %s", body)
 	}
 }
+
+func TestNavDevicesBeforeSubnets(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	di := strings.Index(body, `href="/devices"`)
+	si := strings.Index(body, `href="/subnets"`)
+	if di < 0 || si < 0 {
+		t.Fatalf("nav links missing: devices@%d subnets@%d", di, si)
+	}
+	if di > si {
+		t.Fatalf("Devices nav link should come before Subnets: devices@%d subnets@%d", di, si)
+	}
+}
