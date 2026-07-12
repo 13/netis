@@ -51,6 +51,8 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("GET /subnets/{id}", s.handleSubnetPage)
 	s.mux.HandleFunc("GET /subnets/{id}/grid", s.handleGridFrag)
 	s.mux.HandleFunc("POST /subnets/{id}/scan", s.requireAdmin(s.handleScanNow))
+	s.mux.HandleFunc("GET /subnets/{id}/cell", s.handleCellDetail)
+	s.mux.HandleFunc("POST /subnets/{id}/cell", s.requireAdmin(s.handleCellKind))
 	s.mux.HandleFunc("POST /scan", s.requireAdmin(s.handleScanAll))
 	s.mux.HandleFunc("GET /devices", s.handleDeviceList)
 	s.mux.HandleFunc("GET /devices/new", s.handleDeviceForm)

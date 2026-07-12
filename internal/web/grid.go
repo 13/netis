@@ -112,6 +112,41 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 	views.ScanToast("Scanning "+sn.CIDR+"…").Render(r.Context(), w)
 }
 
+func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
+	sn, err := s.subnetFromPath(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ip := r.URL.Query().Get("ip")
+	occ, err := s.store.SubnetOccupancy(sn.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.CellDetail(sn, ip, occ[ip]).Render(r.Context(), w)
+}
+
+func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
+	sn, err := s.subnetFromPath(r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ip := r.FormValue("ip")
+	kind := r.FormValue("kind")
+	if kind != "static" && kind != "dhcp" {
+		http.Error(w, "bad kind", 400)
+		return
+	}
+	if err := s.store.SetIPKind(sn.ID, ip, kind); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	s.broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
+	views.ScanToast(ip+" → "+kind).Render(r.Context(), w)
+}
+
 func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 	subnets, err := s.store.ListSubnets()
 	if err != nil {
