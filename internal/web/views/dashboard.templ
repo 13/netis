@@ -113,25 +113,7 @@ templ DashboardBody(d DashboardData) {
 	<h2>Subnets <button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan all</button></h2>
 	<div class="cards">
 		for _, r := range d.Rows {
-			<div class="card">
-				<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
-					<h3><a href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a></h3>
-					<span class="mono muted">{ r.Subnet.CIDR }</span>
-					if r.Subnet.Kind != "wireguard" {
-						<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan</button>
-					}
-				</div>
-				<div class="occ">
-					<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
-					<i class="res" style={ "width:" + BarPct(r.Reserved, r.Hosts) }></i>
-					<i class="off" style={ "width:" + BarPct(r.Offline, r.Hosts) }></i>
-				</div>
-				<div class="legend">
-					<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
-					<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
-					<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
-				</div>
-			</div>
+			@subnetCard(r)
 		}
 	</div>
 	<h2>Recent events</h2>
@@ -144,4 +126,42 @@ templ DashboardBody(d DashboardData) {
 			</tr>
 		}
 	</table>
+}
+
+templ subnetCard(r DashRow) {
+	<div class="card">
+		<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+			<h3><a href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a></h3>
+			<span class="mono muted">{ r.Subnet.CIDR }</span>
+			if r.Subnet.Kind != "wireguard" {
+				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan</button>
+			}
+		</div>
+		<div class="occ">
+			<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
+			<i class="res" style={ "width:" + BarPct(r.Reserved, r.Hosts) }></i>
+			<i class="off" style={ "width:" + BarPct(r.Offline, r.Hosts) }></i>
+		</div>
+		<div class="legend">
+			<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
+			<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
+			<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+		</div>
+	</div>
+}
+
+templ SubnetsPage(username string, rows []DashRow) {
+	@Layout("Subnets", username) {
+		<h1>Subnets</h1>
+		<p class="muted">Open a subnet to see its occupancy grid — free, reserved, online/offline, and static/DHCP.</p>
+		if len(rows) == 0 {
+			<p class="muted">No subnets yet — add one in <a href="/settings?tab=subnets">Settings</a>.</p>
+		} else {
+			<div class="cards">
+				for _, r := range rows {
+					@subnetCard(r)
+				}
+			</div>
+		}
+	}
 }
