@@ -56,6 +56,15 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	values["offline_after"] = offlineAfter
 
+	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled"} {
+		v, err := s.store.GetSetting(k)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		values[k] = v
+	}
+
 	tab := r.URL.Query().Get("tab")
 	switch tab {
 	case "subnets", "integrations", "users", "general":
@@ -280,6 +289,37 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SetSetting("offline_after", strconv.Itoa(n)); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
+	}
+	if v := r.FormValue("default_scan_interval_sec"); v != "" {
+		iv, err := strconv.Atoi(v)
+		if err != nil || iv < 30 {
+			http.Error(w, "default scan interval must be an integer >= 30", 400)
+			return
+		}
+		if err := s.store.SetSetting("default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+	if v := r.FormValue("default_subnet_kind"); v != "" {
+		if v != "lan" && v != "wireguard" && v != "proxmox-bridge" {
+			http.Error(w, "bad subnet kind", 400)
+			return
+		}
+		if err := s.store.SetSetting("default_subnet_kind", v); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+	if v := r.FormValue("default_scan_enabled"); v != "" {
+		if v != "on" && v != "off" {
+			http.Error(w, "bad default scan enabled", 400)
+			return
+		}
+		if err := s.store.SetSetting("default_scan_enabled", v); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 	}
 	http.Redirect(w, r, "/settings?tab=general", http.StatusSeeOther)
 }

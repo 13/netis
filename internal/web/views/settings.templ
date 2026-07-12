@@ -167,7 +167,7 @@ templ subnetsTab(d SettingsData) {
 					<input type="hidden" name="cidr" value={ det.CIDR }/>
 					<input type="hidden" name="name" value={ det.Iface }/>
 					<input type="hidden" name="kind" value="lan"/>
-					<input type="hidden" name="scan_interval_sec" value="120"/>
+					<input type="hidden" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/>
 					<input type="hidden" name="scan_enabled" value="on"/>
 					<button type="submit" class="chip-add"><span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span> +</button>
 				</form>
@@ -184,12 +184,16 @@ templ subnetsTab(d SettingsData) {
 				<label>Kind
 					<select name="kind">
 						for _, k := range subnetKinds {
-							<option value={ k }>{ k }</option>
+							if k == settingOr(d.Values, "default_subnet_kind", "lan") {
+								<option value={ k } selected>{ k }</option>
+							} else {
+								<option value={ k }>{ k }</option>
+							}
 						}
 					</select>
 				</label>
-				<label>Interval (s) <input type="number" name="scan_interval_sec" value="120" min="30"/></label>
-				<label class="chk"><input type="checkbox" name="scan_enabled" checked/> Auto-scan (periodic)</label>
+				<label>Interval (s) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
+				<label class="chk"><input type="checkbox" name="scan_enabled" if defaultScanEnabled(d.Values) { checked }/> Auto-scan (periodic)</label>
 			</div>
 			<button type="submit" class="primary">Add subnet</button>
 		</form>
@@ -234,14 +238,43 @@ templ usersTab(d SettingsData) {
 
 templ generalTab(d SettingsData) {
 	<h2>General</h2>
-	<div class="setting-card">
-		<div class="sc-head"><h3>Availability</h3></div>
-		<form method="post" action="/settings/general">
+	<form method="post" action="/settings/general">
+		<div class="setting-card">
+			<div class="sc-head"><h3>Availability</h3></div>
 			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
-			<p class="muted" style="margin:6px 0 10px">A device is marked offline after this many consecutive missed scans.</p>
-			<button type="submit" class="primary">Save</button>
-		</form>
-	</div>
+			<p class="muted" style="margin:6px 0 4px">A device is marked offline after this many consecutive missed scans.</p>
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Defaults for new subnets</h3></div>
+			<div class="field-grid">
+				<label>Default scan interval (s) <input type="number" name="default_scan_interval_sec" min="30" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/></label>
+				<label>Default kind
+					<select name="default_subnet_kind">
+						for _, k := range subnetKinds {
+							if k == settingOr(d.Values, "default_subnet_kind", "lan") {
+								<option value={ k } selected>{ k }</option>
+							} else {
+								<option value={ k }>{ k }</option>
+							}
+						}
+					</select>
+				</label>
+				<label>Default auto-scan
+					<select name="default_scan_enabled">
+						if defaultScanEnabled(d.Values) {
+							<option value="on" selected>Enabled</option>
+							<option value="off">Disabled</option>
+						} else {
+							<option value="on">Enabled</option>
+							<option value="off" selected>Disabled</option>
+						}
+					</select>
+				</label>
+			</div>
+			<p class="muted" style="margin:6px 0 4px">Prefilled into the Add-subnet form.</p>
+		</div>
+		<button type="submit" class="primary">Save</button>
+	</form>
 }
 
 templ SettingsPage(username string, d SettingsData) {
@@ -271,4 +304,15 @@ func generalOfflineAfter(values map[string]string) string {
 		return v
 	}
 	return "3"
+}
+
+func settingOr(values map[string]string, key, def string) string {
+	if v := values[key]; v != "" {
+		return v
+	}
+	return def
+}
+
+func defaultScanEnabled(values map[string]string) bool {
+	return values["default_scan_enabled"] != "off"
 }

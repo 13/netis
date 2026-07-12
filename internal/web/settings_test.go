@@ -251,3 +251,63 @@ func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 		t.Fatal("expected 'no new subnets detected' once all detected subnets exist")
 	}
 }
+
+func TestGeneralSavesSubnetDefaults(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	rec := authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after":             {"3"},
+		"default_scan_interval_sec": {"300"},
+		"default_subnet_kind":       {"proxmox-bridge"},
+		"default_scan_enabled":      {"off"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("code=%d", rec.Code)
+	}
+	if v, _ := st.GetSetting("default_scan_interval_sec"); v != "300" {
+		t.Fatalf("interval=%q", v)
+	}
+	if v, _ := st.GetSetting("default_subnet_kind"); v != "proxmox-bridge" {
+		t.Fatalf("kind=%q", v)
+	}
+	if v, _ := st.GetSetting("default_scan_enabled"); v != "off" {
+		t.Fatalf("enabled=%q", v)
+	}
+}
+
+func TestGeneralSaveRejectsBadDefaults(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	rec := authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after":             {"3"},
+		"default_scan_interval_sec": {"5"}, // < 30
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad interval code=%d, want 400", rec.Code)
+	}
+}
+
+func TestGeneralTabRendersDefaults(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/settings?tab=general").Body.String()
+	for _, want := range []string{`name="default_scan_interval_sec"`, `name="default_subnet_kind"`, `name="default_scan_enabled"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("general tab missing %q", want)
+		}
+	}
+}
+
+func TestAddSubnetFormUsesDefaults(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.SetSetting("default_scan_interval_sec", "300")
+	st.SetSetting("default_subnet_kind", "proxmox-bridge")
+	body := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
+	if !strings.Contains(body, `value="300"`) {
+		t.Errorf("add-subnet form should default interval to 300")
+	}
+	if !strings.Contains(body, `<option value="proxmox-bridge" selected>`) {
+		t.Errorf("add-subnet form should default kind to proxmox-bridge")
+	}
+}
