@@ -99,6 +99,33 @@ func TestScanAllTriggersNonWireGuard(t *testing.T) {
 	}
 }
 
+func TestScanButtonsRendered(t *testing.T) {
+	srv, st, _ := testServerTrig(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+
+	dash := authedGet(t, srv, st, "/").Body.String()
+	if !strings.Contains(dash, `hx-post="/scan"`) {
+		t.Error("dashboard missing Scan all button")
+	}
+	if !strings.Contains(dash, `hx-post="/subnets/1/scan"`) {
+		t.Error("dashboard subnet card missing Scan button")
+	}
+
+	devs := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(devs, `hx-post="/scan"`) {
+		t.Error("device list toolbar missing Scan all button")
+	}
+
+	settings := authedGet(t, srv, st, "/settings").Body.String()
+	if !strings.Contains(settings, `hx-post="/subnets/1/scan"`) {
+		t.Error("settings row missing scan button")
+	}
+	if !strings.Contains(settings, "Auto-scan") {
+		t.Error("settings should relabel Scan enabled -> Auto-scan")
+	}
+}
+
 func TestScanRoutesRequireAdmin(t *testing.T) {
 	srv, st, _ := testServerTrig(t)
 	st.SetSetting("onboarded", "1")
