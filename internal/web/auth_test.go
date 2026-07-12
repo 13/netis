@@ -21,7 +21,7 @@ func testServer(t *testing.T) (*Server, *store.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return NewServer(st, events.NewBroker(), nil), st
+	return NewServer(st, events.NewBroker(), nil, nil), st
 }
 
 func addAdmin(t *testing.T, st *store.Store) {

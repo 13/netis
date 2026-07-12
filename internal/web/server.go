@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"net/http"
 
@@ -16,19 +17,25 @@ type ScanTrigger interface {
 	Trigger(subnetID int64)
 }
 
+// IntegrationRunner triggers a single on-demand run of a named integration.
+type IntegrationRunner interface {
+	Run(ctx context.Context, name string) error
+}
+
 type Server struct {
 	mux     *http.ServeMux
 	store   *store.Store
 	broker  *events.Broker
 	trigger ScanTrigger
+	runner  IntegrationRunner
 	limiter *rateLimiter
 	detect  func() ([]netdetect.Detected, error)
 }
 
-func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Server {
+func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner) *Server {
 	s := &Server{
 		mux: http.NewServeMux(), store: st, broker: broker,
-		trigger: trigger, limiter: newRateLimiter(),
+		trigger: trigger, runner: runner, limiter: newRateLimiter(),
 		detect: netdetect.DetectSubnets,
 	}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +82,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("POST /settings/subnets/{id}", s.requireAdmin(s.handleSubnetUpdate))
 	s.mux.HandleFunc("POST /settings/subnets/{id}/delete", s.requireAdmin(s.handleSubnetDelete))
 	s.mux.HandleFunc("POST /settings/integrations", s.requireAdmin(s.handleIntegrationsSave))
+	s.mux.HandleFunc("POST /settings/integrations/{name}/run", s.requireAdmin(s.handleIntegrationRun))
 	s.mux.HandleFunc("POST /settings/users", s.requireAdmin(s.handleUserCreate))
 	s.mux.HandleFunc("POST /settings/users/{id}/delete", s.requireAdmin(s.handleUserDelete))
 	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
