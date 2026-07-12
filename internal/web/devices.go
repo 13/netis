@@ -184,7 +184,7 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	views.DeviceDialog(d, tags, subnets, all, true, 0).Render(r.Context(), w)
+	views.DeviceDrawer(d, tags, subnets, all, 0).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
@@ -520,4 +520,30 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		s.store.UpsertOpenPort(ifaces[0].ID, p, "tcp", scan.ServiceGuess(p), now)
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+}
+
+// handleDeviceIPKind flips an IP assignment's lease kind (static/dhcp) from the
+// device detail page and returns the re-rendered toggle control.
+func (s *Server) handleDeviceIPKind(w http.ResponseWriter, r *http.Request) {
+	devID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	subnetID, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad subnet", 400)
+		return
+	}
+	ip := r.FormValue("ip")
+	kind := r.FormValue("kind")
+	if kind != "static" && kind != "dhcp" {
+		http.Error(w, "bad kind", 400)
+		return
+	}
+	if err := s.store.SetIPKind(subnetID, ip, kind); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.LeaseToggle(devID, subnetID, ip, kind).Render(r.Context(), w)
 }

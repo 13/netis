@@ -77,6 +77,14 @@ func joinNonEmpty(sep string, parts ...string) string {
 	return strings.Join(kept, sep)
 }
 
+// oppositeKind returns the other lease kind, for the toggle's next click.
+func oppositeKind(kind string) string {
+	if kind == "static" {
+		return "dhcp"
+	}
+	return "static"
+}
+
 templ sortHeader(label, col, curSort, curDir, q string) {
 	<th>
 		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
@@ -90,6 +98,26 @@ templ sortHeader(label, col, curSort, curDir, q string) {
 			}
 		</a>
 	</th>
+}
+
+// LeaseToggle renders an IP's lease as a clickable chip that flips
+// static<->dhcp in place (POST /devices/{devID}/ip/kind, htmx outerHTML swap).
+templ LeaseToggle(devID, subnetID int64, ip, kind string) {
+	<span class="lease-cell">
+		<button
+			type="button"
+			if kind == "static" {
+				class="chip static"
+			} else {
+				class="chip"
+			}
+			hx-post={ fmt.Sprintf("/devices/%d/ip/kind", devID) }
+			hx-vals={ fmt.Sprintf(`{"subnet_id":"%d","ip":%q,"kind":%q}`, subnetID, ip, oppositeKind(kind)) }
+			hx-target="closest .lease-cell"
+			hx-swap="outerHTML"
+			title="toggle lease static/dhcp"
+		>{ kind }</button>
+	</span>
 }
 
 templ deviceRow(row store.DeviceRow) {
@@ -250,126 +278,142 @@ func tagNamesJoin(tags []store.Tag) string {
 	return strings.Join(names, ", ")
 }
 
+// deviceFormInner is the shared header + form used by both the centered create
+// dialog and the right-side edit drawer.
+templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64) {
+	<div class="dh">
+		if isEdit {
+			<h3>Edit device</h3>
+		} else {
+			<h3>New device</h3>
+		}
+		<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
+	</div>
+	<form
+		method="post"
+		if isEdit {
+			action={ templ.URL(fmt.Sprintf("/devices/%d", d.ID)) }
+		} else {
+			action="/devices"
+		}
+	>
+		<div class="db">
+			<label>
+				Name
+				<input type="text" name="name" value={ d.Name } required autofocus/>
+			</label>
+			<label>
+				Kind
+				<select name="kind">
+					for _, k := range deviceKinds {
+						if k == d.Kind {
+							<option value={ k } selected>{ k }</option>
+						} else {
+							<option value={ k }>{ k }</option>
+						}
+					}
+				</select>
+			</label>
+			<div>
+				<div class="fieldlabel">Icon</div>
+				<div class="iconpick" data-kind-default={ KindIcon(d.Kind) }>
+					for _, ic := range IconChoices {
+						if ic == DeviceIcon(d.Icon, d.Kind) {
+							<button type="button" class="ic-swatch selected" data-icon={ ic }>{ ic }</button>
+						} else {
+							<button type="button" class="ic-swatch" data-icon={ ic }>{ ic }</button>
+						}
+					}
+				</div>
+				<input type="hidden" name="icon" value={ DeviceIcon(d.Icon, d.Kind) }/>
+			</div>
+			<label>
+				Vendor
+				<input type="text" name="vendor" value={ d.Vendor }/>
+			</label>
+			<label>
+				Model
+				<input type="text" name="model" value={ d.Model }/>
+			</label>
+			<label>
+				Function
+				<input type="text" name="function" value={ d.Function } placeholder="role, channel…"/>
+			</label>
+			<label>
+				Parent device
+				<select name="parent_device_id">
+					<option value="">— none —</option>
+					for _, pd := range allDevices {
+						if pd.ID != d.ID {
+							if d.ParentDeviceID != nil && *d.ParentDeviceID == pd.ID {
+								<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
+							} else {
+								<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
+							}
+						}
+					}
+				</select>
+			</label>
+			<label>
+				Notes
+				<textarea name="notes">{ d.Notes }</textarea>
+			</label>
+			<label>
+				Tags
+				<input type="text" name="tags" value={ tagNamesJoin(tags) } placeholder="comma,separated"/>
+			</label>
+			if !isEdit {
+				<div class="ifgroup">
+					<div class="fieldlabel">First interface (optional)</div>
+					<label>
+						MAC
+						<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff"/>
+					</label>
+					<label>
+						IP
+						<input type="text" name="ip" placeholder="10.0.0.5"/>
+					</label>
+					<label>
+						Subnet
+						<select name="subnet_id">
+							<option value="">—</option>
+							for _, sn := range subnets {
+								if sn.ID == preselectSubnet {
+									<option value={ fmt.Sprint(sn.ID) } selected>{ sn.Name } { sn.CIDR }</option>
+								} else {
+									<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
+								}
+							}
+						</select>
+					</label>
+				</div>
+			}
+		</div>
+		<div class="df">
+			<button type="button" class="theme-toggle" data-close>Cancel</button>
+			if isEdit {
+				<button type="submit" class="primary">Save</button>
+			} else {
+				<button type="submit" class="primary">Create device</button>
+			}
+		</div>
+	</form>
+}
+
+// DeviceDialog is the centered modal used for creating a device.
 templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64) {
 	<div class="dialog-scrim">
 		<div class="dialog">
-			<div class="dh">
-				if isEdit {
-					<h3>Edit device</h3>
-				} else {
-					<h3>New device</h3>
-				}
-				<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
-			</div>
-			<form
-				method="post"
-				if isEdit {
-					action={ templ.URL(fmt.Sprintf("/devices/%d", d.ID)) }
-				} else {
-					action="/devices"
-				}
-			>
-				<div class="db">
-					<label>
-						Name
-						<input type="text" name="name" value={ d.Name } required autofocus/>
-					</label>
-					<label>
-						Kind
-						<select name="kind">
-							for _, k := range deviceKinds {
-								if k == d.Kind {
-									<option value={ k } selected>{ k }</option>
-								} else {
-									<option value={ k }>{ k }</option>
-								}
-							}
-						</select>
-					</label>
-					<div>
-						<div class="fieldlabel">Icon</div>
-						<div class="iconpick" data-kind-default={ KindIcon(d.Kind) }>
-							for _, ic := range IconChoices {
-								if ic == DeviceIcon(d.Icon, d.Kind) {
-									<button type="button" class="ic-swatch selected" data-icon={ ic }>{ ic }</button>
-								} else {
-									<button type="button" class="ic-swatch" data-icon={ ic }>{ ic }</button>
-								}
-							}
-						</div>
-						<input type="hidden" name="icon" value={ DeviceIcon(d.Icon, d.Kind) }/>
-					</div>
-					<label>
-						Vendor
-						<input type="text" name="vendor" value={ d.Vendor }/>
-					</label>
-					<label>
-						Model
-						<input type="text" name="model" value={ d.Model }/>
-					</label>
-					<label>
-						Function
-						<input type="text" name="function" value={ d.Function } placeholder="role, channel…"/>
-					</label>
-					<label>
-						Parent device
-						<select name="parent_device_id">
-							<option value="">— none —</option>
-							for _, pd := range allDevices {
-								if pd.ID != d.ID {
-									if d.ParentDeviceID != nil && *d.ParentDeviceID == pd.ID {
-										<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
-									} else {
-										<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
-									}
-								}
-							}
-						</select>
-					</label>
-					<label>
-						Notes
-						<textarea name="notes">{ d.Notes }</textarea>
-					</label>
-					<label>
-						Tags
-						<input type="text" name="tags" value={ tagNamesJoin(tags) } placeholder="comma,separated"/>
-					</label>
-					if !isEdit {
-						<div class="ifgroup">
-							<div class="fieldlabel">First interface (optional)</div>
-							<label>
-								MAC
-								<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff"/>
-							</label>
-							<label>
-								IP
-								<input type="text" name="ip" placeholder="10.0.0.5"/>
-							</label>
-							<label>
-								Subnet
-								<select name="subnet_id">
-									<option value="">—</option>
-									for _, sn := range subnets {
-										if sn.ID == preselectSubnet {
-											<option value={ fmt.Sprint(sn.ID) } selected>{ sn.Name } { sn.CIDR }</option>
-										} else {
-											<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
-										}
-									}
-								</select>
-							</label>
-						</div>
-					}
-				</div>
-				<div class="df">
-					<button type="button" class="theme-toggle" data-close>Cancel</button>
-					if isEdit {
-						<button type="submit" class="primary">Save</button>
-					} else {
-						<button type="submit" class="primary">Create device</button>
-					}
-				</div>
-			</form>
+			@deviceFormInner(d, tags, subnets, allDevices, isEdit, preselectSubnet)
+		</div>
+	</div>
+}
+
+// DeviceDrawer is the right-side sliding panel used for editing a device.
+templ DeviceDrawer(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, preselectSubnet int64) {
+	<div class="dialog-scrim drawer-scrim">
+		<div class="dialog drawer">
+			@deviceFormInner(d, tags, subnets, allDevices, true, preselectSubnet)
 		</div>
 	</div>
 }
@@ -384,164 +428,213 @@ func parentLabel(pd store.DeviceRow) string {
 	return pd.Name + " — " + ip
 }
 
+// anyOnline reports whether any interface of the device is currently online.
+func anyOnline(ifds []IfaceDetail) bool {
+	for _, f := range ifds {
+		if f.Online {
+			return true
+		}
+	}
+	return false
+}
+
 templ DevicePage(username string, d DeviceDetail) {
 	@Layout(d.Device.Name, username) {
-		<h1>
-			<span class="ic">{ DeviceIcon(d.Device.Icon, d.Device.Kind) }</span>
-			{ d.Device.Name }
-			<span class="badge">{ d.Device.Kind }</span>
-			if d.Device.Kind == "vm" || d.Device.Kind == "lxc" {
-				for _, f := range d.Fields {
-					if f.Key == "proxmox_status" {
-						<span class="badge">{ f.Value }</span>
+		<div class="dev-hero card">
+			<div class="dev-hero-main">
+				<span class="ic ic-lg">{ DeviceIcon(d.Device.Icon, d.Device.Kind) }</span>
+				<div class="dev-hero-head">
+					<h1>
+						{ d.Device.Name }
+						<span class="badge">{ d.Device.Kind }</span>
+						if d.Device.Kind == "vm" || d.Device.Kind == "lxc" {
+							for _, f := range d.Fields {
+								if f.Key == "proxmox_status" {
+									<span class="badge">{ f.Value }</span>
+								}
+							}
+						}
+						if anyOnline(d.Ifaces) {
+							<span class="pill online"><span class="d"></span>online</span>
+						} else {
+							<span class="pill offline"><span class="d"></span>offline</span>
+						}
+					</h1>
+					if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
+						<p class="muted">{ joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) }</p>
 					}
-				}
-			}
-			<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
-		</h1>
-		if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
-			<p class="muted">{ joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) }</p>
-		}
-		if d.Device.Notes != "" {
-			<p>{ d.Device.Notes }</p>
-		}
+					if d.Device.Notes != "" {
+						<p class="dev-notes">{ d.Device.Notes }</p>
+					}
+				</div>
+			</div>
+			<div class="dev-hero-actions">
+				<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
+				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
+					<button type="submit">Wake on LAN</button>
+				</form>
+				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
+					<button type="submit">Scan ports</button>
+				</form>
+			</div>
+		</div>
 
-		<h2>Interfaces</h2>
-		for _, ifd := range d.Ifaces {
-			<div class="card">
-				<p class="mono">
-					if ifd.Iface.MAC != nil {
-						{ *ifd.Iface.MAC }
+		<div class="dev-cols">
+			<div class="dev-main">
+				<div class="card">
+					<h2>Interfaces</h2>
+					for _, ifd := range d.Ifaces {
+						<div class="iface">
+							<p class="mono">
+								if ifd.Iface.MAC != nil {
+									{ *ifd.Iface.MAC }
+								}
+								if ifd.Iface.Hostname != nil {
+									{ " " } { *ifd.Iface.Hostname }
+								}
+								if ifd.Online {
+									<span class="pill online"><span class="d"></span>online</span>
+								} else {
+									<span class="pill offline"><span class="d"></span>offline</span>
+								}
+							</p>
+							<p class="muted">Last seen: <span class="mono">{ ifd.LastSeen }</span> · Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }</p>
+							<table>
+								<tr>
+									<th>IP</th>
+									<th>Lease</th>
+								</tr>
+								for _, ip := range ifd.IPs {
+									<tr>
+										<td class="mono">{ ip.IP }</td>
+										<td>
+											if ip.SubnetID != 0 {
+												@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
+											} else {
+												<span class="chip">{ ip.Kind }</span>
+											}
+										</td>
+									</tr>
+								}
+							</table>
+							if len(ifd.Ports) > 0 {
+								<table>
+									<tr>
+										<th>Port</th>
+										<th>Proto</th>
+										<th>Service</th>
+										<th>Last seen</th>
+									</tr>
+									for _, p := range ifd.Ports {
+										<tr>
+											<td>{ fmt.Sprint(p.Port) }</td>
+											<td>{ p.Proto }</td>
+											<td>{ p.ServiceGuess }</td>
+											<td class="mono">{ p.LastSeen }</td>
+										</tr>
+									}
+								</table>
+							}
+						</div>
 					}
-					if ifd.Iface.Hostname != nil {
-						{ " " } { *ifd.Iface.Hostname }
-					}
-					if ifd.Online {
-						<span class="ok">● online</span>
-					} else {
-						<span class="error">● offline</span>
-					}
-				</p>
-				<p>Last seen: <span class="mono">{ ifd.LastSeen }</span> · Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }</p>
-				<table>
-					<tr>
-						<th>IP</th>
-						<th>Kind</th>
-					</tr>
-					for _, ip := range ifd.IPs {
-						<tr>
-							<td class="mono">{ ip.IP }</td>
-							<td>{ ip.Kind }</td>
-						</tr>
-					}
-				</table>
-				if len(ifd.Ports) > 0 {
+				</div>
+			</div>
+
+			<div class="dev-aside">
+				<div class="card">
+					<h2>Tags</h2>
+					<p>
+						for _, t := range d.Tags {
+							<span class="tag">{ t.Name }</span>{ " " }
+						}
+					</p>
+				</div>
+
+				<div class="card">
+					<h2>Links</h2>
+					<ul class="linklist">
+						for _, l := range d.Links {
+							<li>
+								<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">{ l.Label }</a>
+								<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline">
+									<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
+									<button type="submit">remove</button>
+								</form>
+							</li>
+						}
+					</ul>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="rowform">
+						<input type="text" name="label" placeholder="label" required/>
+						<input type="text" name="url" placeholder="https://…" required/>
+						<button type="submit">Add link</button>
+					</form>
+				</div>
+
+				<div class="card">
+					<h2>Custom fields</h2>
 					<table>
 						<tr>
-							<th>Port</th>
-							<th>Proto</th>
-							<th>Service</th>
-							<th>Last seen</th>
+							<th>Key</th>
+							<th>Value</th>
+							<th></th>
 						</tr>
-						for _, p := range ifd.Ports {
+						for _, f := range d.Fields {
 							<tr>
-								<td>{ fmt.Sprint(p.Port) }</td>
-								<td>{ p.Proto }</td>
-								<td>{ p.ServiceGuess }</td>
-								<td class="mono">{ p.LastSeen }</td>
+								<td class="mono">{ f.Key }</td>
+								<td>{ f.Value }</td>
+								<td>
+									<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline">
+										<input type="hidden" name="key" value={ f.Key }/>
+										<button type="submit">remove</button>
+									</form>
+								</td>
 							</tr>
 						}
 					</table>
-				}
-			</div>
-		}
-
-		<h2>Links</h2>
-		<ul>
-			for _, l := range d.Links {
-				<li>
-					<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">{ l.Label }</a>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline">
-						<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
-						<button type="submit">remove</button>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="rowform">
+						<input type="text" name="key" placeholder="key" required/>
+						<input type="text" name="value" placeholder="value"/>
+						<button type="submit">Set field</button>
 					</form>
-				</li>
-			}
-		</ul>
-		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) }>
-			<input type="text" name="label" placeholder="label" required/>
-			<input type="text" name="url" placeholder="https://…" required/>
-			<button type="submit">Add link</button>
-		</form>
+				</div>
 
-		<h2>Tags</h2>
-		<p>
-			for _, t := range d.Tags {
-				<span class="tag">{ t.Name }</span>{ " " }
-			}
-		</p>
+				<div class="card">
+					<h2>Parent / children</h2>
+					if d.Parent != nil {
+						<p>Parent: <a href={ templ.URL(fmt.Sprintf("/devices/%d", d.Parent.ID)) }>{ d.Parent.Name }</a></p>
+					}
+					if len(d.Children) > 0 {
+						<ul>
+							for _, c := range d.Children {
+								<li><a href={ templ.URL(fmt.Sprintf("/devices/%d", c.ID)) }>{ c.Name }</a></li>
+							}
+						</ul>
+					}
+					if d.Parent == nil && len(d.Children) == 0 {
+						<p class="muted">No parent or children.</p>
+					}
+				</div>
 
-		<h2>Custom fields</h2>
-		<table>
-			<tr>
-				<th>Key</th>
-				<th>Value</th>
-				<th></th>
-			</tr>
-			for _, f := range d.Fields {
-				<tr>
-					<td class="mono">{ f.Key }</td>
-					<td>{ f.Value }</td>
-					<td>
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline">
-							<input type="hidden" name="key" value={ f.Key }/>
-							<button type="submit">remove</button>
-						</form>
-					</td>
-				</tr>
-			}
-		</table>
-		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) }>
-			<input type="text" name="key" placeholder="key" required/>
-			<input type="text" name="value" placeholder="value"/>
-			<button type="submit">Set field</button>
-		</form>
+				<div class="card">
+					<h2>Event history</h2>
+					<table>
+						for _, e := range d.Events {
+							<tr>
+								<td class="mono">{ e.TS }</td>
+								<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+								<td>{ e.Details }</td>
+							</tr>
+						}
+					</table>
+				</div>
 
-		<h2>Parent / children</h2>
-		if d.Parent != nil {
-			<p>Parent: <a href={ templ.URL(fmt.Sprintf("/devices/%d", d.Parent.ID)) }>{ d.Parent.Name }</a></p>
-		}
-		if len(d.Children) > 0 {
-			<ul>
-				for _, c := range d.Children {
-					<li><a href={ templ.URL(fmt.Sprintf("/devices/%d", c.ID)) }>{ c.Name }</a></li>
-				}
-			</ul>
-		}
-
-		<h2>Event history</h2>
-		<table>
-			for _, e := range d.Events {
-				<tr>
-					<td class="mono">{ e.TS }</td>
-					<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
-					<td>{ e.Details }</td>
-				</tr>
-			}
-		</table>
-
-		<h2>Actions</h2>
-		<p>
-			<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
-				<button type="submit">Wake on LAN</button>
-			</form>
-			<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
-				<button type="submit">Scan ports</button>
-			</form>
-		</p>
-
-		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
-			<button type="submit">Delete device</button>
-		</form>
+				<div class="card">
+					<h2>Danger zone</h2>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
+						<button type="submit">Delete device</button>
+					</form>
+				</div>
+			</div>
+		</div>
 	}
 }
