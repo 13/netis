@@ -1,0 +1,11 @@
+# build artifacts
+/netis
+netis.db
+netis.db-shm
+netis.db-wal
+
+# headless-browser scratch
+.playwright-mcp/
+
+# subagent-driven-development runtime scratch (ledger, briefs, reviews)
+.superpowers/sdd/
