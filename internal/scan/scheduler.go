@@ -37,7 +37,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 			return
 		case id := <-s.trigger:
 			if sn, err := s.store.GetSubnet(id); err == nil {
-				s.run(ctx, sn)
+				s.run(ctx, sn, true)
 			}
 		case <-tick.C:
 			subnets, err := s.store.ListSubnets()
@@ -52,17 +52,30 @@ func (s *Scheduler) Start(ctx context.Context) {
 				due := time.Since(s.lastRun[sn.ID]) >= time.Duration(sn.ScanIntervalSec)*time.Second
 				s.mu.Unlock()
 				if due {
-					s.run(ctx, sn)
+					s.run(ctx, sn, false)
 				}
 			}
 		}
 	}
 }
 
-func (s *Scheduler) run(ctx context.Context, sn store.Subnet) {
-	// Guard here (not just at the call sites) so every entry point that
-	// reaches run — periodic tick or manual Trigger — is protected.
-	if !sn.ScanEnabled || sn.Kind == "wireguard" {
+// shouldRunScan reports whether a scan should execute for sn. Manual scans
+// (user-triggered via Trigger) run regardless of the auto-scan flag; periodic
+// scans respect it. WireGuard subnets are never ARP-scannable and are always
+// skipped.
+func shouldRunScan(sn store.Subnet, manual bool) bool {
+	if sn.Kind == "wireguard" {
+		return false
+	}
+	if !manual && !sn.ScanEnabled {
+		return false
+	}
+	return true
+}
+
+func (s *Scheduler) run(ctx context.Context, sn store.Subnet, manual bool) {
+	// shouldRunScan is the authoritative guard for every entry point.
+	if !shouldRunScan(sn, manual) {
 		return
 	}
 	s.mu.Lock()
