@@ -76,6 +76,161 @@ func TestDeviceListFilter(t *testing.T) {
 	}
 }
 
+func TestDeviceListDefaultSortIPNumeric(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	mk := func(name, ip string) {
+		d, _ := st.CreateDevice(store.Device{Name: name, Kind: "other", Source: "manual"})
+		f, _ := st.AddIface(d, nil, nil)
+		st.AssignIP(f, snID, ip, "dhcp")
+	}
+	mk("c", "10.0.0.100")
+	mk("a", "10.0.0.2")
+	mk("b", "10.0.0.10")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	// Numeric IP order: .2 before .10 before .100 (string sort would flip .10/.100/.2).
+	i2, i10, i100 := strings.Index(body, "10.0.0.2<"), strings.Index(body, "10.0.0.10<"), strings.Index(body, "10.0.0.100<")
+	if !(i2 >= 0 && i10 > i2 && i100 > i10) {
+		t.Fatalf("IP order wrong: .2@%d .10@%d .100@%d", i2, i10, i100)
+	}
+}
+
+func TestDeviceListLeaseChipsAndGrid(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(d, nil, nil)
+	st.AssignIP(f, snID, "10.0.0.5", "static")
+	st.AssignIP(f, snID, "10.0.0.6", "dhcp")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	for _, want := range []string{"chip static", "chip", `id="dev-grid"`, `id="dev-list"`, `class="seg"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("device list missing %q", want)
+		}
+	}
+}
+
+func TestDeviceListNewMarker(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "new") {
+		t.Fatal("unreviewed scan device should show a 'new' marker")
+	}
+}
+
+func TestApproveDevice(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "unknown-bb", Kind: "other", Source: "scan"})
+	// The unreviewed device shows an Approve control.
+	if !strings.Contains(authedGet(t, srv, st, "/devices").Body.String(), "/devices/1/approve") {
+		t.Fatal("unreviewed device should show an Approve control")
+	}
+	rec := authedPost(t, srv, st, "/devices/1/approve", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("approve code=%d", rec.Code)
+	}
+	d, _ := st.GetDevice(devID)
+	if !d.Reviewed {
+		t.Fatal("approve did not set reviewed")
+	}
+	// After approval the Approve control is gone.
+	if strings.Contains(authedGet(t, srv, st, "/devices").Body.String(), "/devices/1/approve") {
+		t.Fatal("approved device should no longer show Approve")
+	}
+}
+
+func TestApproveRequiresAdmin(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	addAdmin(t, st)
+	st.CreateDevice(store.Device{Name: "unknown-cc", Kind: "other", Source: "scan"})
+	uID, _ := st.CreateUser("eve", "h", "viewer")
+	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	req := httptest.NewRequest("POST", "/devices/1/approve", nil)
+	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer approve code=%d, want 403", rec.Code)
+	}
+}
+
+func TestGridShowsLowestIP(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(d, nil, nil)
+	// Assign in non-ascending order so the insertion-order index 0 would be wrong.
+	st.AssignIP(f, snID, "10.0.0.50", "dhcp")
+	st.AssignIP(f, snID, "10.0.0.5", "static")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	gridIdx := strings.Index(body, `id="dev-grid"`)
+	if gridIdx < 0 {
+		t.Fatal("dev-grid not found")
+	}
+	grid := body[gridIdx:]
+	if !strings.Contains(grid, "10.0.0.5") {
+		t.Fatalf("grid tile missing lowest IP: %s", grid)
+	}
+	if strings.Contains(grid, "10.0.0.50") {
+		t.Fatalf("grid tile shows insertion-order IP instead of lowest: %s", grid)
+	}
+}
+
+func TestApproveClearsDashboardUnknown(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+
+	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Stats.Unknown != 1 {
+		t.Fatalf("Stats.Unknown = %d, want 1", data.Stats.Unknown)
+	}
+	found := false
+	for _, u := range data.Unknowns {
+		if u.ID == devID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("unknown device missing from attention list before approve")
+	}
+
+	if err := st.SetDeviceReviewed(devID, true); err != nil {
+		t.Fatal(err)
+	}
+	data2, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data2.Stats.Unknown != 0 {
+		t.Fatalf("Stats.Unknown after approve = %d, want 0", data2.Stats.Unknown)
+	}
+	for _, u := range data2.Unknowns {
+		if u.ID == devID {
+			t.Fatal("approved device still in attention list")
+		}
+	}
+}
+
+func TestApproveNonexistentDevice404(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	rec := authedPost(t, srv, st, "/devices/999/approve", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("approve nonexistent device code=%d, want 404", rec.Code)
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

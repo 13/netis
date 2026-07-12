@@ -49,7 +49,7 @@ func TestSyncCreatesUnknownFromReservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := deviceByName(t, st, "printer")
-	if d.Source != "pihole" || len(d.IPs) != 1 || d.IPs[0] != "10.0.0.20" {
+	if d.Source != "pihole" || len(d.IPs) != 1 || d.IPs[0].IP != "10.0.0.20" {
 		t.Fatalf("device=%+v", d)
 	}
 	// reservation → static
@@ -78,7 +78,7 @@ func TestSyncEnrichesExistingByMAC(t *testing.T) {
 		t.Fatalf("must not create a second device: %+v", rows)
 	}
 	d := deviceByName(t, st, "known")
-	if len(d.IPs) != 1 || d.IPs[0] != "10.0.0.10" {
+	if len(d.IPs) != 1 || d.IPs[0].IP != "10.0.0.10" {
 		t.Fatalf("IP not attached: %+v", d.IPs)
 	}
 	ifaces, _ := st.ListIfaces(d.ID)

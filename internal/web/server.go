@@ -57,6 +57,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger) *Ser
 	s.mux.HandleFunc("GET /devices/{id}", s.handleDevicePage)
 	s.mux.HandleFunc("POST /devices/{id}", s.requireAdmin(s.handleDeviceUpdate))
 	s.mux.HandleFunc("POST /devices/{id}/delete", s.requireAdmin(s.handleDeviceDelete))
+	s.mux.HandleFunc("POST /devices/{id}/approve", s.requireAdmin(s.handleDeviceApprove))
 	s.mux.HandleFunc("POST /devices/{id}/links", s.requireAdmin(s.handleLinkAdd))
 	s.mux.HandleFunc("POST /links/{id}/delete", s.requireAdmin(s.handleLinkDelete))
 	s.mux.HandleFunc("POST /devices/{id}/tags", s.requireAdmin(s.handleTagAdd))

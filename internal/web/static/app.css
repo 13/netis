@@ -176,3 +176,19 @@ label input, label select { color:var(--fg); }
 @media (prefers-reduced-motion: reduce) {
   a.card, .theme-toggle, .btn, button { transition:none; }
 }
+
+/* ---- device list toolbar + grid view (sub-project B) ---- */
+.toolbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+.toolbar .grow { flex:1; }
+.dev { display:flex; align-items:center; gap:10px; }
+.dev a { text-decoration:none; font-weight:540; }
+thead th a { color:inherit; text-decoration:none; }
+thead th a:hover { color:var(--fg); }
+.devgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+.devtile { position:relative; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+           padding:13px; box-shadow:var(--shadow); color:inherit; text-decoration:none; display:block; }
+.devtile:hover { border-color:var(--accent); }
+.devtile .ic { width:38px; height:38px; font-size:19px; border-radius:10px; }
+.devtile .nm { font-weight:580; margin-top:9px; }
+.devtile .ip { color:var(--muted); font-size:12px; margin-top:1px; }
+.devtile .st { position:absolute; top:12px; right:12px; }

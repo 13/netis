@@ -42,7 +42,7 @@ func TestSyncCreatesPeersAndStatus(t *testing.T) {
 	if a.Kind != "wg-peer" || a.Source != "wireguard" || !a.Online {
 		t.Fatalf("peerA=%+v", a)
 	}
-	if len(a.IPs) != 1 || a.IPs[0] != "10.6.0.2" {
+	if len(a.IPs) != 1 || a.IPs[0].IP != "10.6.0.2" {
 		t.Fatalf("peerA ips=%v", a.IPs)
 	}
 	if byName["10.6.0.3"].Online {
