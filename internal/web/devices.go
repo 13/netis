@@ -184,7 +184,7 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	views.DeviceDialog(d, tags, subnets, all, true, 0).Render(r.Context(), w)
+	views.DeviceDrawer(d, tags, subnets, all, 0).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {

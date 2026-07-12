@@ -189,6 +189,13 @@ nav.tabs .tab.active { background:var(--accent-soft); color:var(--accent); }
 .dialog .db { padding:16px; display:flex; flex-direction:column; gap:13px; overflow-y:auto; min-height:0; }
 .dialog .df { display:flex; justify-content:flex-end; gap:9px; padding:13px 16px; border-top:1px solid var(--border); background:var(--surface-2); flex:none; }
 
+/* ---- edit drawer (right-side; reuses .dialog internals) ---- */
+.drawer-scrim { place-items:stretch end; padding:0; }
+.drawer { max-width:min(460px,100%); width:min(460px,100%); max-height:100vh; height:100vh;
+  border-radius:0; border-width:0 0 0 1px; box-shadow:var(--shadow-lg); animation:drawerIn .18s ease; }
+@keyframes drawerIn { from { transform:translateX(24px); opacity:.6; } to { transform:none; opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation:none; } }
+
 @media (prefers-reduced-motion: reduce) {
   .theme-toggle, .btn, button { transition:none; }
 }

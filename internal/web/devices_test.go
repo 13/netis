@@ -548,6 +548,31 @@ func TestDeviceIPKindToggle(t *testing.T) {
 	}
 }
 
+func TestEditServesDrawer(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/edit").Body.String()
+	if !strings.Contains(body, "drawer") {
+		t.Fatalf("edit form is not a drawer: %q", body)
+	}
+	if !strings.Contains(body, `action="/devices/`+strconv.FormatInt(devID, 10)+`"`) {
+		t.Fatalf("edit form action missing: %q", body)
+	}
+}
+
+func TestNewStaysDialog(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	if !strings.Contains(body, "dialog-scrim") {
+		t.Fatalf("new form lost dialog shell: %q", body)
+	}
+	if strings.Contains(body, "drawer") {
+		t.Fatalf("new form should be a centered dialog, not a drawer")
+	}
+}
+
 func TestDeviceIPKindBadKind(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
