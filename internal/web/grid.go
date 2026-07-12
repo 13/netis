@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
 
 	"netis/internal/scan"
@@ -15,15 +16,32 @@ func (s *Server) gridCells(sn store.Subnet) ([]views.GridCell, error) {
 	if err != nil {
 		return nil, err
 	}
-	ips, err := scan.HostIPs(sn.CIDR)
+	ips, err := scan.AllIPs(sn.CIDR)
 	if err != nil {
 		return nil, err
 	}
+	prefix, err := netip.ParsePrefix(sn.CIDR)
+	if err != nil {
+		return nil, err
+	}
+	prefix = prefix.Masked()
+	hasEdges := prefix.Addr().Is4() && prefix.Bits() < 31
 	cells := make([]views.GridCell, 0, len(ips))
-	for _, ip := range ips {
+	for i, ip := range ips {
 		c := views.GridCell{IP: ip, State: "free", Title: ip}
+		if hasEdges && (i == 0 || i == len(ips)-1) {
+			c.State = "edge"
+			if i == 0 {
+				c.Title = ip + " — network address"
+			} else {
+				c.Title = ip + " — broadcast address"
+			}
+			cells = append(cells, c)
+			continue
+		}
 		if o, ok := occ[ip]; ok {
 			c.DeviceID = o.DeviceID
+			c.Kind = o.Kind
 			c.Title = fmt.Sprintf("%s — %s %s last seen %s", ip, o.DeviceName, o.MAC, o.LastSeen)
 			switch {
 			case o.Count > 1:

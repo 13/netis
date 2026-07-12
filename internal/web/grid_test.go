@@ -35,13 +35,13 @@ func TestGridStates(t *testing.T) {
 		t.Fatalf("code=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"sq conflict", "sq offline", "sq reserved", "sq free"} {
+	for _, want := range []string{"sq conflict", "sq offline", "sq reserved", "sq free", "sq edge", "static"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("grid missing %q", want)
 		}
 	}
-	// /29 → 6 host squares
-	if n := strings.Count(body, `class="sq`); n != 6 {
-		t.Errorf("squares=%d, want 6", n)
+	// /29 full range → 8 squares (network + 6 hosts + broadcast)
+	if n := strings.Count(body, `class="sq`); n != 8 {
+		t.Errorf("squares=%d, want 8", n)
 	}
 }

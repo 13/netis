@@ -11,6 +11,7 @@ type GridCell struct {
 	State    string
 	DeviceID int64
 	Title    string
+	Kind     string
 }
 
 templ GridPage(username string, sn store.Subnet, cells []GridCell) {
@@ -32,6 +33,9 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell) {
 			<span class="sq reserved"></span> reserved
 			<span class="sq"></span> free
 			<span class="sq conflict"></span> conflict
+			<span class="sq edge"></span> network/broadcast
+			· border: <span class="sq static"></span> static
+			<span class="sq dhcp"></span> dhcp
 		</p>
 	}
 }
@@ -40,11 +44,13 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 	<div class="grid">
 		for _, c := range cells {
 			if c.DeviceID > 0 {
-				<a
-					class={ "sq", c.State }
-					href={ templ.URL(fmt.Sprintf("/devices/%d", c.DeviceID)) }
+				<button
+					type="button"
+					class={ "sq", c.State, c.Kind }
+					hx-get={ fmt.Sprintf("/subnets/%d/cell?ip=%s", sn.ID, c.IP) }
+					hx-target="#modal"
 					title={ c.Title }
-				></a>
+				></button>
 			} else {
 				<span class={ "sq", c.State } title={ c.Title }></span>
 			}
