@@ -68,6 +68,54 @@ func TestTagsFieldsLinksPortsUsersSettings(t *testing.T) {
 	}
 }
 
+func TestSetDeviceTags(t *testing.T) {
+	s := openTest(t)
+	devID, _ := s.CreateDevice(Device{Name: "d", Kind: "other", Source: "manual"})
+
+	names := func() []string {
+		tags, _ := s.DeviceTags(devID)
+		out := make([]string, 0, len(tags))
+		for _, tg := range tags {
+			out = append(out, tg.Name)
+		}
+		return out
+	}
+
+	// Attach two, creating tags that don't exist. Input has dupes/blanks/spaces.
+	if err := s.SetDeviceTags(devID, []string{"web", " web ", "", "db"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(); len(got) != 2 || got[0] != "db" || got[1] != "web" {
+		t.Fatalf("after first sync tags=%v, want [db web]", got)
+	}
+
+	// Re-sync to a set that drops "db", keeps "web", adds "nas".
+	if err := s.SetDeviceTags(devID, []string{"web", "nas"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(); len(got) != 2 || got[0] != "nas" || got[1] != "web" {
+		t.Fatalf("after second sync tags=%v, want [nas web]", got)
+	}
+
+	// Empty set detaches everything.
+	if err := s.SetDeviceTags(devID, []string{"  ", ""}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(); len(got) != 0 {
+		t.Fatalf("after clear tags=%v, want []", got)
+	}
+
+	// A tag reused across syncs is not duplicated in the tag table.
+	all, _ := s.ListTags()
+	seen := map[string]int{}
+	for _, tg := range all {
+		seen[tg.Name]++
+	}
+	if seen["web"] != 1 {
+		t.Fatalf("tag 'web' should exist exactly once, got %d", seen["web"])
+	}
+}
+
 func TestDeleteUserGuardedKeepsLastAdmin(t *testing.T) {
 	s := openTest(t)
 
