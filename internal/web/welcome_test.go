@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -11,6 +12,26 @@ import (
 
 // Note: authedGet/authedPost and testServer are defined in the package's other
 // _test.go files (dashboard_test.go, devices_test.go, auth_test.go).
+
+// TestWelcomePostsRequireAdmin guards against a viewer using the wizard's
+// mutating routes (which stay live after onboarding) to bypass the admin gate
+// that /settings/* enforces.
+func TestWelcomePostsRequireAdmin(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	addAdmin(t, st)
+	uID, _ := st.CreateUser("eve", "h", "viewer")
+	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	for _, path := range []string{"/welcome/subnets", "/welcome/integrations", "/welcome/skip"} {
+		req := httptest.NewRequest("POST", path, nil)
+		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("viewer POST %s = %d, want 403", path, rec.Code)
+		}
+	}
+}
 
 func TestOnboardingRedirect(t *testing.T) {
 	srv, st := testServer(t)
