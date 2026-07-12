@@ -122,6 +122,44 @@ func TestDeviceListNewMarker(t *testing.T) {
 	}
 }
 
+func TestApproveDevice(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "unknown-bb", Kind: "other", Source: "scan"})
+	// The unreviewed device shows an Approve control.
+	if !strings.Contains(authedGet(t, srv, st, "/devices").Body.String(), "/devices/1/approve") {
+		t.Fatal("unreviewed device should show an Approve control")
+	}
+	rec := authedPost(t, srv, st, "/devices/1/approve", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("approve code=%d", rec.Code)
+	}
+	d, _ := st.GetDevice(devID)
+	if !d.Reviewed {
+		t.Fatal("approve did not set reviewed")
+	}
+	// After approval the Approve control is gone.
+	if strings.Contains(authedGet(t, srv, st, "/devices").Body.String(), "/devices/1/approve") {
+		t.Fatal("approved device should no longer show Approve")
+	}
+}
+
+func TestApproveRequiresAdmin(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	addAdmin(t, st)
+	st.CreateDevice(store.Device{Name: "unknown-cc", Kind: "other", Source: "scan"})
+	uID, _ := st.CreateUser("eve", "h", "viewer")
+	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	req := httptest.NewRequest("POST", "/devices/1/approve", nil)
+	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("viewer approve code=%d, want 403", rec.Code)
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

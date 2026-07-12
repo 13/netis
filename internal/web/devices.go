@@ -204,6 +204,19 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
+func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.store.SetDeviceReviewed(id, true); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	http.Redirect(w, r, "/devices", http.StatusSeeOther)
+}
+
 func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

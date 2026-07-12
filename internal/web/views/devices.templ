@@ -78,6 +78,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						@sortHeader("Kind", "kind", sortKey, dir, q)
 						<th>Tags</th>
 						@sortHeader("Last seen", "seen", sortKey, dir, q)
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -133,6 +134,13 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 							<td class="mono muted">
 								if row.LastSeen != nil {
 									{ *row.LastSeen }
+								}
+							</td>
+							<td>
+								if !row.Reviewed {
+									<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
+										<button type="submit">Approve</button>
+									</form>
 								}
 							</td>
 						</tr>
