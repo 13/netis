@@ -1,7 +1,7 @@
 (function () {
 	function current() {
-		return document.documentElement.getAttribute('data-theme') ||
-			(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		// Dark is the default; the bootstrap has already set data-theme.
+		return document.documentElement.getAttribute('data-theme') || 'dark';
 	}
 	function label(t) {
 		var l = document.querySelector('#theme-toggle .tglabel');

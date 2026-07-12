@@ -12,9 +12,8 @@ templ Layout(title string, username string) {
 				// Default dark unless a stored choice or an explicit OS light preference says otherwise.
 				(function () {
 					try {
-						var t = localStorage.getItem('netis-theme');
-						if (!t) { t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
-						document.documentElement.setAttribute('data-theme', t);
+						// Default to dark unless the user has explicitly chosen a theme.
+						document.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');
 					} catch (e) {
 						document.documentElement.setAttribute('data-theme', 'dark');
 					}
