@@ -1,5 +1,7 @@
 package store
 
+import "strings"
+
 type Tag struct {
 	ID    int64
 	Name  string
@@ -53,6 +55,69 @@ func (s *Store) TagDevice(deviceID, tagID int64) error {
 func (s *Store) UntagDevice(deviceID, tagID int64) error {
 	_, err := s.DB.Exec(`DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, tagID)
 	return err
+}
+
+// SetDeviceTags syncs a device's tags to exactly the given names: names are
+// trimmed, blanks dropped, and de-duplicated; tags that don't exist are
+// created (color #888888); tags no longer present are detached. Idempotent
+// and order-independent.
+func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
+	// Build the desired set (trim, drop empty, dedup).
+	want := map[string]bool{}
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			want[n] = true
+		}
+	}
+
+	current, err := s.DeviceTags(deviceID)
+	if err != nil {
+		return err
+	}
+	have := map[string]int64{} // name -> tag id, currently attached
+	for _, t := range current {
+		have[t.Name] = t.ID
+	}
+
+	// Detach tags no longer wanted.
+	for name, id := range have {
+		if !want[name] {
+			if err := s.UntagDevice(deviceID, id); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Attach wanted tags not already present (find-or-create).
+	for name := range want {
+		if _, ok := have[name]; ok {
+			continue
+		}
+		id, err := s.findOrCreateTag(name)
+		if err != nil {
+			return err
+		}
+		if err := s.TagDevice(deviceID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// findOrCreateTag returns the id of the tag with the given name, creating it
+// with a neutral color if it does not exist yet.
+func (s *Store) findOrCreateTag(name string) (int64, error) {
+	tags, err := s.ListTags()
+	if err != nil {
+		return 0, err
+	}
+	for _, t := range tags {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return s.CreateTag(name, "#888888")
 }
 
 func (s *Store) SetCustomField(deviceID int64, key, value string) error {

@@ -28,6 +28,17 @@ func normMAC(in string) string {
 	return m
 }
 
+// parseTags splits a comma-separated tags field into trimmed, non-empty names.
+func parseTags(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.ListDevices()
 	if err != nil {
@@ -130,8 +141,45 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	u, _ := userFrom(r)
-	views.DeviceForm(u.Username, subnets).Render(r.Context(), w)
+	all, err := s.store.ListDevices()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false).Render(r.Context(), w)
+}
+
+func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	d, err := s.store.GetDevice(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	tags, err := s.store.DeviceTags(id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	subnets, err := s.store.ListSubnets()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	all, err := s.store.ListDevices()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	views.DeviceDialog(d, tags, subnets, all, true).Render(r.Context(), w)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
@@ -145,10 +193,21 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name required", 400)
 		return
 	}
-	devID, err := s.store.CreateDevice(store.Device{
-		Name: name, Kind: kind, Notes: r.FormValue("notes"), Source: "manual",
-	})
+	dev := store.Device{
+		Name: name, Kind: kind, Notes: r.FormValue("notes"),
+		Icon: r.FormValue("icon"), Source: "manual",
+	}
+	if p := r.FormValue("parent_device_id"); p != "" {
+		if pid, err := strconv.ParseInt(p, 10, 64); err == nil {
+			dev.ParentDeviceID = &pid
+		}
+	}
+	devID, err := s.store.CreateDevice(dev)
 	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if err := s.store.SetDeviceTags(devID, parseTags(r.FormValue("tags"))); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -198,6 +257,10 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(d); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	if err := s.store.SetDeviceTags(d.ID, parseTags(r.FormValue("tags"))); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -299,11 +362,6 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	allTags, err := s.store.ListTags()
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
 	fields, err := s.store.ListCustomFields(id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -334,7 +392,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 
 	u, _ := userFrom(r)
 	views.DevicePage(u.Username, views.DeviceDetail{
-		Device: d, Ifaces: ifaceDetails, Tags: tags, AllTags: allTags,
+		Device: d, Ifaces: ifaceDetails, Tags: tags,
 		Fields: fields, Links: links, Children: children, Parent: parent, Events: evs,
 	}).Render(r.Context(), w)
 }
@@ -362,46 +420,6 @@ func (s *Server) handleLinkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/devices/"+devID, http.StatusSeeOther)
-}
-
-func (s *Server) handleTagAdd(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name != "" {
-		tagID, err := s.findOrCreateTag(name)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		if err := s.store.TagDevice(id, tagID); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-	}
-	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
-}
-
-func (s *Server) findOrCreateTag(name string) (int64, error) {
-	tags, err := s.store.ListTags()
-	if err != nil {
-		return 0, err
-	}
-	for _, t := range tags {
-		if t.Name == name {
-			return t.ID, nil
-		}
-	}
-	return s.store.CreateTag(name, "#888888")
-}
-
-func (s *Server) handleTagRemove(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	tagID, _ := strconv.ParseInt(r.PathValue("tagID"), 10, 64)
-	if err := s.store.UntagDevice(id, tagID); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
 func (s *Server) handleFieldSet(w http.ResponseWriter, r *http.Request) {

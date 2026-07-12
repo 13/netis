@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -43,6 +44,25 @@ func TestWOLDeviceWithoutMAC400(t *testing.T) {
 		t.Errorf("WOL on device without MAC = %d, want 400", rec.Code)
 	}
 	_ = devID
+}
+
+func TestDetailPageHasEditButtonNoInlineForm(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", Source: "manual"})
+	body := authedGet(t, srv, st, "/devices/1").Body.String()
+
+	if !strings.Contains(body, `hx-get="/devices/1/edit"`) {
+		t.Error("detail page should have an Edit button targeting the edit fragment")
+	}
+	// The old inline edit form had a notes <textarea>; it now lives only in the dialog.
+	if strings.Contains(body, "<textarea") {
+		t.Error("detail page should no longer contain the inline edit form")
+	}
+	// The old per-tag add form posted to /devices/1/tags; it is gone.
+	if strings.Contains(body, `/devices/1/tags`) {
+		t.Error("detail page should no longer contain inline tag forms")
+	}
 }
 
 func TestCreateAndShowDevice(t *testing.T) {
@@ -231,6 +251,16 @@ func TestApproveNonexistentDevice404(t *testing.T) {
 	}
 }
 
+func TestDeviceListShowsStoredIcon(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	st.CreateDevice(store.Device{Name: "console", Kind: "other", Icon: "🎮", Source: "manual"})
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "🎮") {
+		t.Fatal("device list should render the stored icon")
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")
@@ -247,5 +277,114 @@ func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	}
 	if _, err := st.GetDevice(devID); err != nil {
 		t.Fatal("device must still exist")
+	}
+}
+
+func TestDeviceNewDialogFragment(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	for _, want := range []string{`class="dialog"`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new dialog fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<nav") {
+		t.Error("new dialog should be a fragment, not a full page with <nav>")
+	}
+}
+
+func TestDeviceEditDialogPrefilled(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	parentID, _ := st.CreateDevice(store.Device{Name: "core-switch", Kind: "switch", Source: "manual"})
+	pid := parentID
+	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", ParentDeviceID: &pid, Source: "manual"})
+	st.SetDeviceTags(devID, []string{"storage"})
+
+	body := authedGet(t, srv, st, "/devices/2/edit").Body.String()
+	if !strings.Contains(body, `value="nas"`) {
+		t.Error("edit dialog missing prefilled name")
+	}
+	if !strings.Contains(body, `value="storage"`) {
+		t.Error("edit dialog missing prefilled tags")
+	}
+	// Parent device (id 1) must be the pre-selected option. Kind-select
+	// "selected" options carry string values (e.g. "server"), so match the
+	// numeric parent value specifically.
+	if !strings.Contains(body, "core-switch") || !strings.Contains(body, `value="1" selected`) {
+		t.Error("edit dialog should pre-select the parent device")
+	}
+	// The edited device must not appear as a selectable parent of itself.
+	if strings.Contains(body, "nas — ") || strings.Contains(body, ">nas<") {
+		t.Error("edit dialog should exclude the device itself from parent options")
+	}
+	_ = devID
+}
+
+func TestDeviceEditDialogBadID404(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	if rec := authedGet(t, srv, st, "/devices/999/edit"); rec.Code != http.StatusNotFound {
+		t.Fatalf("edit unknown device = %d, want 404", rec.Code)
+	}
+}
+
+func TestCreateDeviceWithIconParentTags(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	parentID, _ := st.CreateDevice(store.Device{Name: "rack", Kind: "switch", Source: "manual"})
+
+	rec := authedPost(t, srv, st, "/devices", url.Values{
+		"name": {"nas"}, "kind": {"server"}, "icon": {"🗄️"},
+		"parent_device_id": {strconv.FormatInt(parentID, 10)},
+		"tags":             {"storage, media"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// The new device is id 2 (parent is id 1).
+	d, err := st.GetDevice(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Icon != "🗄️" {
+		t.Errorf("icon=%q, want 🗄️", d.Icon)
+	}
+	if d.ParentDeviceID == nil || *d.ParentDeviceID != parentID {
+		t.Errorf("parent=%v, want %d", d.ParentDeviceID, parentID)
+	}
+	tags, _ := st.DeviceTags(2)
+	if len(tags) != 2 {
+		t.Fatalf("tags=%v, want 2", tags)
+	}
+}
+
+func TestUpdateDeviceSyncsTags(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(devID, []string{"a", "b"})
+
+	rec := authedPost(t, srv, st, "/devices/1", url.Values{
+		"name": {"nas"}, "kind": {"server"}, "tags": {"a"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("update code=%d", rec.Code)
+	}
+	tags, _ := st.DeviceTags(devID)
+	if len(tags) != 1 || tags[0].Name != "a" {
+		t.Fatalf("after update tags=%v, want [a]", tags)
+	}
+}
+
+func TestLayoutHasModalContainer(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	for _, want := range []string{`id="modal"`, "/static/dialog.js"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout missing %q", want)
+		}
 	}
 }

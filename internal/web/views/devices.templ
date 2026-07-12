@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"strings"
 
 	"netis/internal/store"
 )
@@ -30,7 +31,6 @@ type DeviceDetail struct {
 	Device   store.Device
 	Ifaces   []IfaceDetail
 	Tags     []store.Tag
-	AllTags  []store.Tag
 	Fields   []store.CustomField
 	Links    []store.Link
 	Children []store.Device
@@ -92,7 +92,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 				<button type="button" data-view="list">List</button>
 				<button type="button" data-view="grid">Grid</button>
 			</div>
-			<a href="/devices/new"><button type="button" class="primary">New device</button></a>
+			<button type="button" class="primary" hx-get="/devices/new" hx-target="#modal">New device</button>
 		</div>
 
 		<div id="dev-list">
@@ -114,7 +114,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						<tr>
 							<td>
 								<div class="dev">
-									<span class="ic">{ KindIcon(row.Kind) }</span>
+									<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
 									<div>
 										<div>
 											<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
@@ -187,7 +187,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 							<span class="pill offline"><span class="d"></span></span>
 						}
 					</span>
-					<span class="ic">{ KindIcon(row.Kind) }</span>
+					<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
 					<div class="nm">
 						{ row.Name }
 						if !row.Reviewed {
@@ -217,54 +217,138 @@ func sortURL(q, col, curSort, curDir string) string {
 	return "/devices?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
 }
 
-templ DeviceForm(username string, subnets []store.Subnet) {
-	@Layout("New device", username) {
-		<h1>New device</h1>
-		<form method="post" action="/devices" class="auth-card">
-			<label>
-				Name
-				<input type="text" name="name" required/>
-			</label>
-			<label>
-				Kind
-				<select name="kind">
-					for _, k := range deviceKinds {
-						<option value={ k }>{ k }</option>
-					}
-				</select>
-			</label>
-			<label>
-				Notes
-				<textarea name="notes"></textarea>
-			</label>
-			<fieldset>
-				<legend>Optional first interface</legend>
-				<label>
-					MAC
-					<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff"/>
-				</label>
-				<label>
-					IP
-					<input type="text" name="ip" placeholder="10.0.0.5"/>
-				</label>
-				<label>
-					Subnet
-					<select name="subnet_id">
-						<option value="">—</option>
-						for _, sn := range subnets {
-							<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
-						}
-					</select>
-				</label>
-			</fieldset>
-			<button type="submit">Create</button>
-		</form>
+// tagNamesJoin renders a device's tags as a comma-separated string for the
+// dialog's tags input.
+func tagNamesJoin(tags []store.Tag) string {
+	names := make([]string, 0, len(tags))
+	for _, t := range tags {
+		names = append(names, t.Name)
 	}
+	return strings.Join(names, ", ")
+}
+
+templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool) {
+	<div class="dialog-scrim">
+		<div class="dialog">
+			<div class="dh">
+				if isEdit {
+					<h3>Edit device</h3>
+				} else {
+					<h3>New device</h3>
+				}
+				<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
+			</div>
+			<form
+				method="post"
+				if isEdit {
+					action={ templ.URL(fmt.Sprintf("/devices/%d", d.ID)) }
+				} else {
+					action="/devices"
+				}
+			>
+				<div class="db">
+					<label>
+						Name
+						<input type="text" name="name" value={ d.Name } required autofocus/>
+					</label>
+					<label>
+						Kind
+						<select name="kind">
+							for _, k := range deviceKinds {
+								if k == d.Kind {
+									<option value={ k } selected>{ k }</option>
+								} else {
+									<option value={ k }>{ k }</option>
+								}
+							}
+						</select>
+					</label>
+					<div>
+						<div class="fieldlabel">Icon</div>
+						<div class="iconpick" data-kind-default={ KindIcon(d.Kind) }>
+							for _, ic := range IconChoices {
+								if ic == DeviceIcon(d.Icon, d.Kind) {
+									<button type="button" class="ic-swatch selected" data-icon={ ic }>{ ic }</button>
+								} else {
+									<button type="button" class="ic-swatch" data-icon={ ic }>{ ic }</button>
+								}
+							}
+						</div>
+						<input type="hidden" name="icon" value={ DeviceIcon(d.Icon, d.Kind) }/>
+					</div>
+					<label>
+						Parent device
+						<select name="parent_device_id">
+							<option value="">— none —</option>
+							for _, pd := range allDevices {
+								if pd.ID != d.ID {
+									if d.ParentDeviceID != nil && *d.ParentDeviceID == pd.ID {
+										<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
+									} else {
+										<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
+									}
+								}
+							}
+						</select>
+					</label>
+					<label>
+						Notes
+						<textarea name="notes">{ d.Notes }</textarea>
+					</label>
+					<label>
+						Tags
+						<input type="text" name="tags" value={ tagNamesJoin(tags) } placeholder="comma,separated"/>
+					</label>
+					if !isEdit {
+						<div class="ifgroup">
+							<div class="fieldlabel">First interface (optional)</div>
+							<label>
+								MAC
+								<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff"/>
+							</label>
+							<label>
+								IP
+								<input type="text" name="ip" placeholder="10.0.0.5"/>
+							</label>
+							<label>
+								Subnet
+								<select name="subnet_id">
+									<option value="">—</option>
+									for _, sn := range subnets {
+										<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
+									}
+								</select>
+							</label>
+						</div>
+					}
+				</div>
+				<div class="df">
+					<button type="button" class="theme-toggle" data-close>Cancel</button>
+					if isEdit {
+						<button type="submit" class="primary">Save</button>
+					} else {
+						<button type="submit" class="primary">Create device</button>
+					}
+				</div>
+			</form>
+		</div>
+	</div>
+}
+
+// parentLabel formats a device as "name — ip" for the parent <select>,
+// omitting the dash when the device has no IP.
+func parentLabel(pd store.DeviceRow) string {
+	ip := lowestIPStr(pd.IPs)
+	if ip == "" {
+		return pd.Name
+	}
+	return pd.Name + " — " + ip
 }
 
 templ DevicePage(username string, d DeviceDetail) {
 	@Layout(d.Device.Name, username) {
 		<h1>
+			<span class="ic">{ DeviceIcon(d.Device.Icon, d.Device.Kind) }</span>
 			{ d.Device.Name }
 			<span class="badge">{ d.Device.Kind }</span>
 			if d.Device.Kind == "vm" || d.Device.Kind == "lxc" {
@@ -274,6 +358,7 @@ templ DevicePage(username string, d DeviceDetail) {
 					}
 				}
 			}
+			<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
 		</h1>
 		if d.Device.Vendor != "" {
 			<p class="muted">{ d.Device.Vendor }</p>
@@ -353,23 +438,9 @@ templ DevicePage(username string, d DeviceDetail) {
 		<h2>Tags</h2>
 		<p>
 			for _, t := range d.Tags {
-				<span class="badge">
-					{ t.Name }
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/tags/%d/delete", d.Device.ID, t.ID)) } class="inline">
-						<button type="submit">×</button>
-					</form>
-				</span>
+				<span class="tag">{ t.Name }</span>{ " " }
 			}
 		</p>
-		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/tags", d.Device.ID)) }>
-			<input type="text" name="name" list="all-tags" placeholder="tag name" required/>
-			<datalist id="all-tags">
-				for _, t := range d.AllTags {
-					<option value={ t.Name }></option>
-				}
-			</datalist>
-			<button type="submit">Add tag</button>
-		</form>
 
 		<h2>Custom fields</h2>
 		<table>
@@ -429,43 +500,6 @@ templ DevicePage(username string, d DeviceDetail) {
 				<button type="submit">Scan ports</button>
 			</form>
 		</p>
-
-		<h2>Edit</h2>
-		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d", d.Device.ID)) } class="auth-card">
-			<label>
-				Name
-				<input type="text" name="name" value={ d.Device.Name }/>
-			</label>
-			<label>
-				Kind
-				<select name="kind">
-					for _, k := range deviceKinds {
-						if k == d.Device.Kind {
-							<option value={ k } selected>{ k }</option>
-						} else {
-							<option value={ k }>{ k }</option>
-						}
-					}
-				</select>
-			</label>
-			<label>
-				Notes
-				<textarea name="notes">{ d.Device.Notes }</textarea>
-			</label>
-			<label>
-				Icon
-				<input type="text" name="icon" value={ d.Device.Icon }/>
-			</label>
-			<label>
-				Parent device ID
-				if d.Device.ParentDeviceID != nil {
-					<input type="number" name="parent_device_id" value={ fmt.Sprint(*d.Device.ParentDeviceID) }/>
-				} else {
-					<input type="number" name="parent_device_id"/>
-				}
-			</label>
-			<button type="submit">Save</button>
-		</form>
 
 		<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
 			<button type="submit">Delete device</button>
