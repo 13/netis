@@ -77,6 +77,14 @@ func joinNonEmpty(sep string, parts ...string) string {
 	return strings.Join(kept, sep)
 }
 
+// oppositeKind returns the other lease kind, for the toggle's next click.
+func oppositeKind(kind string) string {
+	if kind == "static" {
+		return "dhcp"
+	}
+	return "static"
+}
+
 templ sortHeader(label, col, curSort, curDir, q string) {
 	<th>
 		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
@@ -90,6 +98,26 @@ templ sortHeader(label, col, curSort, curDir, q string) {
 			}
 		</a>
 	</th>
+}
+
+// LeaseToggle renders an IP's lease as a clickable chip that flips
+// static<->dhcp in place (POST /devices/{devID}/ip/kind, htmx outerHTML swap).
+templ LeaseToggle(devID, subnetID int64, ip, kind string) {
+	<span class="lease-cell">
+		<button
+			type="button"
+			if kind == "static" {
+				class="chip static"
+			} else {
+				class="chip"
+			}
+			hx-post={ fmt.Sprintf("/devices/%d/ip/kind", devID) }
+			hx-vals={ fmt.Sprintf(`{"subnet_id":"%d","ip":%q,"kind":%q}`, subnetID, ip, oppositeKind(kind)) }
+			hx-target="closest .lease-cell"
+			hx-swap="outerHTML"
+			title="toggle lease static/dhcp"
+		>{ kind }</button>
+	</span>
 }
 
 templ deviceRow(row store.DeviceRow) {
@@ -431,7 +459,13 @@ templ DevicePage(username string, d DeviceDetail) {
 					for _, ip := range ifd.IPs {
 						<tr>
 							<td class="mono">{ ip.IP }</td>
-							<td>{ ip.Kind }</td>
+							<td>
+								if ip.SubnetID != 0 {
+									@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
+								} else {
+									<span class="chip">{ ip.Kind }</span>
+								}
+							</td>
 						</tr>
 					}
 				</table>

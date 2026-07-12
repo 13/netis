@@ -511,3 +511,54 @@ func TestNavDevicesBeforeSubnets(t *testing.T) {
 		t.Fatalf("Devices nav link should come before Subnets: devices@%d subnets@%d", di, si)
 	}
 }
+
+func TestDeviceIPKindToggle(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(devID, nil, nil)
+	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+
+	// Toggle static -> dhcp.
+	rec := authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
+		"subnet_id": {strconv.FormatInt(snID, 10)}, "ip": {"10.0.0.1"}, "kind": {"dhcp"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("toggle code=%d", rec.Code)
+	}
+	body := rec.Body.String()
+	// The re-rendered control shows the new kind and offers the reverse next step.
+	// Note: HTML attributes are encoded, so "kind":"static" appears as &#34;kind&#34;:&#34;static&#34;
+	if !strings.Contains(body, "dhcp") || !strings.Contains(body, `&#34;kind&#34;:&#34;static&#34;`) {
+		t.Fatalf("fragment did not reflect flip: %q", body)
+	}
+	ips, _ := st.ListIPs(ifID)
+	if len(ips) != 1 || ips[0].Kind != "dhcp" {
+		t.Fatalf("kind not persisted: %+v", ips)
+	}
+
+	// Toggle back dhcp -> static.
+	authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
+		"subnet_id": {strconv.FormatInt(snID, 10)}, "ip": {"10.0.0.1"}, "kind": {"static"},
+	})
+	ips, _ = st.ListIPs(ifID)
+	if ips[0].Kind != "static" {
+		t.Fatalf("toggle back failed: %+v", ips)
+	}
+}
+
+func TestDeviceIPKindBadKind(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(devID, nil, nil)
+	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+	rec := authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
+		"subnet_id": {strconv.FormatInt(snID, 10)}, "ip": {"10.0.0.1"}, "kind": {"bogus"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad kind code=%d, want 400", rec.Code)
+	}
+}
