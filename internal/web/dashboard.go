@@ -9,6 +9,44 @@ import (
 	"netis/internal/web/views"
 )
 
+// subnetRows builds the per-subnet occupancy rows (shared by the dashboard and
+// the subnets index) plus any IP conflicts found while scanning occupancy.
+func (s *Server) subnetRows() ([]views.DashRow, []views.AttentionConflict, error) {
+	subnets, err := s.store.ListSubnets()
+	if err != nil {
+		return nil, nil, err
+	}
+	var rows []views.DashRow
+	var conflicts []views.AttentionConflict
+	for _, sn := range subnets {
+		occ, err := s.store.SubnetOccupancy(sn.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		hosts, _ := scan.HostIPs(sn.CIDR)
+		free := len(hosts) - len(occ)
+		if free < 0 {
+			free = 0
+		}
+		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free, Hosts: len(hosts)}
+		for ip, o := range occ {
+			switch {
+			case o.Online:
+				row.Online++
+			case !o.EverSeen:
+				row.Reserved++
+			default:
+				row.Offline++
+			}
+			if o.Count > 1 {
+				conflicts = append(conflicts, views.AttentionConflict{IP: ip, SubnetID: sn.ID, SubnetName: sn.Name})
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, conflicts, nil
+}
+
 func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error) {
 	u, _ := userFrom(r)
 	data := views.DashboardData{Username: u.Username}
@@ -29,39 +67,13 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	}
 	data.Stats.Offline = data.Stats.Total - data.Stats.Online
 
-	subnets, err := s.store.ListSubnets()
+	rows, conflicts, err := s.subnetRows()
 	if err != nil {
 		return data, err
 	}
-	data.Stats.Subnets = len(subnets)
-	for _, sn := range subnets {
-		occ, err := s.store.SubnetOccupancy(sn.ID)
-		if err != nil {
-			return data, err
-		}
-		hosts, _ := scan.HostIPs(sn.CIDR)
-		free := len(hosts) - len(occ)
-		if free < 0 {
-			free = 0
-		}
-		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free, Hosts: len(hosts)}
-		for ip, o := range occ {
-			switch {
-			case o.Online:
-				row.Online++
-			case !o.EverSeen:
-				row.Reserved++
-			default:
-				row.Offline++
-			}
-			if o.Count > 1 {
-				data.Conflicts = append(data.Conflicts, views.AttentionConflict{
-					IP: ip, SubnetID: sn.ID, SubnetName: sn.Name,
-				})
-			}
-		}
-		data.Rows = append(data.Rows, row)
-	}
+	data.Rows = rows
+	data.Stats.Subnets = len(rows)
+	data.Conflicts = conflicts
 	sort.Slice(data.Conflicts, func(i, j int) bool { return data.Conflicts[i].IP < data.Conflicts[j].IP })
 
 	statuses, err := s.store.ListIntegrationStatus()
@@ -94,4 +106,14 @@ func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	views.DashboardBody(data).Render(r.Context(), w)
+}
+
+func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
+	rows, _, err := s.subnetRows()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	u, _ := userFrom(r)
+	views.SubnetsPage(u.Username, rows).Render(r.Context(), w)
 }
