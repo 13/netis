@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+func TestSetIPKindAndOccupancyKind(t *testing.T) {
+	s := openTest(t)
+	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(Device{Name: "gw", Kind: "other", Source: "manual"})
+	ifID, _ := s.AddIface(devID, nil, nil)
+	if _, err := s.AssignIP(ifID, snID, "10.0.0.1", "static"); err != nil {
+		t.Fatal(err)
+	}
+
+	occ, _ := s.SubnetOccupancy(snID)
+	if occ["10.0.0.1"].Kind != "static" {
+		t.Fatalf("kind=%q, want static", occ["10.0.0.1"].Kind)
+	}
+	if err := s.SetIPKind(snID, "10.0.0.1", "dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	occ2, _ := s.SubnetOccupancy(snID)
+	if occ2["10.0.0.1"].Kind != "dhcp" {
+		t.Fatalf("kind after SetIPKind=%q, want dhcp", occ2["10.0.0.1"].Kind)
+	}
+}
+
 func TestSubnetOccupancy(t *testing.T) {
 	s := openTest(t)
 	snID, err := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
