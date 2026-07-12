@@ -160,6 +160,77 @@ func TestApproveRequiresAdmin(t *testing.T) {
 	}
 }
 
+func TestGridShowsLowestIP(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(d, nil, nil)
+	// Assign in non-ascending order so the insertion-order index 0 would be wrong.
+	st.AssignIP(f, snID, "10.0.0.50", "dhcp")
+	st.AssignIP(f, snID, "10.0.0.5", "static")
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	gridIdx := strings.Index(body, `id="dev-grid"`)
+	if gridIdx < 0 {
+		t.Fatal("dev-grid not found")
+	}
+	grid := body[gridIdx:]
+	if !strings.Contains(grid, "10.0.0.5") {
+		t.Fatalf("grid tile missing lowest IP: %s", grid)
+	}
+	if strings.Contains(grid, "10.0.0.50") {
+		t.Fatalf("grid tile shows insertion-order IP instead of lowest: %s", grid)
+	}
+}
+
+func TestApproveClearsDashboardUnknown(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	devID, _ := st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+
+	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Stats.Unknown != 1 {
+		t.Fatalf("Stats.Unknown = %d, want 1", data.Stats.Unknown)
+	}
+	found := false
+	for _, u := range data.Unknowns {
+		if u.ID == devID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("unknown device missing from attention list before approve")
+	}
+
+	if err := st.SetDeviceReviewed(devID, true); err != nil {
+		t.Fatal(err)
+	}
+	data2, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data2.Stats.Unknown != 0 {
+		t.Fatalf("Stats.Unknown after approve = %d, want 0", data2.Stats.Unknown)
+	}
+	for _, u := range data2.Unknowns {
+		if u.ID == devID {
+			t.Fatal("approved device still in attention list")
+		}
+	}
+}
+
+func TestApproveNonexistentDevice404(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
+	rec := authedPost(t, srv, st, "/devices/999/approve", url.Values{})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("approve nonexistent device code=%d, want 404", rec.Code)
+	}
+}
+
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting("onboarded", "1")

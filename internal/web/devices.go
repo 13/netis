@@ -210,6 +210,14 @@ func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if _, err := s.store.GetDevice(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	if err := s.store.SetDeviceReviewed(id, true); err != nil {
 		http.Error(w, err.Error(), 500)
 		return

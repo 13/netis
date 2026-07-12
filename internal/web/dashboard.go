@@ -22,7 +22,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 		if d.Online {
 			data.Stats.Online++
 		}
-		if d.Source == "scan" && strings.HasPrefix(d.Name, "unknown-") {
+		if d.Source == "scan" && strings.HasPrefix(d.Name, "unknown-") && !d.Reviewed {
 			data.Stats.Unknown++
 			data.Unknowns = append(data.Unknowns, views.AttentionUnknown{ID: d.ID, Name: d.Name})
 		}

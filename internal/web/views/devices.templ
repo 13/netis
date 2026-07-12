@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 
 	"netis/internal/store"
@@ -37,6 +38,32 @@ type DeviceDetail struct {
 	Events   []store.Event
 }
 
+// lowestIPStr returns the numerically-lowest parseable IP among ips (the
+// same order the list view's "ip" sort uses), so the grid tile shows the
+// same address a user would expect from the sorted list. Falls back to the
+// first raw value when none parse, or "" when there are no IPs at all.
+func lowestIPStr(ips []store.IPInfo) string {
+	var best netip.Addr
+	found := false
+	var bestStr string
+	for _, ip := range ips {
+		a, err := netip.ParseAddr(ip.IP)
+		if err != nil {
+			continue
+		}
+		if !found || a.Compare(best) < 0 {
+			best, bestStr, found = a, ip.IP, true
+		}
+	}
+	if !found {
+		if len(ips) > 0 {
+			return ips[0].IP
+		}
+		return ""
+	}
+	return bestStr
+}
+
 templ sortHeader(label, col, curSort, curDir, q string) {
 	<th>
 		<a href={ templ.URL(sortURL(q, col, curSort, curDir)) }>
@@ -59,6 +86,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 			<input
 				class="grow" type="search" name="q" value={ q } placeholder="filter devices, IP, MAC, tag…"
 				hx-get="/devices" hx-trigger="input changed delay:300ms" hx-target="body" hx-push-url="true"
+				hx-vals={ fmt.Sprintf(`{"sort":%q,"dir":%q}`, sortKey, dir) }
 			/>
 			<div class="seg" id="dev-view">
 				<button type="button" data-view="list">List</button>
@@ -167,11 +195,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						}
 					</div>
 					<div class="ip mono">
-						for i, ip := range row.IPs {
-							if i == 0 {
-								{ ip.IP }
-							}
-						}
+						{ lowestIPStr(row.IPs) }
 					</div>
 				</a>
 			}
