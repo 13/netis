@@ -92,6 +92,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		}
 		if c, err := r.Cookie("netis_session"); err == nil {
 			if u, ok, _ := s.store.GetSession(c.Value); ok {
+				if !onboardingAllowed(r.URL.Path) {
+					if v, _ := s.store.GetSetting("onboarded"); v != "1" {
+						http.Redirect(w, r, "/welcome", http.StatusSeeOther)
+						return
+					}
+				}
 				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
 				return
 			}
@@ -102,6 +108,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		}
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	})
+}
+
+// onboardingAllowed reports whether a path is reachable before onboarding is
+// complete (so the wizard and logout don't get caught by the redirect).
+func onboardingAllowed(path string) bool {
+	return path == "/welcome" || strings.HasPrefix(path, "/welcome/") || path == "/logout"
 }
 
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {

@@ -10,6 +10,7 @@ import (
 
 func TestGridStates(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 
 	mk := func(name, ip string) int64 {

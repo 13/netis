@@ -15,6 +15,7 @@ import (
 
 func TestCreateSubnetViaSettings(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/subnets", url.Values{
 		"cidr": {"192.168.1.0/24"}, "name": {"main"}, "kind": {"lan"},
 		"scan_interval_sec": {"120"}, "scan_enabled": {"on"},
@@ -37,6 +38,7 @@ func TestCreateSubnetViaSettings(t *testing.T) {
 
 func TestViewerCannotPostSettings(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	addAdmin(t, st)
 	uID, _ := st.CreateUser("eve", "h", "viewer")
 	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
@@ -52,6 +54,7 @@ func TestViewerCannotPostSettings(t *testing.T) {
 
 func TestCannotDeleteLastAdmin(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedGet(t, srv, st, "/") // creates admin "ben" id=1
 	_ = rec
 	del := authedPost(t, srv, st, "/settings/users/1/delete", url.Values{})
@@ -65,6 +68,7 @@ func TestCannotDeleteLastAdmin(t *testing.T) {
 
 func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	// Seed a stored password, then load the settings page as admin.
 	st.SetSetting("pihole_password", "topsecret")
 	rec := authedGet(t, srv, st, "/settings?tab=integrations")
@@ -97,6 +101,7 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 // lockout, since /setup refuses once any user exists).
 func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	authedGet(t, srv, st, "/") // creates admin "ben" (id=1) + session "testtok"
 	ben, ok, err := st.GetUserByName("ben")
 	if err != nil || !ok {
@@ -138,6 +143,7 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 
 func TestSettingsTabsShowOneSection(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	// Users tab shows the users section, not the subnet "Add subnet" form.
 	rec := authedGet(t, srv, st, "/settings?tab=users")
 	body := rec.Body.String()
@@ -156,6 +162,7 @@ func TestSettingsTabsShowOneSection(t *testing.T) {
 
 func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	// Inject a detected subnet not yet configured.
 	srv.detect = func() ([]netdetect.Detected, error) {
 		return []netdetect.Detected{{CIDR: "192.168.7.0/24", Iface: "eth0"}}, nil

@@ -28,6 +28,7 @@ func authedGet(t *testing.T, srv *Server, st *store.Store, path string) *httptes
 
 func TestDashboardShowsSubnetCounts(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "other", Source: "manual"})
 	ifID, _ := st.AddIface(devID, nil, nil)
@@ -48,6 +49,7 @@ func TestDashboardShowsSubnetCounts(t *testing.T) {
 
 func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	// a subnet + an online device + an unknown scan device + a conflict
 	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 	on, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "other", Source: "manual"})
@@ -78,6 +80,7 @@ func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
 
 func TestDashboardPageHasFragmentContainer(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedGet(t, srv, st, "/")
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `hx-get="/dashboard/widgets"`) {
 		t.Fatalf("dashboard page missing fragment container (code=%d)", rec.Code)

@@ -24,6 +24,7 @@ func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form ur
 
 func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	for _, path := range []string{"/devices/999/wol", "/devices/999/portscan"} {
 		rec := authedPost(t, srv, st, path, url.Values{})
 		if rec.Code != http.StatusNotFound {
@@ -34,6 +35,7 @@ func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 
 func TestWOLDeviceWithoutMAC400(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	devID, _ := st.CreateDevice(store.Device{Name: "nomac", Kind: "other", Source: "manual"})
 	st.AddIface(devID, nil, nil) // iface but no MAC
 	rec := authedPost(t, srv, st, "/devices/1/wol", url.Values{})
@@ -45,6 +47,7 @@ func TestWOLDeviceWithoutMAC400(t *testing.T) {
 
 func TestCreateAndShowDevice(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	rec := authedPost(t, srv, st, "/devices", url.Values{
 		"name": {"office-switch"}, "kind": {"switch"}, "notes": {"rack top"},
 	})
@@ -63,6 +66,7 @@ func TestCreateAndShowDevice(t *testing.T) {
 
 func TestDeviceListFilter(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	st.CreateDevice(store.Device{Name: "alpha", Kind: "computer", Source: "manual"})
 	st.CreateDevice(store.Device{Name: "beta", Kind: "phone", Source: "manual"})
 	rec := authedGet(t, srv, st, "/devices?q=alp")
@@ -74,6 +78,7 @@ func TestDeviceListFilter(t *testing.T) {
 
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
+	st.SetSetting("onboarded", "1")
 	devID, _ := st.CreateDevice(store.Device{Name: "x", Kind: "other", Source: "manual"})
 	// viewer session
 	uID, _ := st.CreateUser("eve", "hash", "viewer")
