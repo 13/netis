@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+func TestAllIPs(t *testing.T) {
+	ips, err := AllIPs("192.168.1.0/30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"192.168.1.0", "192.168.1.1", "192.168.1.2", "192.168.1.3"}
+	if len(ips) != len(want) {
+		t.Fatalf("got %v, want %v", ips, want)
+	}
+	for i := range want {
+		if ips[i] != want[i] {
+			t.Fatalf("got %v, want %v", ips, want)
+		}
+	}
+	if _, err := AllIPs("garbage"); err == nil {
+		t.Fatal("want error for bad cidr")
+	}
+}
+
 func TestHostIPs(t *testing.T) {
 	ips, err := HostIPs("192.168.1.0/30")
 	if err != nil {
