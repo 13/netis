@@ -108,7 +108,7 @@ func TestIPChangeDetectedByMAC(t *testing.T) {
 	}
 	found := false
 	for _, ip := range rows[0].IPs {
-		if ip == "10.0.0.42" {
+		if ip.IP == "10.0.0.42" {
 			found = true
 		}
 	}

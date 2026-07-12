@@ -36,7 +36,11 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	if q != "" {
 		filtered := rows[:0]
 		for _, row := range rows {
-			hay := strings.ToLower(row.Name + " " + strings.Join(row.IPs, " ") + " " +
+			var ips []string
+			for _, ip := range row.IPs {
+				ips = append(ips, ip.IP)
+			}
+			hay := strings.ToLower(row.Name + " " + strings.Join(ips, " ") + " " +
 				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " "))
 			if strings.Contains(hay, q) {
 				filtered = append(filtered, row)

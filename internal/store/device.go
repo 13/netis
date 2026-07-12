@@ -16,6 +16,7 @@ type Device struct {
 	ProxmoxVMID    *int64
 	WGPubKey       *string
 	Icon           string
+	Reviewed       bool
 }
 
 type Iface struct {
@@ -32,28 +33,36 @@ type IPRow struct {
 	Kind     string
 }
 
+type IPInfo struct {
+	IP   string
+	Kind string
+}
+
 type DeviceRow struct {
 	Device
-	IPs      []string
+	IPs      []IPInfo
 	MACs     []string
 	Online   bool
 	LastSeen *string
 	TagNames []string
 }
 
-const deviceCols = `id,name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon`
+const deviceCols = `id,name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed`
 
 func scanDevice(row interface{ Scan(...any) error }) (Device, error) {
 	var d Device
 	err := row.Scan(&d.ID, &d.Name, &d.Kind, &d.Notes, &d.Vendor, &d.Source,
-		&d.ParentDeviceID, &d.ProxmoxVMID, &d.WGPubKey, &d.Icon)
+		&d.ParentDeviceID, &d.ProxmoxVMID, &d.WGPubKey, &d.Icon, &d.Reviewed)
 	return d, err
 }
 
 func (s *Store) CreateDevice(d Device) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
-		d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID, d.WGPubKey, d.Icon)
+	// Scan-discovered devices start unreviewed; anything from a named source
+	// (manual/proxmox/wireguard/pihole) is reviewed on creation.
+	reviewed := d.Source != "scan"
+	res, err := s.DB.Exec(`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID, d.WGPubKey, d.Icon, reviewed)
 	if err != nil {
 		return 0, err
 	}
@@ -65,10 +74,16 @@ func (s *Store) GetDevice(id int64) (Device, error) {
 }
 
 func (s *Store) UpdateDevice(d Device) error {
+	// Editing a device counts as reviewing it.
 	_, err := s.DB.Exec(`UPDATE device SET name=?,kind=?,notes=?,vendor=?,source=?,
-		parent_device_id=?,proxmox_vmid=?,wg_pubkey=?,icon=? WHERE id=?`,
+		parent_device_id=?,proxmox_vmid=?,wg_pubkey=?,icon=?,reviewed=1 WHERE id=?`,
 		d.Name, d.Kind, d.Notes, d.Vendor, d.Source,
 		d.ParentDeviceID, d.ProxmoxVMID, d.WGPubKey, d.Icon, d.ID)
+	return err
+}
+
+func (s *Store) SetDeviceReviewed(id int64, reviewed bool) error {
+	_, err := s.DB.Exec(`UPDATE device SET reviewed=? WHERE id=?`, reviewed, id)
 	return err
 }
 
@@ -229,7 +244,7 @@ func (s *Store) ListDevices() ([]DeviceRow, error) {
 				return nil, err
 			}
 			for _, p := range ips {
-				out[i].IPs = append(out[i].IPs, p.IP)
+				out[i].IPs = append(out[i].IPs, IPInfo{IP: p.IP, Kind: p.Kind})
 			}
 			online, lastSeen, err := s.ifaceOnline(f.ID)
 			if err != nil {

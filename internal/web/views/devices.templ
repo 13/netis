@@ -72,7 +72,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q string) {
 							if i > 0 {
 								{ ", " }
 							}
-							{ ip }
+							{ ip.IP }
 						}
 					</td>
 					<td class="mono">
