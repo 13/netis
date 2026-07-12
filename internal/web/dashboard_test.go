@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"netis/internal/store"
+	"netis/internal/web/views"
 )
 
 // authedGet performs a request with a valid admin session cookie.
@@ -40,7 +41,9 @@ func TestDashboardShowsSubnetCounts(t *testing.T) {
 		t.Fatalf("code=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"lab", "10.0.0.0/30", "gw"} {
+	// The redesigned card shows the subnet name/CIDR and an occupancy bar +
+	// legend (online/reserved/free counts) rather than occupant device names.
+	for _, want := range []string{"lab", "10.0.0.0/30", "online"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
@@ -84,6 +87,50 @@ func TestDashboardPageHasFragmentContainer(t *testing.T) {
 	rec := authedGet(t, srv, st, "/")
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `hx-get="/dashboard/widgets"`) {
 		t.Fatalf("dashboard page missing fragment container (code=%d)", rec.Code)
+	}
+}
+
+func TestSubnetCardOccupancyCounts(t *testing.T) {
+	srv, st := testServer(t)
+	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	mk := func(name, ip string) int64 {
+		devID, _ := st.CreateDevice(store.Device{Name: name, Kind: "other", Source: "manual"})
+		ifID, _ := st.AddIface(devID, nil, nil)
+		st.AssignIP(ifID, snID, ip, "static")
+		return ifID
+	}
+	onIf := mk("on", "10.0.0.1")
+	st.MarkSeen(onIf, 1, time.Now()) // online
+	offIf := mk("off", "10.0.0.2")
+	st.MarkSeen(offIf, 1, time.Now())
+	st.MarkMissed(offIf, 1) // seen then offline
+	mk("res", "10.0.0.3")   // assigned, never seen → reserved
+
+	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row views.DashRow
+	for _, r := range data.Rows {
+		if r.Subnet.ID == snID {
+			row = r
+		}
+	}
+	if row.Online != 1 || row.Reserved != 1 || row.Offline != 1 {
+		t.Fatalf("counts: online=%d reserved=%d offline=%d (want 1/1/1)", row.Online, row.Reserved, row.Offline)
+	}
+	// /29 has 6 host IPs; 3 used → 3 free; Hosts=6.
+	if row.Hosts != 6 || row.Free != 3 || row.Used != 3 {
+		t.Fatalf("hosts=%d used=%d free=%d (want 6/3/3)", row.Hosts, row.Used, row.Free)
+	}
+}
+
+func TestBarPct(t *testing.T) {
+	if got := views.BarPct(1, 4); got != "25%" {
+		t.Errorf("BarPct(1,4)=%q want 25%%", got)
+	}
+	if got := views.BarPct(3, 0); got != "0%" {
+		t.Errorf("BarPct(3,0)=%q want 0%%", got)
 	}
 }
 

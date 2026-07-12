@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"strings"
 
 	"netis/internal/store"
 )
@@ -10,8 +9,11 @@ import (
 type DashRow struct {
 	Subnet    store.Subnet
 	Online    int
+	Reserved  int
+	Offline   int
 	Used      int
 	Free      int
+	Hosts     int
 	Occupants []string
 }
 
@@ -113,15 +115,20 @@ templ DashboardBody(d DashboardData) {
 	<div class="cards">
 		for _, r := range d.Rows {
 			<a class="card" href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>
-				<h2>{ r.Subnet.Name }</h2>
-				<p class="mono">{ r.Subnet.CIDR }</p>
-				<p>
-					<span class="ok">{ fmt.Sprint(r.Online) } online</span> ·
-					{ fmt.Sprint(r.Used) } used · { fmt.Sprint(r.Free) } free
-				</p>
-				if len(r.Occupants) > 0 {
-					<p class="mono occupants">{ strings.Join(r.Occupants, ", ") }</p>
-				}
+				<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+					<h3>{ r.Subnet.Name }</h3>
+					<span class="mono muted">{ r.Subnet.CIDR }</span>
+				</div>
+				<div class="occ">
+					<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
+					<i class="res" style={ "width:" + BarPct(r.Reserved, r.Hosts) }></i>
+					<i class="off" style={ "width:" + BarPct(r.Offline, r.Hosts) }></i>
+				</div>
+				<div class="legend">
+					<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
+					<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
+					<span><span class="sw" style="background:var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+				</div>
 			</a>
 		}
 	</div>

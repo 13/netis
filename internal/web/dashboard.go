@@ -44,11 +44,16 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 		if free < 0 {
 			free = 0
 		}
-		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free}
+		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free, Hosts: len(hosts)}
 		seen := make(map[string]bool)
 		for ip, o := range occ {
-			if o.Online {
+			switch {
+			case o.Online:
 				row.Online++
+			case !o.EverSeen:
+				row.Reserved++
+			default:
+				row.Offline++
 			}
 			if o.Count > 1 {
 				data.Conflicts = append(data.Conflicts, views.AttentionConflict{
