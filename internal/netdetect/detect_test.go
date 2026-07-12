@@ -18,16 +18,16 @@ func TestDetectFromFiltersAndDedupes(t *testing.T) {
 		return []ifaceInfo{
 			{Name: "eth0", Up: true, Addrs: []netip.Prefix{mustPrefix("192.168.1.50/24")}},
 			{Name: "lo", Up: true, Loopback: true, Addrs: []netip.Prefix{mustPrefix("127.0.0.1/8")}},
-			{Name: "eth1", Up: false, Addrs: []netip.Prefix{mustPrefix("10.1.0.5/24")}},          // down → skip
-			{Name: "docker0", Up: true, Addrs: []netip.Prefix{mustPrefix("172.17.0.1/16")}},      // virtual prefix → skip
-			{Name: "veth123", Up: true, Addrs: []netip.Prefix{mustPrefix("10.9.0.1/24")}},        // virtual prefix → skip
+			{Name: "eth1", Up: false, Addrs: []netip.Prefix{mustPrefix("10.1.0.5/24")}},     // down → skip
+			{Name: "docker0", Up: true, Addrs: []netip.Prefix{mustPrefix("172.17.0.1/16")}}, // virtual prefix → skip
+			{Name: "veth123", Up: true, Addrs: []netip.Prefix{mustPrefix("10.9.0.1/24")}},   // virtual prefix → skip
 			{Name: "wlan0", Up: true, Addrs: []netip.Prefix{
-				mustPrefix("169.254.5.5/16"),   // link-local → skip
-				mustPrefix("fe80::1/64"),       // IPv6 → skip
-				mustPrefix("10.0.0.2/24"),      // kept
+				mustPrefix("169.254.5.5/16"), // link-local → skip
+				mustPrefix("fe80::1/64"),     // IPv6 → skip
+				mustPrefix("10.0.0.2/24"),    // kept
 			}},
-			{Name: "eth2", Up: true, Addrs: []netip.Prefix{mustPrefix("192.168.1.9/24")}},        // dup CIDR of eth0 → deduped
-			{Name: "ptp0", Up: true, Addrs: []netip.Prefix{mustPrefix("203.0.113.7/32")}},        // /32 host route → skip
+			{Name: "eth2", Up: true, Addrs: []netip.Prefix{mustPrefix("192.168.1.9/24")}}, // dup CIDR of eth0 → deduped
+			{Name: "ptp0", Up: true, Addrs: []netip.Prefix{mustPrefix("203.0.113.7/32")}}, // /32 host route → skip
 		}, nil
 	}
 	got, err := detectFrom(lister)
