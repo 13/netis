@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -100,7 +100,7 @@ func runIntegrationLoop(ctx context.Context, runNow integrationRunner, name stri
 	defer t.Stop()
 	for {
 		if err := runNow.Run(ctx, name); err != nil && !errors.Is(err, errNotConfigured) {
-			log.Printf("integration %s: %v", name, err)
+			slog.Error("integration run failed", "name", name, "err", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -114,7 +114,8 @@ func main() {
 	cfg := config.Load()
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("open db: %v", err)
+		slog.Error("open db", "err", err)
+		os.Exit(1)
 	}
 	defer st.Close()
 
@@ -154,18 +155,19 @@ func main() {
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	log.Printf("netis listening on %s", cfg.Addr)
+	slog.Info("netis listening", "addr", cfg.Addr)
 
 	select {
 	case err := <-errCh:
-		log.Fatalf("http server: %v", err)
+		slog.Error("http server", "err", err)
+		os.Exit(1)
 	case <-ctx.Done():
 	}
-	log.Printf("netis shutting down")
+	slog.Info("netis shutting down")
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutCtx); err != nil {
-		log.Printf("shutdown: %v", err)
+		slog.Error("shutdown", "err", err)
 		srv.Close()
 	}
 }

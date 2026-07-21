@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"time"
@@ -75,7 +75,7 @@ func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 		st.Detail = fmt.Sprintf("%d peers", stats.Peers)
 	}
 	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		log.Printf("wireguard status write: %v", serr)
+		slog.Error("wireguard status write", "err", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
 }

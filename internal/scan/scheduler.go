@@ -2,7 +2,7 @@ package scan
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -86,7 +86,7 @@ func (s *Scheduler) run(ctx context.Context, sn store.Subnet, manual bool) {
 	s.mu.Unlock()
 	err := s.engine.RunSubnet(ctx, sn)
 	if err != nil {
-		log.Printf("scan %s: %v", sn.CIDR, err)
+		slog.Error("scan failed", "cidr", sn.CIDR, "err", err)
 	}
 	st := store.IntegrationStatus{
 		Name:    "scan",
@@ -98,7 +98,7 @@ func (s *Scheduler) run(ctx context.Context, sn store.Subnet, manual bool) {
 		st.Detail = sn.CIDR + ": " + err.Error()
 	}
 	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		log.Printf("scan status write: %v", serr)
+		slog.Error("scan status write", "err", serr)
 	}
 	s.engine.Broker.Publish("dashboard", "refresh")
 }
