@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -185,7 +185,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		expires := time.Now().UTC().Add(30 * 24 * time.Hour)
 		if serr := s.store.CreateSession(r.Context(), token, u.ID, expires.Format(time.RFC3339)); serr != nil {
-			log.Printf("create session: %v", serr)
+			slog.Error("create session", "err", serr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

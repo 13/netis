@@ -3,7 +3,7 @@ package pihole
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/netip"
 	"time"
 
@@ -205,7 +205,7 @@ func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 		st.Detail = fmt.Sprintf("%d leases, %d new", stats.Leases, stats.Created)
 	}
 	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		log.Printf("pihole status write: %v", serr)
+		slog.Error("pihole status write", "err", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
 }

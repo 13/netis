@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"netis/internal/events"
@@ -46,7 +46,7 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	}
 	for _, g := range guests {
 		if err := s.upsertGuest(ctx, g, nodeIDs[g.Node]); err != nil {
-			log.Printf("proxmox guest %d: %v", g.VMID, err)
+			slog.Error("proxmox guest sync", "vmid", g.VMID, "err", err)
 		}
 	}
 	return Stats{Guests: len(guests), Nodes: len(nodeIDs)}, nil
@@ -77,7 +77,7 @@ func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 		st.Detail = fmt.Sprintf("%d guests, %d nodes", stats.Guests, stats.Nodes)
 	}
 	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		log.Printf("proxmox status write: %v", serr)
+		slog.Error("proxmox status write", "err", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
 }
