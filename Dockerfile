@@ -9,7 +9,10 @@ COPY . .
 # templ version comes from go.mod's tool directive — single source of truth
 RUN go tool templ generate && CGO_ENABLED=0 go build -ldflags="-s -w" -o /netis ./cmd/netis
 
-FROM gcr.io/distroless/static:nonroot
+# root (not :nonroot): scanning needs CAP_NET_RAW for privileged ICMP and
+# docker's --cap-add only survives execve for root; UDP-ICMP fallback would
+# additionally need a ping_group_range sysctl covering a nonroot uid.
+FROM gcr.io/distroless/static
 COPY --from=build /netis /netis
 ENV NETIS_DB=/data/netis.db
 VOLUME /data

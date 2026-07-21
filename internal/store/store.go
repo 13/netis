@@ -26,6 +26,13 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// NORMAL is the recommended synchronous level under WAL (durable at
+	// checkpoint, much cheaper per write); busy_timeout guards against an
+	// external process (e.g. sqlite3 CLI) briefly locking the file.
+	if _, err := db.Exec(`PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	s := &Store{DB: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
