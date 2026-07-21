@@ -38,7 +38,7 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		if _, ok := nodeIDs[g.Node]; ok {
 			continue
 		}
-		id, err := s.upsertNode(g.Node)
+		id, err := s.upsertNode(ctx, g.Node)
 		if err != nil {
 			return Stats{}, err
 		}
@@ -60,13 +60,13 @@ func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
 
 // recordStatus writes the integration_status row and manages the
 // once-per-outage scan_error event.
-func (s *Sync) recordStatus(stats Stats, err error) {
+func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	st := store.IntegrationStatus{Name: "proxmox", LastRun: now}
 	if err != nil {
 		if !s.failing {
 			s.failing = true
-			s.events.Emit("scan_error", nil, "proxmox sync failing: "+err.Error())
+			s.events.Emit(ctx, "scan_error", nil, "proxmox sync failing: "+err.Error())
 		}
 		st.OK = false
 		st.Detail = err.Error()
@@ -76,15 +76,15 @@ func (s *Sync) recordStatus(stats Stats, err error) {
 		st.ItemCount = stats.Guests
 		st.Detail = fmt.Sprintf("%d guests, %d nodes", stats.Guests, stats.Nodes)
 	}
-	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
 		log.Printf("proxmox status write: %v", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
 }
 
-func (s *Sync) upsertNode(node string) (int64, error) {
+func (s *Sync) upsertNode(ctx context.Context, node string) (int64, error) {
 	var id int64
-	err := s.store.DB.QueryRow(
+	err := s.store.DB.QueryRowContext(ctx,
 		`SELECT id FROM device WHERE name=? AND source='proxmox' AND proxmox_vmid IS NULL`, node).
 		Scan(&id)
 	if err == nil {
@@ -93,7 +93,7 @@ func (s *Sync) upsertNode(node string) (int64, error) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	return s.store.CreateDevice(store.Device{Name: node, Kind: "server", Source: "proxmox"})
+	return s.store.CreateDevice(ctx, store.Device{Name: node, Kind: "server", Source: "proxmox"})
 }
 
 func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
@@ -102,32 +102,32 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 		kind = "lxc"
 	}
 	var devID int64
-	err := s.store.DB.QueryRow(
+	err := s.store.DB.QueryRowContext(ctx,
 		`SELECT id FROM device WHERE proxmox_vmid=? AND source='proxmox'`, g.VMID).Scan(&devID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	if errors.Is(err, sql.ErrNoRows) { // new guest
 		vmid := g.VMID
-		devID, err = s.store.CreateDevice(store.Device{
+		devID, err = s.store.CreateDevice(ctx, store.Device{
 			Name: g.Name, Kind: kind, Source: "proxmox",
 			ParentDeviceID: &nodeID, ProxmoxVMID: &vmid,
 		})
 		if err != nil {
 			return err
 		}
-		s.events.Emit("device_new", &devID, fmt.Sprintf("proxmox guest %s (%d)", g.Name, g.VMID))
+		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("proxmox guest %s (%d)", g.Name, g.VMID))
 	} else {
-		d, err := s.store.GetDevice(devID)
+		d, err := s.store.GetDevice(ctx, devID)
 		if err != nil {
 			return err
 		}
 		d.Name, d.Kind, d.ParentDeviceID = g.Name, kind, &nodeID
-		if err := s.store.UpdateDevice(d); err != nil {
+		if err := s.store.UpdateDevice(ctx, d); err != nil {
 			return err
 		}
 	}
-	if err := s.store.SetCustomField(devID, "proxmox_status", g.Status); err != nil {
+	if err := s.store.SetCustomField(ctx, devID, "proxmox_status", g.Status); err != nil {
 		return err
 	}
 	macs, err := s.client.GuestMACs(ctx, g.Node, g.VMID, g.Type)
@@ -135,9 +135,9 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 		return err
 	}
 	for _, mac := range macs {
-		if _, ok, _ := s.store.FindIfaceByMAC(mac); !ok {
+		if _, ok, _ := s.store.FindIfaceByMAC(ctx, mac); !ok {
 			m := mac
-			s.store.AddIface(devID, &m, nil)
+			s.store.AddIface(ctx, devID, &m, nil)
 		}
 	}
 	return nil
@@ -147,7 +147,8 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		s.recordStatus(s.runAndCount(ctx))
+		stats, err := s.runAndCount(ctx)
+		s.recordStatus(ctx, stats, err)
 		select {
 		case <-ctx.Done():
 			return

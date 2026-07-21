@@ -118,9 +118,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			return
 		}
 		if c, err := r.Cookie("netis_session"); err == nil {
-			if u, ok, _ := s.store.GetSession(c.Value); ok {
+			if u, ok, _ := s.store.GetSession(r.Context(), c.Value); ok {
 				if !onboardingAllowed(r.URL.Path) {
-					if v, _ := s.store.GetSetting("onboarded"); v != "1" {
+					if v, _ := s.store.GetSetting(r.Context(), "onboarded"); v != "1" {
 						http.Redirect(w, r, "/welcome", http.StatusSeeOther)
 						return
 					}
@@ -129,7 +129,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if n, _ := s.store.CountUsers(); n == 0 {
+		if n, _ := s.store.CountUsers(r.Context()); n == 0 {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
@@ -167,7 +167,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username, password := r.FormValue("username"), r.FormValue("password")
-	u, ok, err := s.store.GetUserByName(username)
+	u, ok, err := s.store.GetUserByName(r.Context(), username)
 	var match bool
 	if err == nil && ok {
 		match = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
@@ -184,7 +184,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		expires := time.Now().UTC().Add(30 * 24 * time.Hour)
-		if serr := s.store.CreateSession(token, u.ID, expires.Format(time.RFC3339)); serr != nil {
+		if serr := s.store.CreateSession(r.Context(), token, u.ID, expires.Format(time.RFC3339)); serr != nil {
 			log.Printf("create session: %v", serr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -204,7 +204,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("netis_session"); err == nil {
-		s.store.DeleteSession(c.Value)
+		s.store.DeleteSession(r.Context(), c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: "netis_session", Value: "", Path: "/", MaxAge: -1,
@@ -214,7 +214,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
-	if n, _ := s.store.CountUsers(); n > 0 {
+	if n, _ := s.store.CountUsers(r.Context()); n > 0 {
 		http.Error(w, "already set up", http.StatusForbidden)
 		return
 	}
@@ -222,7 +222,7 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
-	if n, _ := s.store.CountUsers(); n > 0 {
+	if n, _ := s.store.CountUsers(r.Context()); n > 0 {
 		http.Error(w, "already set up", http.StatusForbidden)
 		return
 	}
@@ -237,7 +237,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	created, err := s.store.CreateFirstAdmin(username, string(hash))
+	created, err := s.store.CreateFirstAdmin(r.Context(), username, string(hash))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

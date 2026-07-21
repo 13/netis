@@ -14,12 +14,12 @@ import (
 // authedGet performs a request with a valid admin session cookie.
 func authedGet(t *testing.T, srv *Server, st *store.Store, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	u, ok, _ := st.GetUserByName("ben")
+	u, ok, _ := st.GetUserByName(t.Context(), "ben")
 	if !ok {
 		addAdmin(t, st)
-		u, _, _ = st.GetUserByName("ben")
+		u, _, _ = st.GetUserByName(t.Context(), "ben")
 	}
-	st.CreateSession("testtok", u.ID, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	st.CreateSession(t.Context(), "testtok", u.ID, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
 	req := httptest.NewRequest("GET", path, nil)
 	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "testtok"})
 	rec := httptest.NewRecorder()
@@ -29,12 +29,12 @@ func authedGet(t *testing.T, srv *Server, st *store.Store, path string) *httptes
 
 func TestDashboardShowsSubnetCounts(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "other", Source: "manual"})
-	ifID, _ := st.AddIface(devID, nil, nil)
-	st.AssignIP(ifID, snID, "10.0.0.1", "static")
-	st.MarkSeen(ifID, 1, time.Now())
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "other", Source: "manual"})
+	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
+	st.MarkSeen(t.Context(), ifID, 1, time.Now())
 
 	rec := authedGet(t, srv, st, "/")
 	if rec.Code != 200 {
@@ -54,22 +54,22 @@ func TestDashboardShowsSubnetCounts(t *testing.T) {
 
 func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	// a subnet + an online device + an unknown scan device + a conflict
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	on, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "other", Source: "manual"})
-	onIf, _ := st.AddIface(on, nil, nil)
-	st.AssignIP(onIf, snID, "10.0.0.1", "static")
-	st.MarkSeen(onIf, 1, time.Now())
-	unk, _ := st.CreateDevice(store.Device{Name: "unknown-aa:bb:cc:00:00:09", Kind: "other", Source: "scan"})
-	unkIf, _ := st.AddIface(unk, nil, nil)
-	st.AssignIP(unkIf, snID, "10.0.0.2", "dhcp")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	on, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "other", Source: "manual"})
+	onIf, _ := st.AddIface(t.Context(), on, nil, nil)
+	st.AssignIP(t.Context(), onIf, snID, "10.0.0.1", "static")
+	st.MarkSeen(t.Context(), onIf, 1, time.Now())
+	unk, _ := st.CreateDevice(t.Context(), store.Device{Name: "unknown-aa:bb:cc:00:00:09", Kind: "other", Source: "scan"})
+	unkIf, _ := st.AddIface(t.Context(), unk, nil, nil)
+	st.AssignIP(t.Context(), unkIf, snID, "10.0.0.2", "dhcp")
 	// conflict: a second device claims .1
-	ghost, _ := st.CreateDevice(store.Device{Name: "ghost", Kind: "other", Source: "manual"})
-	ghostIf, _ := st.AddIface(ghost, nil, nil)
-	st.AssignIP(ghostIf, snID, "10.0.0.1", "static")
+	ghost, _ := st.CreateDevice(t.Context(), store.Device{Name: "ghost", Kind: "other", Source: "manual"})
+	ghostIf, _ := st.AddIface(t.Context(), ghost, nil, nil)
+	st.AssignIP(t.Context(), ghostIf, snID, "10.0.0.1", "static")
 	// an integration status row
-	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", LastRun: time.Now().UTC().Format(time.RFC3339), OK: true, Detail: "48 leases, 2 new", ItemCount: 48})
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "pihole", LastRun: time.Now().UTC().Format(time.RFC3339), OK: true, Detail: "48 leases, 2 new", ItemCount: 48})
 
 	rec := authedGet(t, srv, st, "/dashboard/widgets")
 	if rec.Code != 200 {
@@ -85,7 +85,7 @@ func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
 
 func TestDashboardPageHasFragmentContainer(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedGet(t, srv, st, "/")
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `hx-get="/dashboard/widgets"`) {
 		t.Fatalf("dashboard page missing fragment container (code=%d)", rec.Code)
@@ -94,19 +94,19 @@ func TestDashboardPageHasFragmentContainer(t *testing.T) {
 
 func TestSubnetCardOccupancyCounts(t *testing.T) {
 	srv, st := testServer(t)
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 	mk := func(name, ip string) int64 {
-		devID, _ := st.CreateDevice(store.Device{Name: name, Kind: "other", Source: "manual"})
-		ifID, _ := st.AddIface(devID, nil, nil)
-		st.AssignIP(ifID, snID, ip, "static")
+		devID, _ := st.CreateDevice(t.Context(), store.Device{Name: name, Kind: "other", Source: "manual"})
+		ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+		st.AssignIP(t.Context(), ifID, snID, ip, "static")
 		return ifID
 	}
 	onIf := mk("on", "10.0.0.1")
-	st.MarkSeen(onIf, 1, time.Now()) // online
+	st.MarkSeen(t.Context(), onIf, 1, time.Now()) // online
 	offIf := mk("off", "10.0.0.2")
-	st.MarkSeen(offIf, 1, time.Now())
-	st.MarkMissed(offIf, 1) // seen then offline
-	mk("res", "10.0.0.3")   // assigned, never seen → reserved
+	st.MarkSeen(t.Context(), offIf, 1, time.Now())
+	st.MarkMissed(t.Context(), offIf, 1) // seen then offline
+	mk("res", "10.0.0.3")                // assigned, never seen → reserved
 
 	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
 	if err != nil {
@@ -138,7 +138,7 @@ func TestBarPct(t *testing.T) {
 
 func TestLayoutHasThemeToggleAndBootstrap(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedGet(t, srv, st, "/")
 	body := rec.Body.String()
 	if rec.Code != 200 {

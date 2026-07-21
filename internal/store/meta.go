@@ -1,6 +1,9 @@
 package store
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 type Tag struct {
 	ID    int64
@@ -21,16 +24,16 @@ type OpenPort struct {
 	Proto, ServiceGuess, FirstSeen, LastSeen string
 }
 
-func (s *Store) CreateTag(name, color string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO tag (name,color) VALUES (?,?)`, name, color)
+func (s *Store) CreateTag(ctx context.Context, name, color string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO tag (name,color) VALUES (?,?)`, name, color)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func (s *Store) ListTags() ([]Tag, error) {
-	rows, err := s.DB.Query(`SELECT id,name,color FROM tag ORDER BY name`)
+func (s *Store) ListTags(ctx context.Context) ([]Tag, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,name,color FROM tag ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -46,14 +49,14 @@ func (s *Store) ListTags() ([]Tag, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) TagDevice(deviceID, tagID int64) error {
-	_, err := s.DB.Exec(`INSERT OR IGNORE INTO device_tag (device_id,tag_id) VALUES (?,?)`,
+func (s *Store) TagDevice(ctx context.Context, deviceID, tagID int64) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT OR IGNORE INTO device_tag (device_id,tag_id) VALUES (?,?)`,
 		deviceID, tagID)
 	return err
 }
 
-func (s *Store) UntagDevice(deviceID, tagID int64) error {
-	_, err := s.DB.Exec(`DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, tagID)
+func (s *Store) UntagDevice(ctx context.Context, deviceID, tagID int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, tagID)
 	return err
 }
 
@@ -61,7 +64,7 @@ func (s *Store) UntagDevice(deviceID, tagID int64) error {
 // trimmed, blanks dropped, and de-duplicated; tags that don't exist are
 // created (color #888888); tags no longer present are detached. Idempotent
 // and order-independent.
-func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
+func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []string) error {
 	// Build the desired set (trim, drop empty, dedup).
 	want := map[string]bool{}
 	for _, n := range names {
@@ -71,7 +74,7 @@ func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
 		}
 	}
 
-	current, err := s.DeviceTags(deviceID)
+	current, err := s.DeviceTags(ctx, deviceID)
 	if err != nil {
 		return err
 	}
@@ -83,7 +86,7 @@ func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
 	// Detach tags no longer wanted.
 	for name, id := range have {
 		if !want[name] {
-			if err := s.UntagDevice(deviceID, id); err != nil {
+			if err := s.UntagDevice(ctx, deviceID, id); err != nil {
 				return err
 			}
 		}
@@ -94,11 +97,11 @@ func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
 		if _, ok := have[name]; ok {
 			continue
 		}
-		id, err := s.findOrCreateTag(name)
+		id, err := s.findOrCreateTag(ctx, name)
 		if err != nil {
 			return err
 		}
-		if err := s.TagDevice(deviceID, id); err != nil {
+		if err := s.TagDevice(ctx, deviceID, id); err != nil {
 			return err
 		}
 	}
@@ -107,8 +110,8 @@ func (s *Store) SetDeviceTags(deviceID int64, names []string) error {
 
 // findOrCreateTag returns the id of the tag with the given name, creating it
 // with a neutral color if it does not exist yet.
-func (s *Store) findOrCreateTag(name string) (int64, error) {
-	tags, err := s.ListTags()
+func (s *Store) findOrCreateTag(ctx context.Context, name string) (int64, error) {
+	tags, err := s.ListTags(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -117,22 +120,22 @@ func (s *Store) findOrCreateTag(name string) (int64, error) {
 			return t.ID, nil
 		}
 	}
-	return s.CreateTag(name, "#888888")
+	return s.CreateTag(ctx, name, "#888888")
 }
 
-func (s *Store) SetCustomField(deviceID int64, key, value string) error {
-	_, err := s.DB.Exec(`INSERT INTO custom_field (device_id,key,value) VALUES (?,?,?)
+func (s *Store) SetCustomField(ctx context.Context, deviceID int64, key, value string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO custom_field (device_id,key,value) VALUES (?,?,?)
 		ON CONFLICT(device_id,key) DO UPDATE SET value=excluded.value`, deviceID, key, value)
 	return err
 }
 
-func (s *Store) DeleteCustomField(deviceID int64, key string) error {
-	_, err := s.DB.Exec(`DELETE FROM custom_field WHERE device_id=? AND key=?`, deviceID, key)
+func (s *Store) DeleteCustomField(ctx context.Context, deviceID int64, key string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM custom_field WHERE device_id=? AND key=?`, deviceID, key)
 	return err
 }
 
-func (s *Store) ListCustomFields(deviceID int64) ([]CustomField, error) {
-	rows, err := s.DB.Query(`SELECT key,value FROM custom_field WHERE device_id=? ORDER BY key`, deviceID)
+func (s *Store) ListCustomFields(ctx context.Context, deviceID int64) ([]CustomField, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT key,value FROM custom_field WHERE device_id=? ORDER BY key`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +151,8 @@ func (s *Store) ListCustomFields(deviceID int64) ([]CustomField, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) AddLink(deviceID int64, label, url string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO device_link (device_id,label,url) VALUES (?,?,?)`,
+func (s *Store) AddLink(ctx context.Context, deviceID int64, label, url string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO device_link (device_id,label,url) VALUES (?,?,?)`,
 		deviceID, label, url)
 	if err != nil {
 		return 0, err
@@ -157,13 +160,13 @@ func (s *Store) AddLink(deviceID int64, label, url string) (int64, error) {
 	return res.LastInsertId()
 }
 
-func (s *Store) DeleteLink(id int64) error {
-	_, err := s.DB.Exec(`DELETE FROM device_link WHERE id=?`, id)
+func (s *Store) DeleteLink(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM device_link WHERE id=?`, id)
 	return err
 }
 
-func (s *Store) ListLinks(deviceID int64) ([]Link, error) {
-	rows, err := s.DB.Query(`SELECT id,label,url FROM device_link WHERE device_id=?`, deviceID)
+func (s *Store) ListLinks(ctx context.Context, deviceID int64) ([]Link, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,label,url FROM device_link WHERE device_id=?`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +182,8 @@ func (s *Store) ListLinks(deviceID int64) ([]Link, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) UpsertOpenPort(ifaceID int64, port int, proto, guess, seenAt string) error {
-	_, err := s.DB.Exec(`INSERT INTO open_port (iface_id,port,proto,service_guess,first_seen,last_seen)
+func (s *Store) UpsertOpenPort(ctx context.Context, ifaceID int64, port int, proto, guess, seenAt string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO open_port (iface_id,port,proto,service_guess,first_seen,last_seen)
 		VALUES (?,?,?,?,?,?)
 		ON CONFLICT(iface_id,port,proto) DO UPDATE SET
 			last_seen=excluded.last_seen, service_guess=excluded.service_guess`,
@@ -188,8 +191,8 @@ func (s *Store) UpsertOpenPort(ifaceID int64, port int, proto, guess, seenAt str
 	return err
 }
 
-func (s *Store) ListOpenPorts(ifaceID int64) ([]OpenPort, error) {
-	rows, err := s.DB.Query(`SELECT port,proto,service_guess,first_seen,last_seen
+func (s *Store) ListOpenPorts(ctx context.Context, ifaceID int64) ([]OpenPort, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT port,proto,service_guess,first_seen,last_seen
 		FROM open_port WHERE iface_id=? ORDER BY port`, ifaceID)
 	if err != nil {
 		return nil, err

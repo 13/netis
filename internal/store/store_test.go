@@ -76,7 +76,7 @@ func TestMigration0002AgainstPopulatedTable(t *testing.T) {
 		t.Fatalf("iface rows after 0002 rebuild = %d, want 1 (DROP cascade-deleted the child iface)", ifaces)
 	}
 	// self-FK survived the rebuild
-	child, err := s.GetDevice(2)
+	child, err := s.GetDevice(t.Context(), 2)
 	if err != nil || child.ParentDeviceID == nil || *child.ParentDeviceID != 1 {
 		t.Fatalf("parent link lost after rebuild: %+v err=%v", child, err)
 	}
@@ -141,9 +141,9 @@ func TestMigrationPreservesChildRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parentID, _ := s.CreateDevice(Device{Name: "parent", Kind: "server", Source: "manual"})
-	childID, _ := s.CreateDevice(Device{Name: "child", Kind: "vm", Source: "proxmox", ParentDeviceID: &parentID})
-	ifID, _ := s.AddIface(childID, strp("aa:bb:cc:dd:ee:01"), nil)
+	parentID, _ := s.CreateDevice(t.Context(), Device{Name: "parent", Kind: "server", Source: "manual"})
+	childID, _ := s.CreateDevice(t.Context(), Device{Name: "child", Kind: "vm", Source: "proxmox", ParentDeviceID: &parentID})
+	ifID, _ := s.AddIface(t.Context(), childID, strp("aa:bb:cc:dd:ee:01"), nil)
 	_ = ifID
 	s.Close()
 
@@ -153,17 +153,17 @@ func TestMigrationPreservesChildRows(t *testing.T) {
 		t.Fatalf("reopen after migrations: %v", err)
 	}
 	defer s2.Close()
-	rows, err := s2.ListDevices()
+	rows, err := s2.ListDevices(t.Context())
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("devices after rebuild: %+v err=%v", rows, err)
 	}
 	// self-FK preserved
-	child, _ := s2.GetDevice(childID)
+	child, _ := s2.GetDevice(t.Context(), childID)
 	if child.ParentDeviceID == nil || *child.ParentDeviceID != parentID {
 		t.Fatalf("parent link lost: %+v", child)
 	}
 	// child iface preserved
-	ifaces, _ := s2.ListIfaces(childID)
+	ifaces, _ := s2.ListIfaces(t.Context(), childID)
 	if len(ifaces) != 1 || ifaces[0].MAC == nil || *ifaces[0].MAC != "aa:bb:cc:dd:ee:01" {
 		t.Fatalf("iface lost: %+v", ifaces)
 	}

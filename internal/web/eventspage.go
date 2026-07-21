@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) handleEventsPage(w http.ResponseWriter, r *http.Request) {
-	evs, err := s.store.ListEvents(200)
+	evs, err := s.store.ListEvents(r.Context(), 200)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

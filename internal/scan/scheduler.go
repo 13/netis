@@ -39,11 +39,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case id := <-s.trigger:
-			if sn, err := s.store.GetSubnet(id); err == nil {
+			if sn, err := s.store.GetSubnet(ctx, id); err == nil {
 				s.run(ctx, sn, true)
 			}
 		case <-tick.C:
-			subnets, err := s.store.ListSubnets()
+			subnets, err := s.store.ListSubnets(ctx)
 			if err != nil {
 				continue
 			}
@@ -97,7 +97,7 @@ func (s *Scheduler) run(ctx context.Context, sn store.Subnet, manual bool) {
 	if err != nil {
 		st.Detail = sn.CIDR + ": " + err.Error()
 	}
-	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
 		log.Printf("scan status write: %v", serr)
 	}
 	s.engine.Broker.Publish("dashboard", "refresh")

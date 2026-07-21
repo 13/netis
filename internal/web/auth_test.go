@@ -27,7 +27,7 @@ func testServer(t *testing.T) (*Server, *store.Store) {
 func addAdmin(t *testing.T, st *store.Store) {
 	t.Helper()
 	h, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-	if _, err := st.CreateUser("ben", string(h), "admin"); err != nil {
+	if _, err := st.CreateUser(t.Context(), "ben", string(h), "admin"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -51,7 +51,7 @@ func TestSetupCreatesAdminOnce(t *testing.T) {
 	if rec.Code != 303 {
 		t.Fatalf("code=%d", rec.Code)
 	}
-	u, ok, _ := st.GetUserByName("ben")
+	u, ok, _ := st.GetUserByName(t.Context(), "ben")
 	if !ok || u.Role != "admin" {
 		t.Fatalf("user=%+v", u)
 	}
@@ -81,7 +81,7 @@ func TestSetupRaceCreatesOneAdmin(t *testing.T) {
 		}(name)
 	}
 	wg.Wait()
-	n, err := st.CountUsers()
+	n, err := st.CountUsers(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

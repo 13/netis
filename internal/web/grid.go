@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -11,8 +12,8 @@ import (
 	"netis/internal/web/views"
 )
 
-func (s *Server) gridCells(sn store.Subnet) ([]views.GridCell, error) {
-	occ, err := s.store.SubnetOccupancy(sn.ID)
+func (s *Server) gridCells(ctx context.Context, sn store.Subnet) ([]views.GridCell, error) {
+	occ, err := s.store.SubnetOccupancy(ctx, sn.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,17 +65,17 @@ func (s *Server) subnetFromPath(r *http.Request) (store.Subnet, error) {
 	if err != nil {
 		return store.Subnet{}, err
 	}
-	return s.store.GetSubnet(id)
+	return s.store.GetSubnet(r.Context(), id)
 }
 
 // devicesInSubnet returns the DeviceRows that have an IP assigned in subnetID,
 // in ListDevices order.
-func (s *Server) devicesInSubnet(subnetID int64) ([]store.DeviceRow, error) {
-	all, err := s.store.ListDevices()
+func (s *Server) devicesInSubnet(ctx context.Context, subnetID int64) ([]store.DeviceRow, error) {
+	all, err := s.store.ListDevices(ctx)
 	if err != nil {
 		return nil, err
 	}
-	links, err := s.store.ListSubnetIfaceIPs(subnetID)
+	links, err := s.store.ListSubnetIfaceIPs(ctx, subnetID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,12 +98,12 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cells, err := s.gridCells(sn)
+	cells, err := s.gridCells(r.Context(), sn)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	devices, err := s.devicesInSubnet(sn.ID)
+	devices, err := s.devicesInSubnet(r.Context(), sn.ID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -119,7 +120,7 @@ func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cells, err := s.gridCells(sn)
+	cells, err := s.gridCells(r.Context(), sn)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -150,7 +151,7 @@ func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := r.URL.Query().Get("ip")
-	occ, err := s.store.SubnetOccupancy(sn.ID)
+	occ, err := s.store.SubnetOccupancy(r.Context(), sn.ID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -170,7 +171,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad kind", 400)
 		return
 	}
-	if err := s.store.SetIPKind(sn.ID, ip, kind); err != nil {
+	if err := s.store.SetIPKind(r.Context(), sn.ID, ip, kind); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -179,7 +180,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
-	subnets, err := s.store.ListSubnets()
+	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

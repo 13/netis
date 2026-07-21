@@ -25,14 +25,14 @@ func testSync(t *testing.T) (*store.Store, *fakeFetcher, *Sync) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
 	f := &fakeFetcher{}
 	return st, f, NewSync(st, f, events.NewService(st, events.NewBroker()))
 }
 
 func deviceByName(t *testing.T, st *store.Store, name string) store.DeviceRow {
 	t.Helper()
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	for _, r := range rows {
 		if r.Name == name {
 			return r
@@ -53,12 +53,12 @@ func TestSyncCreatesUnknownFromReservation(t *testing.T) {
 		t.Fatalf("device=%+v", d)
 	}
 	// reservation → static
-	ifaces, _ := st.ListIfaces(d.ID)
-	ips, _ := st.ListIPs(ifaces[0].ID)
+	ifaces, _ := st.ListIfaces(t.Context(), d.ID)
+	ips, _ := st.ListIPs(t.Context(), ifaces[0].ID)
 	if ips[0].Kind != "static" {
 		t.Fatalf("want static, got %q", ips[0].Kind)
 	}
-	evs, _ := st.ListEvents(5)
+	evs, _ := st.ListEvents(t.Context(), 5)
 	if len(evs) != 1 || evs[0].Type != "device_new" {
 		t.Fatalf("events=%+v", evs)
 	}
@@ -67,13 +67,13 @@ func TestSyncCreatesUnknownFromReservation(t *testing.T) {
 func TestSyncEnrichesExistingByMAC(t *testing.T) {
 	st, f, sync := testSync(t)
 	// Pre-existing device from another source with the same MAC.
-	devID, _ := st.CreateDevice(store.Device{Name: "known", Kind: "computer", Source: "scan"})
-	st.AddIface(devID, strpP("aa:bb:cc:00:00:10"), nil)
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "known", Kind: "computer", Source: "scan"})
+	st.AddIface(t.Context(), devID, strpP("aa:bb:cc:00:00:10"), nil)
 	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
 	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 1 {
 		t.Fatalf("must not create a second device: %+v", rows)
 	}
@@ -81,7 +81,7 @@ func TestSyncEnrichesExistingByMAC(t *testing.T) {
 	if len(d.IPs) != 1 || d.IPs[0].IP != "10.0.0.10" {
 		t.Fatalf("IP not attached: %+v", d.IPs)
 	}
-	ifaces, _ := st.ListIfaces(d.ID)
+	ifaces, _ := st.ListIfaces(t.Context(), d.ID)
 	if ifaces[0].Hostname == nil || *ifaces[0].Hostname != "laptop" {
 		t.Fatalf("hostname not set: %+v", ifaces[0])
 	}
@@ -95,8 +95,8 @@ func TestReservationBeatsLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := deviceByName(t, st, "printer")
-	ifaces, _ := st.ListIfaces(d.ID)
-	ips, _ := st.ListIPs(ifaces[0].ID)
+	ifaces, _ := st.ListIfaces(t.Context(), d.ID)
+	ips, _ := st.ListIPs(t.Context(), ifaces[0].ID)
 	if len(ips) != 1 || ips[0].Kind != "static" {
 		t.Fatalf("reservation should win (static), got %+v", ips)
 	}
@@ -113,12 +113,12 @@ func TestDNSRecordAttachesAndSkipsUnknown(t *testing.T) {
 	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 1 {
 		t.Fatalf("DNS must not create a device: %+v", rows)
 	}
 	d := rows[0]
-	fields, _ := st.ListCustomFields(d.ID)
+	fields, _ := st.ListCustomFields(t.Context(), d.ID)
 	var hasDNS bool
 	for _, cf := range fields {
 		if cf.Key == "pihole_dns" && cf.Value == "printer.lan" {
@@ -140,8 +140,8 @@ func TestSyncIdempotentAndNoStatus(t *testing.T) {
 		}
 	}
 	d := deviceByName(t, st, "printer")
-	ifaces, _ := st.ListIfaces(d.ID)
-	ips, _ := st.ListIPs(ifaces[0].ID)
+	ifaces, _ := st.ListIfaces(t.Context(), d.ID)
+	ips, _ := st.ListIPs(t.Context(), ifaces[0].ID)
 	if len(ips) != 1 {
 		t.Fatalf("duplicate assignment on re-run: %+v", ips)
 	}
@@ -173,8 +173,9 @@ func TestPiholeStartRecordsStatus(t *testing.T) {
 	st, f, sync := testSync(t)
 	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
 	// One iteration: record status via the same path Start uses.
-	sync.recordStatus(sync.runAndCount(context.Background()))
-	list, _ := st.ListIntegrationStatus()
+	stats, rerr := sync.runAndCount(context.Background())
+	sync.recordStatus(context.Background(), stats, rerr)
+	list, _ := st.ListIntegrationStatus(t.Context())
 	if len(list) != 1 || list[0].Name != "pihole" || !list[0].OK || list[0].ItemCount != 1 {
 		t.Fatalf("status=%+v", list)
 	}
@@ -182,18 +183,18 @@ func TestPiholeStartRecordsStatus(t *testing.T) {
 
 func TestPiholeLeaseKeepsManualStatic(t *testing.T) {
 	st, f, sync := testSync(t)
-	subnets, _ := st.ListSubnets()
+	subnets, _ := st.ListSubnets(t.Context())
 	snID := subnets[0].ID
 	// A device the user marked static, whose MAC pihole will report as a lease.
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
-	ifID, _ := st.AddIface(devID, strpP("aa:bb:cc:00:00:40"), nil)
-	st.AssignIP(ifID, snID, "10.0.0.40", "static")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(t.Context(), devID, strpP("aa:bb:cc:00:00:40"), nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.40", "static")
 
 	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:40", IP: "10.0.0.40", Hostname: "gw"}}
 	if _, err := sync.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	ips, _ := st.ListIPs(ifID)
+	ips, _ := st.ListIPs(t.Context(), ifID)
 	if len(ips) != 1 || ips[0].Kind != "static" {
 		t.Fatalf("pihole lease must not downgrade a manual static, got %+v", ips)
 	}

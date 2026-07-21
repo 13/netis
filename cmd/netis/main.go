@@ -40,34 +40,34 @@ var errNotConfigured = errors.New("not configured")
 func newIntegrationRunner(st *store.Store, evs *events.Service) integrationRunner {
 	return integrationRunner{
 		"proxmox": func(ctx context.Context) error {
-			url, _ := st.GetSetting("proxmox_url")
+			url, _ := st.GetSetting(ctx, "proxmox_url")
 			if url == "" {
 				return errNotConfigured
 			}
-			tokenID, _ := st.GetSetting("proxmox_token_id")
-			secret, _ := st.GetSetting("proxmox_secret")
-			insecure, _ := st.GetSetting("proxmox_insecure")
+			tokenID, _ := st.GetSetting(ctx, "proxmox_token_id")
+			secret, _ := st.GetSetting(ctx, "proxmox_secret")
+			insecure, _ := st.GetSetting(ctx, "proxmox_insecure")
 			_, err := proxmox.NewSync(st, proxmox.NewClient(url, tokenID, secret, insecure == "1"), evs).RunOnce(ctx)
 			return err
 		},
 		"pihole": func(ctx context.Context) error {
-			url, _ := st.GetSetting("pihole_url")
+			url, _ := st.GetSetting(ctx, "pihole_url")
 			if url == "" {
 				return errNotConfigured
 			}
-			pass, _ := st.GetSetting("pihole_password")
-			insecure, _ := st.GetSetting("pihole_insecure")
+			pass, _ := st.GetSetting(ctx, "pihole_password")
+			insecure, _ := st.GetSetting(ctx, "pihole_insecure")
 			_, err := pihole.NewSync(st, pihole.NewClient(url, pass, insecure == "1"), evs).RunOnce(ctx)
 			return err
 		},
 		"wireguard": func(ctx context.Context) error {
-			addr, _ := st.GetSetting("wg_ssh_addr")
+			addr, _ := st.GetSetting(ctx, "wg_ssh_addr")
 			if addr == "" {
 				return errNotConfigured
 			}
-			user, _ := st.GetSetting("wg_ssh_user")
-			key, _ := st.GetSetting("wg_ssh_key_path")
-			iface, _ := st.GetSetting("wg_iface")
+			user, _ := st.GetSetting(ctx, "wg_ssh_user")
+			key, _ := st.GetSetting(ctx, "wg_ssh_key_path")
+			iface, _ := st.GetSetting(ctx, "wg_iface")
 			if iface == "" {
 				iface = "wg0"
 			}
@@ -121,8 +121,11 @@ func main() {
 	broker := events.NewBroker()
 	evs := events.NewService(st, broker)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	offlineAfter := 3
-	if v, _ := st.GetSetting("offline_after"); v != "" {
+	if v, _ := st.GetSetting(ctx, "offline_after"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			offlineAfter = n
 		}
@@ -135,8 +138,6 @@ func main() {
 		OfflineAfter: offlineAfter,
 	}
 	sched := scan.NewScheduler(engine, st)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	go sched.Start(ctx)
 
 	runNow := newIntegrationRunner(st, evs)

@@ -33,7 +33,7 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 	runErr := s.runner.Run(ctx, name)
 
 	var st *store.IntegrationStatus
-	if list, err := s.store.ListIntegrationStatus(); err == nil {
+	if list, err := s.store.ListIntegrationStatus(r.Context()); err == nil {
 		for i := range list {
 			if list[i].Name == name {
 				st = &list[i]

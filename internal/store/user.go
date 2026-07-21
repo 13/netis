@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -13,8 +14,8 @@ type User struct {
 	Role         string
 }
 
-func (s *Store) CreateUser(username, passwordHash, role string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO user (username,password_hash,role) VALUES (?,?,?)`,
+func (s *Store) CreateUser(ctx context.Context, username, passwordHash, role string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO user (username,password_hash,role) VALUES (?,?,?)`,
 		username, passwordHash, role)
 	if err != nil {
 		return 0, err
@@ -22,9 +23,9 @@ func (s *Store) CreateUser(username, passwordHash, role string) (int64, error) {
 	return res.LastInsertId()
 }
 
-func (s *Store) GetUserByName(username string) (User, bool, error) {
+func (s *Store) GetUserByName(ctx context.Context, username string) (User, bool, error) {
 	var u User
-	err := s.DB.QueryRow(`SELECT id,username,password_hash,role FROM user WHERE username=?`, username).
+	err := s.DB.QueryRowContext(ctx, `SELECT id,username,password_hash,role FROM user WHERE username=?`, username).
 		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -37,8 +38,8 @@ func (s *Store) GetUserByName(username string) (User, bool, error) {
 
 // CreateFirstAdmin inserts an admin user only if the user table is
 // currently empty, atomically. It reports whether the row was created.
-func (s *Store) CreateFirstAdmin(username, passwordHash string) (bool, error) {
-	res, err := s.DB.Exec(`INSERT INTO user (username,password_hash,role)
+func (s *Store) CreateFirstAdmin(ctx context.Context, username, passwordHash string) (bool, error) {
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO user (username,password_hash,role)
 		SELECT ?,?,'admin' WHERE NOT EXISTS (SELECT 1 FROM user)`,
 		username, passwordHash)
 	if err != nil {
@@ -51,14 +52,14 @@ func (s *Store) CreateFirstAdmin(username, passwordHash string) (bool, error) {
 	return n == 1, nil
 }
 
-func (s *Store) CountUsers() (int, error) {
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var n int
-	err := s.DB.QueryRow(`SELECT count(*) FROM user`).Scan(&n)
+	err := s.DB.QueryRowContext(ctx, `SELECT count(*) FROM user`).Scan(&n)
 	return n, err
 }
 
-func (s *Store) ListUsers() ([]User, error) {
-	rows, err := s.DB.Query(`SELECT id,username,password_hash,role FROM user ORDER BY username`)
+func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,username,password_hash,role FROM user ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +75,8 @@ func (s *Store) ListUsers() ([]User, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) DeleteUser(id int64) error {
-	_, err := s.DB.Exec(`DELETE FROM user WHERE id=?`, id)
+func (s *Store) DeleteUser(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM user WHERE id=?`, id)
 	return err
 }
 
@@ -86,8 +87,8 @@ func (s *Store) DeleteUser(id int64) error {
 // ListUsers-then-DeleteUser sequence, which is vulnerable to a TOCTOU race
 // where two concurrent admin deletions both pass the "admins > 1" check).
 // It reports whether a row was actually deleted.
-func (s *Store) DeleteUserGuarded(id int64) (deleted bool, err error) {
-	res, err := s.DB.Exec(`DELETE FROM user WHERE id=? AND
+func (s *Store) DeleteUserGuarded(ctx context.Context, id int64) (deleted bool, err error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM user WHERE id=? AND
 		(role<>'admin' OR (SELECT COUNT(*) FROM user WHERE role='admin') > 1)`, id)
 	if err != nil {
 		return false, err
@@ -99,16 +100,16 @@ func (s *Store) DeleteUserGuarded(id int64) (deleted bool, err error) {
 	return n == 1, nil
 }
 
-func (s *Store) CreateSession(token string, userID int64, expiresAt string) error {
-	_, err := s.DB.Exec(`INSERT INTO session (token,user_id,expires_at) VALUES (?,?,?)`,
+func (s *Store) CreateSession(ctx context.Context, token string, userID int64, expiresAt string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO session (token,user_id,expires_at) VALUES (?,?,?)`,
 		token, userID, expiresAt)
 	return err
 }
 
-func (s *Store) GetSession(token string) (User, bool, error) {
+func (s *Store) GetSession(ctx context.Context, token string) (User, bool, error) {
 	var u User
 	now := time.Now().UTC().Format(time.RFC3339)
-	err := s.DB.QueryRow(`SELECT u.id,u.username,u.password_hash,u.role FROM session s
+	err := s.DB.QueryRowContext(ctx, `SELECT u.id,u.username,u.password_hash,u.role FROM session s
 		JOIN user u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?`, token, now).
 		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role)
 	if err != nil {
@@ -120,14 +121,14 @@ func (s *Store) GetSession(token string) (User, bool, error) {
 	return u, true, nil
 }
 
-func (s *Store) DeleteSession(token string) error {
-	_, err := s.DB.Exec(`DELETE FROM session WHERE token=?`, token)
+func (s *Store) DeleteSession(ctx context.Context, token string) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM session WHERE token=?`, token)
 	return err
 }
 
-func (s *Store) GetSetting(key string) (string, error) {
+func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
 	var v string
-	err := s.DB.QueryRow(`SELECT value FROM setting WHERE key=?`, key).Scan(&v)
+	err := s.DB.QueryRowContext(ctx, `SELECT value FROM setting WHERE key=?`, key).Scan(&v)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
@@ -137,8 +138,8 @@ func (s *Store) GetSetting(key string) (string, error) {
 	return v, nil
 }
 
-func (s *Store) SetSetting(key, value string) error {
-	_, err := s.DB.Exec(`INSERT INTO setting (key,value) VALUES (?,?)
+func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO setting (key,value) VALUES (?,?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
 }

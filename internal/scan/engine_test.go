@@ -40,7 +40,7 @@ func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
 		Resolve:      func(ctx context.Context, ip string) string { return "" },
 		OfflineAfter: 3,
 	}
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 	return e, st, fs, snID
 }
 
@@ -69,11 +69,11 @@ func TestShouldRunScan(t *testing.T) {
 func TestAutoCreatesUnknownDevice(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.2}}
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	if err := e.RunSubnet(context.Background(), sn); err != nil {
 		t.Fatal(err)
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 1 {
 		t.Fatalf("devices=%+v", rows)
 	}
@@ -82,7 +82,7 @@ func TestAutoCreatesUnknownDevice(t *testing.T) {
 		d.Vendor != "Proxmox Server Solutions GmbH" || !d.Online {
 		t.Fatalf("device=%+v", d)
 	}
-	evs, _ := st.ListEvents(5)
+	evs, _ := st.ListEvents(t.Context(), 5)
 	if len(evs) != 1 || evs[0].Type != "device_new" {
 		t.Fatalf("events=%+v", evs)
 	}
@@ -90,18 +90,18 @@ func TestAutoCreatesUnknownDevice(t *testing.T) {
 
 func TestOfflineAfterThreeMisses(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
 	e.RunSubnet(context.Background(), sn) // creates + online
 	fs.results = nil                      // device disappears
 	for i := 0; i < 3; i++ {
 		e.RunSubnet(context.Background(), sn)
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if rows[0].Online {
 		t.Fatal("should be offline after 3 misses")
 	}
-	evs, _ := st.ListEvents(10)
+	evs, _ := st.ListEvents(t.Context(), 10)
 	var hasOffline bool
 	for _, ev := range evs {
 		if ev.Type == "offline" {
@@ -115,7 +115,7 @@ func TestOfflineAfterThreeMisses(t *testing.T) {
 
 func TestIPChangeDetectedByMAC(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
 	e.RunSubnet(context.Background(), sn)
 	// same MAC shows up on a new IP
@@ -124,7 +124,7 @@ func TestIPChangeDetectedByMAC(t *testing.T) {
 	}
 	fs.results = []Result{{IP: "10.0.0.42", Alive: true, RTTms: 1.0}}
 	e.RunSubnet(context.Background(), sn)
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 1 {
 		t.Fatalf("must not duplicate device: %+v", rows)
 	}
@@ -146,13 +146,13 @@ func TestIPChangeDetectedByMAC(t *testing.T) {
 // verifies the stale old IP is retired from the subnet's occupancy.
 func TestAvailabilityStableAcrossIPChange(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
 	if err := e.RunSubnet(context.Background(), sn); err != nil {
 		t.Fatal(err)
 	}
 
-	iface, ok, err := st.FindIfaceByMAC("bc:24:11:00:00:01")
+	iface, ok, err := st.FindIfaceByMAC(t.Context(), "bc:24:11:00:00:01")
 	if err != nil || !ok {
 		t.Fatalf("iface not found: ok=%v err=%v", ok, err)
 	}
@@ -167,7 +167,7 @@ func TestAvailabilityStableAcrossIPChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pct, err := st.AvailabilityPct(ifID, "1970-01-01T00:00:00Z")
+	pct, err := st.AvailabilityPct(t.Context(), ifID, "1970-01-01T00:00:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestAvailabilityStableAcrossIPChange(t *testing.T) {
 		t.Fatalf("availability degraded across IP change: got %v, want 100", pct)
 	}
 
-	known, err := st.ListSubnetIfaceIPs(snID)
+	known, err := st.ListSubnetIfaceIPs(t.Context(), snID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,9 +201,9 @@ func TestAvailabilityStableAcrossIPChange(t *testing.T) {
 // demand.
 func TestManualTriggerRunsDisabledSubnet(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	sn.ScanEnabled = false
-	if err := st.UpdateSubnet(sn); err != nil {
+	if err := st.UpdateSubnet(t.Context(), sn); err != nil {
 		t.Fatal(err)
 	}
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
@@ -223,7 +223,7 @@ func TestManualTriggerRunsDisabledSubnet(t *testing.T) {
 	if fs.calls == 0 {
 		t.Fatal("sweeper was not called for a manually-triggered disabled subnet")
 	}
-	rows, err := st.ListDevices()
+	rows, err := st.ListDevices(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,10 +235,10 @@ func TestManualTriggerRunsDisabledSubnet(t *testing.T) {
 func TestSchedulerRecordsScanStatus(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
 	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
-	sn, _ := st.GetSubnet(snID)
+	sn, _ := st.GetSubnet(t.Context(), snID)
 	sched := NewScheduler(e, st)
 	sched.run(context.Background(), sn, false) // one sweep
-	list, _ := st.ListIntegrationStatus()
+	list, _ := st.ListIntegrationStatus(t.Context())
 	if len(list) != 1 || list[0].Name != "scan" || !list[0].OK {
 		t.Fatalf("scan status=%+v", list)
 	}

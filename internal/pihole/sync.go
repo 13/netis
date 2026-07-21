@@ -48,7 +48,7 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return Stats{}, err
 	}
-	subnets, err := s.store.ListSubnets()
+	subnets, err := s.store.ListSubnets(ctx)
 	if err != nil {
 		return Stats{}, err
 	}
@@ -64,7 +64,7 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		if !ok {
 			continue
 		}
-		created, err := s.upsertByMAC(r.MAC, r.IP, r.Hostname, snID, "static")
+		created, err := s.upsertByMAC(ctx, r.MAC, r.IP, r.Hostname, snID, "static")
 		if err != nil {
 			return Stats{}, err
 		}
@@ -82,19 +82,19 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 			// a reservation already assigned this IP as static; still enrich
 			// the hostname but do not touch the assignment kind
 			if l.Hostname != "" {
-				iface, found, err := s.store.FindIfaceByMAC(l.MAC)
+				iface, found, err := s.store.FindIfaceByMAC(ctx, l.MAC)
 				if err != nil {
 					return Stats{}, err
 				}
 				if found {
-					if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, l.Hostname); err != nil {
+					if err := s.store.SetIfaceHostnameIfEmpty(ctx, iface.ID, l.Hostname); err != nil {
 						return Stats{}, err
 					}
 				}
 			}
 			continue
 		}
-		created, err := s.upsertByMAC(l.MAC, l.IP, l.Hostname, snID, "dhcp")
+		created, err := s.upsertByMAC(ctx, l.MAC, l.IP, l.Hostname, snID, "dhcp")
 		if err != nil {
 			return Stats{}, err
 		}
@@ -107,17 +107,17 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		if !ok {
 			continue
 		}
-		iface, found, err := s.store.FindIfaceByIP(snID, rec.IP)
+		iface, found, err := s.store.FindIfaceByIP(ctx, snID, rec.IP)
 		if err != nil {
 			return Stats{}, err
 		}
 		if !found {
 			continue // never create a device from a DNS record alone
 		}
-		if err := s.store.SetIfaceHostnameIfEmpty(iface.ID, rec.Name); err != nil {
+		if err := s.store.SetIfaceHostnameIfEmpty(ctx, iface.ID, rec.Name); err != nil {
 			return Stats{}, err
 		}
-		if err := s.store.SetCustomField(iface.DeviceID, "pihole_dns", rec.Name); err != nil {
+		if err := s.store.SetCustomField(ctx, iface.DeviceID, "pihole_dns", rec.Name); err != nil {
 			return Stats{}, err
 		}
 	}
@@ -129,17 +129,17 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 // failure is returned so RunOnce surfaces it (and Start emits scan_error)
 // rather than silently reporting a healthy cycle. The returned bool reports
 // whether a new device was created (vs. an existing one enriched).
-func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string) (bool, error) {
-	iface, found, err := s.store.FindIfaceByMAC(mac)
+func (s *Sync) upsertByMAC(ctx context.Context, mac, ip, hostname string, subnetID int64, kind string) (bool, error) {
+	iface, found, err := s.store.FindIfaceByMAC(ctx, mac)
 	if err != nil {
 		return false, err
 	}
 	if found {
-		if err := s.store.UpsertIPAssignment(iface.ID, subnetID, ip, kind); err != nil {
+		if err := s.store.UpsertIPAssignment(ctx, iface.ID, subnetID, ip, kind); err != nil {
 			return false, err
 		}
 		if hostname != "" {
-			return false, s.store.SetIfaceHostnameIfEmpty(iface.ID, hostname)
+			return false, s.store.SetIfaceHostnameIfEmpty(ctx, iface.ID, hostname)
 		}
 		return false, nil
 	}
@@ -147,7 +147,7 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	if name == "" {
 		name = "pihole-" + mac
 	}
-	devID, err := s.store.CreateDevice(store.Device{Name: name, Kind: "other", Source: "pihole"})
+	devID, err := s.store.CreateDevice(ctx, store.Device{Name: name, Kind: "other", Source: "pihole"})
 	if err != nil {
 		return false, err
 	}
@@ -156,14 +156,14 @@ func (s *Sync) upsertByMAC(mac, ip, hostname string, subnetID int64, kind string
 	if hostname != "" {
 		hp = &hostname
 	}
-	ifID, err := s.store.AddIface(devID, &m, hp)
+	ifID, err := s.store.AddIface(ctx, devID, &m, hp)
 	if err != nil {
 		return false, err
 	}
-	if err := s.store.UpsertIPAssignment(ifID, subnetID, ip, kind); err != nil {
+	if err := s.store.UpsertIPAssignment(ctx, ifID, subnetID, ip, kind); err != nil {
 		return false, err
 	}
-	s.events.Emit("device_new", &devID, fmt.Sprintf("pihole device %s at %s", name, ip))
+	s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("pihole device %s at %s", name, ip))
 	return true, nil
 }
 
@@ -188,13 +188,13 @@ func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
 	return s.RunOnce(ctx)
 }
 
-func (s *Sync) recordStatus(stats Stats, err error) {
+func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	st := store.IntegrationStatus{Name: "pihole", LastRun: now}
 	if err != nil {
 		if !s.failing {
 			s.failing = true
-			s.events.Emit("scan_error", nil, "pihole sync failing: "+err.Error())
+			s.events.Emit(ctx, "scan_error", nil, "pihole sync failing: "+err.Error())
 		}
 		st.OK = false
 		st.Detail = err.Error()
@@ -204,7 +204,7 @@ func (s *Sync) recordStatus(stats Stats, err error) {
 		st.ItemCount = stats.Leases
 		st.Detail = fmt.Sprintf("%d leases, %d new", stats.Leases, stats.Created)
 	}
-	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
 		log.Printf("pihole status write: %v", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
@@ -214,7 +214,8 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
-		s.recordStatus(s.runAndCount(ctx))
+		stats, err := s.runAndCount(ctx)
+		s.recordStatus(ctx, stats, err)
 		select {
 		case <-ctx.Done():
 			return
