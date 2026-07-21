@@ -1,0 +1,722 @@
+{
+  "cmd/netis/main.go": {
+    "mtime": 1783886814.552245,
+    "ast_hash": "31acf01bf1d28bd353fc4d1ec9dbb5c4",
+    "semantic_hash": "31acf01bf1d28bd353fc4d1ec9dbb5c4"
+  },
+  "cmd/netis/main_test.go": {
+    "mtime": 1783886814.552245,
+    "ast_hash": "9ea8b7f53e0eb7e8f57535026e5642b7",
+    "semantic_hash": "9ea8b7f53e0eb7e8f57535026e5642b7"
+  },
+  "go.mod": {
+    "mtime": 1783829327.1445465,
+    "ast_hash": "07d2c655f3d188192ae26b692a35d011",
+    "semantic_hash": "07d2c655f3d188192ae26b692a35d011"
+  },
+  "internal/config/config.go": {
+    "mtime": 1783785299.6578557,
+    "ast_hash": "e9ea2f3a06ec03271e611f7a6e707062",
+    "semantic_hash": "e9ea2f3a06ec03271e611f7a6e707062"
+  },
+  "internal/config/config_test.go": {
+    "mtime": 1783785299.657916,
+    "ast_hash": "17c4830526a81882073330c7e6cabcef",
+    "semantic_hash": "17c4830526a81882073330c7e6cabcef"
+  },
+  "internal/events/broker.go": {
+    "mtime": 1783785299.657916,
+    "ast_hash": "2c4f9d1ca4b0b9ef0d12297b9d233a73",
+    "semantic_hash": "2c4f9d1ca4b0b9ef0d12297b9d233a73"
+  },
+  "internal/events/broker_test.go": {
+    "mtime": 1783785299.6579876,
+    "ast_hash": "b583b2b1f2c522e9328479c1164d6c3a",
+    "semantic_hash": "b583b2b1f2c522e9328479c1164d6c3a"
+  },
+  "internal/events/service.go": {
+    "mtime": 1783785299.6579876,
+    "ast_hash": "7f8e71f81f943f81ed2aa495ca146df8",
+    "semantic_hash": "7f8e71f81f943f81ed2aa495ca146df8"
+  },
+  "internal/events/service_test.go": {
+    "mtime": 1783785299.6579876,
+    "ast_hash": "eda13c5e1cfcd2a57eca7473a5985bd6",
+    "semantic_hash": "eda13c5e1cfcd2a57eca7473a5985bd6"
+  },
+  "internal/netdetect/detect.go": {
+    "mtime": 1783832875.6548913,
+    "ast_hash": "39d8bf171b784a345c62288a4bce9636",
+    "semantic_hash": "39d8bf171b784a345c62288a4bce9636"
+  },
+  "internal/netdetect/detect_test.go": {
+    "mtime": 1783832875.6552641,
+    "ast_hash": "da8b4149a5838c77161bcf3f0ed0de89",
+    "semantic_hash": "da8b4149a5838c77161bcf3f0ed0de89"
+  },
+  "internal/pihole/client.go": {
+    "mtime": 1783794780.8669834,
+    "ast_hash": "5324fb77ed40acf56ac38f7e40e48e1d",
+    "semantic_hash": "5324fb77ed40acf56ac38f7e40e48e1d"
+  },
+  "internal/pihole/client_test.go": {
+    "mtime": 1783794780.868571,
+    "ast_hash": "9856018989a137a3a9e622d9b748d38c",
+    "semantic_hash": "9856018989a137a3a9e622d9b748d38c"
+  },
+  "internal/pihole/sync.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "4694cabd53bdb6a19092e8b231c9e1c3",
+    "semantic_hash": "4694cabd53bdb6a19092e8b231c9e1c3"
+  },
+  "internal/pihole/sync_test.go": {
+    "mtime": 1783891871.6818867,
+    "ast_hash": "6f3560323da92ce432c661da0d2e0d64",
+    "semantic_hash": "6f3560323da92ce432c661da0d2e0d64"
+  },
+  "internal/proxmox/client.go": {
+    "mtime": 1783785299.6579876,
+    "ast_hash": "0a55ad04beef35d1350fb37d39ac1d1e",
+    "semantic_hash": "0a55ad04beef35d1350fb37d39ac1d1e"
+  },
+  "internal/proxmox/client_test.go": {
+    "mtime": 1783785299.6581082,
+    "ast_hash": "3833da1560981c98c3f4a2f65b1d613a",
+    "semantic_hash": "3833da1560981c98c3f4a2f65b1d613a"
+  },
+  "internal/proxmox/sync.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "5dac333501a892f63d74e67bb188df39",
+    "semantic_hash": "5dac333501a892f63d74e67bb188df39"
+  },
+  "internal/proxmox/sync_test.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "756c22ccb9d672a2a1017e30a0973f08",
+    "semantic_hash": "756c22ccb9d672a2a1017e30a0973f08"
+  },
+  "internal/scan/arp.go": {
+    "mtime": 1783785299.6581082,
+    "ast_hash": "7f05770e49da0e641a212c0df7b885a7",
+    "semantic_hash": "7f05770e49da0e641a212c0df7b885a7"
+  },
+  "internal/scan/arp_test.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "f40a6f5b8e73018729bed197242a4cc0",
+    "semantic_hash": "f40a6f5b8e73018729bed197242a4cc0"
+  },
+  "internal/scan/engine.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "f40322d8c5db560ecd4e24db0364cdf3",
+    "semantic_hash": "f40322d8c5db560ecd4e24db0364cdf3"
+  },
+  "internal/scan/engine_test.go": {
+    "mtime": 1783855247.0366323,
+    "ast_hash": "e9324b1257ae603f3a3f9dcc73fd02a5",
+    "semantic_hash": "e9324b1257ae603f3a3f9dcc73fd02a5"
+  },
+  "internal/scan/oui.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "185f556a6167771ab7233c10f79a62ce",
+    "semantic_hash": "185f556a6167771ab7233c10f79a62ce"
+  },
+  "internal/scan/oui_test.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "9bc0301d1e8f997e613467f8b8e610f5",
+    "semantic_hash": "9bc0301d1e8f997e613467f8b8e610f5"
+  },
+  "internal/scan/ports.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "d7eef0302c34178b81799c80c90ae392",
+    "semantic_hash": "d7eef0302c34178b81799c80c90ae392"
+  },
+  "internal/scan/ports_test.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "ad774d3d9babbc39b798433e38d671c8",
+    "semantic_hash": "ad774d3d9babbc39b798433e38d671c8"
+  },
+  "internal/scan/resolve.go": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "9352069e323ebe1add2dbf3654799ff9",
+    "semantic_hash": "9352069e323ebe1add2dbf3654799ff9"
+  },
+  "internal/scan/scheduler.go": {
+    "mtime": 1783855247.0366323,
+    "ast_hash": "78b6e030f6737a80be602a09eb10b376",
+    "semantic_hash": "78b6e030f6737a80be602a09eb10b376"
+  },
+  "internal/scan/sweep.go": {
+    "mtime": 1783859117.2833846,
+    "ast_hash": "7abe42b8bf0e42287378fdc7e51a8fb7",
+    "semantic_hash": "7abe42b8bf0e42287378fdc7e51a8fb7"
+  },
+  "internal/scan/sweep_test.go": {
+    "mtime": 1783859117.2843847,
+    "ast_hash": "dc984842d81c7eaf346c3cc2467fa34e",
+    "semantic_hash": "dc984842d81c7eaf346c3cc2467fa34e"
+  },
+  "internal/store/device.go": {
+    "mtime": 1783891871.6818867,
+    "ast_hash": "9d5cebb014dd44839d6650907d8846fd",
+    "semantic_hash": "9d5cebb014dd44839d6650907d8846fd"
+  },
+  "internal/store/device_test.go": {
+    "mtime": 1783891871.6818867,
+    "ast_hash": "16d930a4126217bc3f6bcd82881b2c16",
+    "semantic_hash": "16d930a4126217bc3f6bcd82881b2c16"
+  },
+  "internal/store/event.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "1bde5d7626f8f492959fb3cfb5509100",
+    "semantic_hash": "1bde5d7626f8f492959fb3cfb5509100"
+  },
+  "internal/store/grid.go": {
+    "mtime": 1783859117.2843847,
+    "ast_hash": "032227e22265c53dd13281fb5f907597",
+    "semantic_hash": "032227e22265c53dd13281fb5f907597"
+  },
+  "internal/store/grid_test.go": {
+    "mtime": 1783859117.2843847,
+    "ast_hash": "15baa9eacbee808b8885118440f33076",
+    "semantic_hash": "15baa9eacbee808b8885118440f33076"
+  },
+  "internal/store/meta.go": {
+    "mtime": 1783845566.2871416,
+    "ast_hash": "5a8682cf67630db247df4176fca8b212",
+    "semantic_hash": "5a8682cf67630db247df4176fca8b212"
+  },
+  "internal/store/meta_test.go": {
+    "mtime": 1783845566.2871416,
+    "ast_hash": "8e81546cfba23da763fafd88d69d7fce",
+    "semantic_hash": "8e81546cfba23da763fafd88d69d7fce"
+  },
+  "internal/store/migrations/0001_init.sql": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "d93c94315b4ef55385fb48991118b47a",
+    "semantic_hash": "d93c94315b4ef55385fb48991118b47a"
+  },
+  "internal/store/migrations/0002_pihole_source.sql": {
+    "mtime": 1783794780.868571,
+    "ast_hash": "e5c5a556932c82983aff7b9af6e5fc6c",
+    "semantic_hash": "e5c5a556932c82983aff7b9af6e5fc6c"
+  },
+  "internal/store/migrations/0003_integration_status.sql": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "ac69eb45ee4aa5d9640336ae80be5406",
+    "semantic_hash": "ac69eb45ee4aa5d9640336ae80be5406"
+  },
+  "internal/store/migrations/0004_device_reviewed.sql": {
+    "mtime": 1783841899.8639317,
+    "ast_hash": "3ad7cc333bb058eb76a51a0df7cfbb1e",
+    "semantic_hash": "3ad7cc333bb058eb76a51a0df7cfbb1e"
+  },
+  "internal/store/migrations/0005_device_model_function.sql": {
+    "mtime": 1783849833.9753306,
+    "ast_hash": "eee495e7688625a3333d6431b49a31fe",
+    "semantic_hash": "eee495e7688625a3333d6431b49a31fe"
+  },
+  "internal/store/status.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "68d7bbb42ad77f54ca08f79b2b25493d",
+    "semantic_hash": "68d7bbb42ad77f54ca08f79b2b25493d"
+  },
+  "internal/store/status_integration.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "1c0d43e571512392cae509db9b352996",
+    "semantic_hash": "1c0d43e571512392cae509db9b352996"
+  },
+  "internal/store/status_integration_test.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "c6965884c3355bdc0256a77f0fad36fe",
+    "semantic_hash": "c6965884c3355bdc0256a77f0fad36fe"
+  },
+  "internal/store/status_test.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "df1d84c3caed4f367447ecc8ae857d61",
+    "semantic_hash": "df1d84c3caed4f367447ecc8ae857d61"
+  },
+  "internal/store/store.go": {
+    "mtime": 1783794780.868571,
+    "ast_hash": "67185bef683ae35d0e4236caa8fccc30",
+    "semantic_hash": "67185bef683ae35d0e4236caa8fccc30"
+  },
+  "internal/store/store_test.go": {
+    "mtime": 1783794780.868571,
+    "ast_hash": "7317edb743d6501c3be112cbc4c8b008",
+    "semantic_hash": "7317edb743d6501c3be112cbc4c8b008"
+  },
+  "internal/store/subnet.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "e76be8b6253276ae169f9bbf055de54f",
+    "semantic_hash": "e76be8b6253276ae169f9bbf055de54f"
+  },
+  "internal/store/subnet_test.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "ca5337ed4cd7421024f38ea35bacde42",
+    "semantic_hash": "ca5337ed4cd7421024f38ea35bacde42"
+  },
+  "internal/store/user.go": {
+    "mtime": 1783785299.658595,
+    "ast_hash": "1d821f5de10446778cfbb5296df54dcf",
+    "semantic_hash": "1d821f5de10446778cfbb5296df54dcf"
+  },
+  "internal/web/auth.go": {
+    "mtime": 1783832875.6552641,
+    "ast_hash": "10985746489e844491aaf4c8658593a2",
+    "semantic_hash": "10985746489e844491aaf4c8658593a2"
+  },
+  "internal/web/auth_test.go": {
+    "mtime": 1783878585.915324,
+    "ast_hash": "5374b88c77dcae786b18d14116ccaccb",
+    "semantic_hash": "5374b88c77dcae786b18d14116ccaccb"
+  },
+  "internal/web/dashboard.go": {
+    "mtime": 1783863087.3300467,
+    "ast_hash": "22e06cc897dbce99c8460fbdf2b2226d",
+    "semantic_hash": "22e06cc897dbce99c8460fbdf2b2226d"
+  },
+  "internal/web/dashboard_test.go": {
+    "mtime": 1783838247.0272706,
+    "ast_hash": "9627c5a97cd93b796a18c8e35d9cc5fd",
+    "semantic_hash": "9627c5a97cd93b796a18c8e35d9cc5fd"
+  },
+  "internal/web/devices.go": {
+    "mtime": 1783892433.2892427,
+    "ast_hash": "ef7da6f8062b6726c3819db03f0c7272",
+    "semantic_hash": "ef7da6f8062b6726c3819db03f0c7272"
+  },
+  "internal/web/devices_test.go": {
+    "mtime": 1783892433.2892427,
+    "ast_hash": "6a5aef1e2faa743ef03aef4dcb4fc727",
+    "semantic_hash": "6a5aef1e2faa743ef03aef4dcb4fc727"
+  },
+  "internal/web/eventspage.go": {
+    "mtime": 1783785299.6590269,
+    "ast_hash": "29ff35e49a74dd5b0e857f215c91fcac",
+    "semantic_hash": "29ff35e49a74dd5b0e857f215c91fcac"
+  },
+  "internal/web/grid.go": {
+    "mtime": 1783884271.1065347,
+    "ast_hash": "8725616f4463c215f41bb64a60035a10",
+    "semantic_hash": "8725616f4463c215f41bb64a60035a10"
+  },
+  "internal/web/grid_test.go": {
+    "mtime": 1783892433.2902427,
+    "ast_hash": "2b96fb7ffb351c570dc27d373414ec07",
+    "semantic_hash": "2b96fb7ffb351c570dc27d373414ec07"
+  },
+  "internal/web/integrations_run.go": {
+    "mtime": 1783876366.5144374,
+    "ast_hash": "a16c3234e3117ed979d6518b83aa2fb5",
+    "semantic_hash": "a16c3234e3117ed979d6518b83aa2fb5"
+  },
+  "internal/web/integrations_run_test.go": {
+    "mtime": 1783876366.5144374,
+    "ast_hash": "f692cf9ca348e5f569680daf09a38c62",
+    "semantic_hash": "f692cf9ca348e5f569680daf09a38c62"
+  },
+  "internal/web/scan_test.go": {
+    "mtime": 1783876366.5144374,
+    "ast_hash": "677326621ed642c1daf12883d567ee9a",
+    "semantic_hash": "677326621ed642c1daf12883d567ee9a"
+  },
+  "internal/web/server.go": {
+    "mtime": 1783883135.177234,
+    "ast_hash": "f230acc1bc14faa394cd3db7c3e132c9",
+    "semantic_hash": "f230acc1bc14faa394cd3db7c3e132c9"
+  },
+  "internal/web/server_test.go": {
+    "mtime": 1783785299.6590269,
+    "ast_hash": "182b4c416e6f315b26201e0bd84d2b95",
+    "semantic_hash": "182b4c416e6f315b26201e0bd84d2b95"
+  },
+  "internal/web/settings.go": {
+    "mtime": 1783893036.0518525,
+    "ast_hash": "0c0233622c2f14194afc7df0e27d60b4",
+    "semantic_hash": "0c0233622c2f14194afc7df0e27d60b4"
+  },
+  "internal/web/settings_test.go": {
+    "mtime": 1783893036.0518525,
+    "ast_hash": "a2e21e963d9a8030b9a2f8e7b2105ec6",
+    "semantic_hash": "a2e21e963d9a8030b9a2f8e7b2105ec6"
+  },
+  "internal/web/sse.go": {
+    "mtime": 1783785299.6590269,
+    "ast_hash": "b040ce2ce6b02e77aa659166adbf5d81",
+    "semantic_hash": "b040ce2ce6b02e77aa659166adbf5d81"
+  },
+  "internal/web/static/devices.js": {
+    "mtime": 1783841899.8659317,
+    "ast_hash": "52391446d78deda4e48b95e1e4a4748a",
+    "semantic_hash": "52391446d78deda4e48b95e1e4a4748a"
+  },
+  "internal/web/static/dialog.js": {
+    "mtime": 1783849833.9753306,
+    "ast_hash": "c9b87e548aa77383888adec0859b2cde",
+    "semantic_hash": "c9b87e548aa77383888adec0859b2cde"
+  },
+  "internal/web/static/htmx.min.js": {
+    "mtime": 1783785299.6594894,
+    "ast_hash": "b2e3e68dc3745aa9643a12d12fb40bfc",
+    "semantic_hash": "b2e3e68dc3745aa9643a12d12fb40bfc"
+  },
+  "internal/web/static/sse.js": {
+    "mtime": 1783785299.6594894,
+    "ast_hash": "7366cf9d4751c1f8d1e777047d15ea3c",
+    "semantic_hash": "7366cf9d4751c1f8d1e777047d15ea3c"
+  },
+  "internal/web/static/theme.js": {
+    "mtime": 1783838247.0282705,
+    "ast_hash": "f8883206277001e45ee8e5a81ada68ff",
+    "semantic_hash": "f8883206277001e45ee8e5a81ada68ff"
+  },
+  "internal/web/static/toasts.js": {
+    "mtime": 1783855247.0366323,
+    "ast_hash": "f750e8bf58256b7812ae13a6dcd50d4c",
+    "semantic_hash": "f750e8bf58256b7812ae13a6dcd50d4c"
+  },
+  "internal/web/subnets_test.go": {
+    "mtime": 1783863087.3300467,
+    "ast_hash": "db56ac74dea04fc81eb8f7ea460f69fa",
+    "semantic_hash": "db56ac74dea04fc81eb8f7ea460f69fa"
+  },
+  "internal/web/views/auth_templ.go": {
+    "mtime": 1783878585.915324,
+    "ast_hash": "046a630daf4cfa1df9aec7a9560c5e1f",
+    "semantic_hash": "046a630daf4cfa1df9aec7a9560c5e1f"
+  },
+  "internal/web/views/dashboard_templ.go": {
+    "mtime": 1783863087.3310466,
+    "ast_hash": "be4461a5985472e76044a9c11efad43b",
+    "semantic_hash": "be4461a5985472e76044a9c11efad43b"
+  },
+  "internal/web/views/devices_templ.go": {
+    "mtime": 1783892433.2902427,
+    "ast_hash": "0c36cc86483f4dc54a2792c1eb0b30cd",
+    "semantic_hash": "0c36cc86483f4dc54a2792c1eb0b30cd"
+  },
+  "internal/web/views/devices_test.go": {
+    "mtime": 1783841899.8659317,
+    "ast_hash": "47f127702a555810e398141c69d59627",
+    "semantic_hash": "47f127702a555810e398141c69d59627"
+  },
+  "internal/web/views/eventspage_templ.go": {
+    "mtime": 1783829257.303432,
+    "ast_hash": "6af7ae1ca74ef27e528e1bcfc4278a60",
+    "semantic_hash": "6af7ae1ca74ef27e528e1bcfc4278a60"
+  },
+  "internal/web/views/grid_templ.go": {
+    "mtime": 1783892433.2902427,
+    "ast_hash": "3fcc31782f112b82066493722b6322a1",
+    "semantic_hash": "3fcc31782f112b82066493722b6322a1"
+  },
+  "internal/web/views/helpers.go": {
+    "mtime": 1783838247.0282705,
+    "ast_hash": "e20848c6b56ad4cd95097b7f5f80da88",
+    "semantic_hash": "e20848c6b56ad4cd95097b7f5f80da88"
+  },
+  "internal/web/views/helpers_test.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "6784beebdd16eadc1a5842b321c39b79",
+    "semantic_hash": "6784beebdd16eadc1a5842b321c39b79"
+  },
+  "internal/web/views/icons.go": {
+    "mtime": 1783849833.9753306,
+    "ast_hash": "43d36c122e3b3ffb493452775d01c522",
+    "semantic_hash": "43d36c122e3b3ffb493452775d01c522"
+  },
+  "internal/web/views/icons_test.go": {
+    "mtime": 1783849833.9753306,
+    "ast_hash": "c4b5b272f1aa75f60aed4223f03ab5b3",
+    "semantic_hash": "c4b5b272f1aa75f60aed4223f03ab5b3"
+  },
+  "internal/web/views/layout_templ.go": {
+    "mtime": 1783881594.7021995,
+    "ast_hash": "6f89ae8ee4e88c36b90e4a8a414bd1b9",
+    "semantic_hash": "6f89ae8ee4e88c36b90e4a8a414bd1b9"
+  },
+  "internal/web/views/settings_templ.go": {
+    "mtime": 1783893036.0528524,
+    "ast_hash": "9ab5e8e17c59c8d5768df33fc44b2d88",
+    "semantic_hash": "9ab5e8e17c59c8d5768df33fc44b2d88"
+  },
+  "internal/web/views/welcome_templ.go": {
+    "mtime": 1783878585.915324,
+    "ast_hash": "1ae7723960519b27ab83b18ea3e65352",
+    "semantic_hash": "1ae7723960519b27ab83b18ea3e65352"
+  },
+  "internal/web/welcome.go": {
+    "mtime": 1783832875.6558912,
+    "ast_hash": "e8dcd3603ced5ccdc005f8682c20454a",
+    "semantic_hash": "e8dcd3603ced5ccdc005f8682c20454a"
+  },
+  "internal/web/welcome_test.go": {
+    "mtime": 1783878585.915324,
+    "ast_hash": "5ae69b90ad31a51d519df74134f90dc7",
+    "semantic_hash": "5ae69b90ad31a51d519df74134f90dc7"
+  },
+  "internal/wireguard/dump.go": {
+    "mtime": 1783785299.6596925,
+    "ast_hash": "4efbffc14068a4e8b630a3f2149b34a2",
+    "semantic_hash": "4efbffc14068a4e8b630a3f2149b34a2"
+  },
+  "internal/wireguard/dump_test.go": {
+    "mtime": 1783785299.6602652,
+    "ast_hash": "8090693ca4379109d47c615c94526745",
+    "semantic_hash": "8090693ca4379109d47c615c94526745"
+  },
+  "internal/wireguard/ssh.go": {
+    "mtime": 1783785299.6602652,
+    "ast_hash": "96395b72655fb2114a5a553be9801b16",
+    "semantic_hash": "96395b72655fb2114a5a553be9801b16"
+  },
+  "internal/wireguard/sync.go": {
+    "mtime": 1783826553.5214155,
+    "ast_hash": "f4ccdff93bcb8451d01fa48e3f758f6a",
+    "semantic_hash": "f4ccdff93bcb8451d01fa48e3f758f6a"
+  },
+  "internal/wireguard/sync_test.go": {
+    "mtime": 1783841899.8659317,
+    "ast_hash": "80cd3e71e623d5c4c7e19060f7b5a47d",
+    "semantic_hash": "80cd3e71e623d5c4c7e19060f7b5a47d"
+  },
+  "internal/wol/wol.go": {
+    "mtime": 1783785299.6602652,
+    "ast_hash": "3d53f7ba828decdab270069f8a0dbf90",
+    "semantic_hash": "3d53f7ba828decdab270069f8a0dbf90"
+  },
+  "internal/wol/wol_test.go": {
+    "mtime": 1783785299.6604187,
+    "ast_hash": "fd5dd1060e1d908f28a66f2177448513",
+    "semantic_hash": "fd5dd1060e1d908f28a66f2177448513"
+  },
+  "README.md": {
+    "mtime": 1783794780.8669834,
+    "ast_hash": "31abe33bd66ca78be10120786d9be2fe",
+    "semantic_hash": "31abe33bd66ca78be10120786d9be2fe"
+  },
+  "docs/superpowers/plans/2026-07-11-netis-dashboard-implementation.md": {
+    "mtime": 1783795775.9255183,
+    "ast_hash": "75815c6e72abc0339ab5032c849be6c8",
+    "semantic_hash": "75815c6e72abc0339ab5032c849be6c8"
+  },
+  "docs/superpowers/plans/2026-07-11-netis-implementation.md": {
+    "mtime": 1783775133.865081,
+    "ast_hash": "6ef21f7c78fbf9cff237b77a77366527",
+    "semantic_hash": "6ef21f7c78fbf9cff237b77a77366527"
+  },
+  "docs/superpowers/plans/2026-07-11-netis-pihole-implementation.md": {
+    "mtime": 1783790667.2462962,
+    "ast_hash": "59bd350196acc148260839f39f4313d3",
+    "semantic_hash": "59bd350196acc148260839f39f4313d3"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-design-system-implementation.md": {
+    "mtime": 1783835790.8560917,
+    "ast_hash": "069f6b2225e9045adbd5372aa4579138",
+    "semantic_hash": "069f6b2225e9045adbd5372aa4579138"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-device-detail-overhaul.md": {
+    "mtime": 1783881931.8688076,
+    "ast_hash": "a028f60d8066a000b53224130930056c",
+    "semantic_hash": "a028f60d8066a000b53224130930056c"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-device-dialog.md": {
+    "mtime": 1783843527.967948,
+    "ast_hash": "903ca050f89eed4aa6dbd571e1b2554b",
+    "semantic_hash": "903ca050f89eed4aa6dbd571e1b2554b"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-device-list-implementation.md": {
+    "mtime": 1783839946.0794573,
+    "ast_hash": "3c68d1dea4ab5c4a64ed3c13aceb0254",
+    "semantic_hash": "3c68d1dea4ab5c4a64ed3c13aceb0254"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-device-list-tree-sortable.md": {
+    "mtime": 1783883402.3694117,
+    "ast_hash": "7040951e7ab206636033d6b2507f57e1",
+    "semantic_hash": "7040951e7ab206636033d6b2507f57e1"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-device-model-fields.md": {
+    "mtime": 1783847859.5779324,
+    "ast_hash": "78c14ce895c5e286a2fc88f1041e3a26",
+    "semantic_hash": "78c14ce895c5e286a2fc88f1041e3a26"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-general-settings.md": {
+    "mtime": 1783892693.384906,
+    "ast_hash": "130d3fb4b747483ff2568920f3277978",
+    "semantic_hash": "130d3fb4b747483ff2568920f3277978"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-grid-click-device.md": {
+    "mtime": 1783892057.4864428,
+    "ast_hash": "65d28b708b054f3540cbe43695464974",
+    "semantic_hash": "65d28b708b054f3540cbe43695464974"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-hotload-integrations.md": {
+    "mtime": 1783886575.2624724,
+    "ast_hash": "d27d91d7adabe16b9d4118cdc50414b1",
+    "semantic_hash": "d27d91d7adabe16b9d4118cdc50414b1"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-integration-run-now.md": {
+    "mtime": 1783875706.4411817,
+    "ast_hash": "506992dd2a16d6380b014f78781746ba",
+    "semantic_hash": "506992dd2a16d6380b014f78781746ba"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-lease-persist-fix.md": {
+    "mtime": 1783891643.3309999,
+    "ast_hash": "7f9c38270dc8527d3aefca8b9078d9c8",
+    "semantic_hash": "7f9c38270dc8527d3aefca8b9078d9c8"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-onboarding-implementation.md": {
+    "mtime": 1783830522.4708312,
+    "ast_hash": "9a587b34342ebbe35d7f7156098bfaca",
+    "semantic_hash": "9a587b34342ebbe35d7f7156098bfaca"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-onboarding-redesign.md": {
+    "mtime": 1783878044.5958912,
+    "ast_hash": "69afbb5f98f980762950bb9e8dc965df",
+    "semantic_hash": "69afbb5f98f980762950bb9e8dc965df"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-quick-fixes.md": {
+    "mtime": 1783880836.5322623,
+    "ast_hash": "1a073465a2412e0d89225b3e94c7edc0",
+    "semantic_hash": "1a073465a2412e0d89225b3e94c7edc0"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-scanning-ux.md": {
+    "mtime": 1783853378.5510292,
+    "ast_hash": "920e83eccddaf62c791e4a0ab1b1bdb6",
+    "semantic_hash": "920e83eccddaf62c791e4a0ab1b1bdb6"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-settings-redesign.md": {
+    "mtime": 1783860906.7131715,
+    "ast_hash": "fdedb2aa6e4a381b037687355a056701",
+    "semantic_hash": "fdedb2aa6e4a381b037687355a056701"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-subnet-devices.md": {
+    "mtime": 1783877229.0819108,
+    "ast_hash": "3dd85df9d153e9d97f90c1e29caadb74",
+    "semantic_hash": "3dd85df9d153e9d97f90c1e29caadb74"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-subnet-grid-v2.md": {
+    "mtime": 1783856350.1031663,
+    "ast_hash": "81c680df1de14b8371de5e187f7f528d",
+    "semantic_hash": "81c680df1de14b8371de5e187f7f528d"
+  },
+  "docs/superpowers/plans/2026-07-12-netis-subnets-index.md": {
+    "mtime": 1783862662.723767,
+    "ast_hash": "05911626cecc3865612917cc0ef4de71",
+    "semantic_hash": "05911626cecc3865612917cc0ef4de71"
+  },
+  "docs/superpowers/specs/2026-07-11-netis-dashboard-design.md": {
+    "mtime": 1783795421.6635098,
+    "ast_hash": "706cc7f5c4b552dedbac6c4032144fe4",
+    "semantic_hash": "706cc7f5c4b552dedbac6c4032144fe4"
+  },
+  "docs/superpowers/specs/2026-07-11-netis-design.md": {
+    "mtime": 1783769317.8384054,
+    "ast_hash": "4877a605c7fd5fbfa07ff7a49d08f66b",
+    "semantic_hash": "4877a605c7fd5fbfa07ff7a49d08f66b"
+  },
+  "docs/superpowers/specs/2026-07-11-netis-pihole-design.md": {
+    "mtime": 1783789439.5952804,
+    "ast_hash": "57c6c86e7a749d344435d625b4b9d7fd",
+    "semantic_hash": "57c6c86e7a749d344435d625b4b9d7fd"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-design-system-design.md": {
+    "mtime": 1783835460.9113135,
+    "ast_hash": "49fad5b926f66ed500f4f2786ba4e7ee",
+    "semantic_hash": "49fad5b926f66ed500f4f2786ba4e7ee"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-device-detail-overhaul-design.md": {
+    "mtime": 1783881778.9100897,
+    "ast_hash": "d28e78d93c6951f16a927e836e6b1d78",
+    "semantic_hash": "d28e78d93c6951f16a927e836e6b1d78"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-device-dialog-design.md": {
+    "mtime": 1783843066.096184,
+    "ast_hash": "3a23db79446be25c7c1578568abc628a",
+    "semantic_hash": "3a23db79446be25c7c1578568abc628a"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-device-list-design.md": {
+    "mtime": 1783839485.1902058,
+    "ast_hash": "6930285a2c1e8069b016436098eb844b",
+    "semantic_hash": "6930285a2c1e8069b016436098eb844b"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-device-list-tree-sortable-design.md": {
+    "mtime": 1783883284.7571115,
+    "ast_hash": "4cb3f08143bb1b7030926d2d6467d24f",
+    "semantic_hash": "4cb3f08143bb1b7030926d2d6467d24f"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-device-model-fields-design.md": {
+    "mtime": 1783847346.1642597,
+    "ast_hash": "1482a9d1a5fa4d5515f35d321988d535",
+    "semantic_hash": "1482a9d1a5fa4d5515f35d321988d535"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-general-settings-design.md": {
+    "mtime": 1783892630.044739,
+    "ast_hash": "d75b2c97ea3a085aa7d8364a5926afdc",
+    "semantic_hash": "d75b2c97ea3a085aa7d8364a5926afdc"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-grid-click-device-design.md": {
+    "mtime": 1783891993.085335,
+    "ast_hash": "0246836096b804fc525ba3ebc788a1c8",
+    "semantic_hash": "0246836096b804fc525ba3ebc788a1c8"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-hotload-integrations-design.md": {
+    "mtime": 1783886541.31237,
+    "ast_hash": "2c5d92b166e3310b2b76a6f6b109b4cf",
+    "semantic_hash": "2c5d92b166e3310b2b76a6f6b109b4cf"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-integration-run-now-design.md": {
+    "mtime": 1783875523.8863888,
+    "ast_hash": "a5d764ce12f7a8f28960e922486d7e17",
+    "semantic_hash": "a5d764ce12f7a8f28960e922486d7e17"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-lease-persist-fix-design.md": {
+    "mtime": 1783891582.4750001,
+    "ast_hash": "4742e88bf50225a497f0f54784d242ff",
+    "semantic_hash": "4742e88bf50225a497f0f54784d242ff"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-onboarding-design.md": {
+    "mtime": 1783830207.3784585,
+    "ast_hash": "c3d45fe012b96a423539e3ff0e06dc09",
+    "semantic_hash": "c3d45fe012b96a423539e3ff0e06dc09"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-onboarding-redesign-design.md": {
+    "mtime": 1783877916.084907,
+    "ast_hash": "65a28f9ce728096893ea185079b15e86",
+    "semantic_hash": "65a28f9ce728096893ea185079b15e86"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-quick-fixes-design.md": {
+    "mtime": 1783880730.2908428,
+    "ast_hash": "f7a1cacac42a6f0b91cd7acf6be1c6ac",
+    "semantic_hash": "f7a1cacac42a6f0b91cd7acf6be1c6ac"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-scanning-ux-design.md": {
+    "mtime": 1783852742.911651,
+    "ast_hash": "fdbdfd8fa6518fbde15ada1d24399396",
+    "semantic_hash": "fdbdfd8fa6518fbde15ada1d24399396"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-settings-redesign-design.md": {
+    "mtime": 1783860502.0542104,
+    "ast_hash": "605a181f4947bf210c801663fd09e249",
+    "semantic_hash": "605a181f4947bf210c801663fd09e249"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-subnet-devices-design.md": {
+    "mtime": 1783877065.6077278,
+    "ast_hash": "136e2d8cd501d87a32d27f4ab96263e2",
+    "semantic_hash": "136e2d8cd501d87a32d27f4ab96263e2"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-subnet-grid-v2-design.md": {
+    "mtime": 1783855992.096382,
+    "ast_hash": "29418afc54f0e09af7d4951f941e4212",
+    "semantic_hash": "29418afc54f0e09af7d4951f941e4212"
+  },
+  "docs/superpowers/specs/2026-07-12-netis-subnets-index-design.md": {
+    "mtime": 1783862521.8913507,
+    "ast_hash": "25618b8a8315c9dc50b2e7cd397acd1f",
+    "semantic_hash": "25618b8a8315c9dc50b2e7cd397acd1f"
+  },
+  "internal/scan/oui_data.txt": {
+    "mtime": 1783785299.6582248,
+    "ast_hash": "f0e525a5c77f06d00429cf11c0e7a63a",
+    "semantic_hash": "f0e525a5c77f06d00429cf11c0e7a63a"
+  }
+}

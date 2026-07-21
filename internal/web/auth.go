@@ -46,6 +46,10 @@ func (rl *rateLimiter) allow(ip string) bool {
 			kept = append(kept, t)
 		}
 	}
+	if len(kept) == 0 {
+		delete(rl.attempts, ip)
+		return true
+	}
 	rl.attempts[ip] = kept
 	return len(kept) < 5
 }
@@ -53,7 +57,30 @@ func (rl *rateLimiter) allow(ip string) bool {
 func (rl *rateLimiter) fail(ip string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+	// Bound the map: an IP that only ever fails is never visited by allow's
+	// per-key pruning, so sweep stale keys once the map grows large.
+	if len(rl.attempts) > 1024 {
+		cutoff := time.Now().Add(-time.Minute)
+		for k, ts := range rl.attempts {
+			live := false
+			for _, t := range ts {
+				if t.After(cutoff) {
+					live = true
+					break
+				}
+			}
+			if !live {
+				delete(rl.attempts, k)
+			}
+		}
+	}
 	rl.attempts[ip] = append(rl.attempts[ip], time.Now())
+}
+
+// secureRequest reports whether the request arrived over TLS, directly or via
+// a reverse proxy, so session cookies can carry the Secure flag when it works.
+func secureRequest(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 func clientIP(r *http.Request) string {
@@ -165,6 +192,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name: "netis_session", Value: token, Path: "/",
 			HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires,
+			Secure: secureRequest(r),
 		})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -178,7 +206,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("netis_session"); err == nil {
 		s.store.DeleteSession(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: "netis_session", Value: "", Path: "/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{
+		Name: "netis_session", Value: "", Path: "/", MaxAge: -1,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secureRequest(r),
+	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
