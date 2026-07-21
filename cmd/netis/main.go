@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"netis/internal/config"
@@ -131,13 +135,36 @@ func main() {
 		OfflineAfter: offlineAfter,
 	}
 	sched := scan.NewScheduler(engine, st)
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	go sched.Start(ctx)
 
 	runNow := newIntegrationRunner(st, evs)
 	startIntegrationSyncs(ctx, runNow, time.Minute)
 
-	srv := web.NewServer(st, broker, sched, runNow)
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           web.NewServer(st, broker, sched, runNow).Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		// Request contexts derive from ctx so open SSE streams end on
+		// SIGTERM and Shutdown can drain instead of hanging on them.
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
 	log.Printf("netis listening on %s", cfg.Addr)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Handler()))
+
+	select {
+	case err := <-errCh:
+		log.Fatalf("http server: %v", err)
+	case <-ctx.Done():
+	}
+	log.Printf("netis shutting down")
+	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutCtx); err != nil {
+		log.Printf("shutdown: %v", err)
+		srv.Close()
+	}
 }

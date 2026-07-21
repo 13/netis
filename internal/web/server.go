@@ -90,4 +90,24 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	return s
 }
 
-func (s *Server) Handler() http.Handler { return s.requireAuth(s.mux) }
+func (s *Server) Handler() http.Handler {
+	cop := http.NewCrossOriginProtection()
+	return securityHeaders(cop.Handler(s.requireAuth(s.mux)))
+}
+
+// securityHeaders sets baseline browser hardening headers on every response.
+// CSP allows inline script/style and eval because the layout bootstraps the
+// theme inline and htmx compiles hx-on attributes with Function().
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "+
+				"frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		next.ServeHTTP(w, r)
+	})
+}
