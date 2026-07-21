@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -10,12 +11,12 @@ import (
 	"netis/internal/web/views"
 )
 
-func (s *Server) availableDetected() []netdetect.Detected {
+func (s *Server) availableDetected(ctx context.Context) []netdetect.Detected {
 	detected, err := s.detect()
 	if err != nil {
 		return nil
 	}
-	subnets, err := s.store.ListSubnets()
+	subnets, err := s.store.ListSubnets(ctx)
 	if err != nil {
 		return nil
 	}
@@ -34,10 +35,10 @@ func (s *Server) availableDetected() []netdetect.Detected {
 
 func (s *Server) handleWelcome(w http.ResponseWriter, r *http.Request) {
 	u, _ := userFrom(r)
-	views.WelcomeSubnets(u.Username, s.availableDetected()).Render(r.Context(), w)
+	views.WelcomeSubnets(u.Username, s.availableDetected(r.Context())).Render(r.Context(), w)
 }
 
-func (s *Server) createDetectedSubnet(cidr, iface string) {
+func (s *Server) createDetectedSubnet(ctx context.Context, cidr, iface string) {
 	prefix, err := netip.ParsePrefix(strings.TrimSpace(cidr))
 	if err != nil {
 		return
@@ -46,7 +47,7 @@ func (s *Server) createDetectedSubnet(cidr, iface string) {
 	if name == "" {
 		name = prefix.Masked().String()
 	}
-	s.store.CreateSubnet(store.Subnet{
+	s.store.CreateSubnet(ctx, store.Subnet{
 		CIDR: prefix.Masked().String(), Name: name, Kind: "lan",
 		ScanEnabled: true, ScanIntervalSec: 120,
 	})
@@ -59,10 +60,10 @@ func (s *Server) handleWelcomeSubnets(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, v := range r.Form["subnet"] {
 		cidr, iface, _ := strings.Cut(v, "|")
-		s.createDetectedSubnet(cidr, iface)
+		s.createDetectedSubnet(r.Context(), cidr, iface)
 	}
 	if m := strings.TrimSpace(r.FormValue("manual_cidr")); m != "" {
-		s.createDetectedSubnet(m, "")
+		s.createDetectedSubnet(r.Context(), m, "")
 	}
 	http.Redirect(w, r, "/welcome/integrations", http.StatusSeeOther)
 }
@@ -85,7 +86,7 @@ func (s *Server) handleWelcomeSkip(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) finishOnboarding(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.SetSetting("onboarded", "1"); err != nil {
+	if err := s.store.SetSetting(r.Context(), "onboarded", "1"); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}

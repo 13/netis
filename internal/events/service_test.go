@@ -18,9 +18,9 @@ func TestEmitWritesAndBroadcasts(t *testing.T) {
 	ch, cancel := b.Subscribe()
 	defer cancel()
 
-	svc.Emit("scan_error", nil, "subnet unreachable")
+	svc.Emit(t.Context(), "scan_error", nil, "subnet unreachable")
 
-	evs, _ := st.ListEvents(5)
+	evs, _ := st.ListEvents(t.Context(), 5)
 	if len(evs) != 1 || evs[0].Type != "scan_error" {
 		t.Fatalf("db events: %+v", evs)
 	}

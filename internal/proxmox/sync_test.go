@@ -20,7 +20,7 @@ func TestSyncUpsertsGuestsIdempotently(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	// pve1 node + 2 guests
 	if len(rows) != 3 {
 		t.Fatalf("want 3 devices, got %+v", rows)
@@ -44,7 +44,7 @@ func TestSyncUpsertsGuestsIdempotently(t *testing.T) {
 	if len(vm.MACs) != 1 || vm.MACs[0] != "bc:24:11:aa:00:01" {
 		t.Fatalf("vm macs=%v", vm.MACs)
 	}
-	cfs, _ := st.ListCustomFields(vm.ID)
+	cfs, _ := st.ListCustomFields(t.Context(), vm.ID)
 	if len(cfs) != 1 || cfs[0].Key != "proxmox_status" || cfs[0].Value != "running" {
 		t.Fatalf("cfs=%+v", cfs)
 	}

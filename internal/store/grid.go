@@ -1,5 +1,7 @@
 package store
 
+import "context"
+
 type Occupant struct {
 	DeviceID   int64
 	DeviceName string
@@ -11,8 +13,8 @@ type Occupant struct {
 	Kind       string
 }
 
-func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
-	rows, err := s.DB.Query(`SELECT a.ip, f.id, d.id, d.name,
+func (s *Store) SubnetOccupancy(ctx context.Context, subnetID int64) (map[string]Occupant, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT a.ip, f.id, d.id, d.name,
 			COALESCE(f.mac,''), COALESCE(st.last_seen,''),
 			COALESCE(st.online,0), st.first_seen IS NOT NULL, a.kind
 		FROM ip_assignment a
@@ -55,8 +57,8 @@ func (s *Store) SubnetOccupancy(subnetID int64) (map[string]Occupant, error) {
 // SetIPKind updates the lease kind (static/dhcp) of an assignment identified by
 // its subnet and IP. Callers validate the kind; a 0-row update (no such
 // assignment) is not an error.
-func (s *Store) SetIPKind(subnetID int64, ip, kind string) error {
-	_, err := s.DB.Exec(`UPDATE ip_assignment SET kind=? WHERE subnet_id=? AND ip=?`,
+func (s *Store) SetIPKind(ctx context.Context, subnetID int64, ip, kind string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE ip_assignment SET kind=? WHERE subnet_id=? AND ip=?`,
 		kind, subnetID, ip)
 	return err
 }

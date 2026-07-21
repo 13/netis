@@ -46,8 +46,8 @@ func testServerRun(t *testing.T) (*Server, *store.Store, *recordingRunner) {
 
 func TestIntegrationRunPihole(t *testing.T) {
 	srv, st, run := testServerRun(t)
-	st.SetSetting("onboarded", "1")
-	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", OK: true, Detail: "48 leases, 2 new"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "pihole", OK: true, Detail: "48 leases, 2 new"})
 	rec := authedPost(t, srv, st, "/settings/integrations/pihole/run", url.Values{})
 	if rec.Code != 200 {
 		t.Fatalf("run code=%d body=%s", rec.Code, rec.Body.String())
@@ -65,7 +65,7 @@ func TestIntegrationRunPihole(t *testing.T) {
 
 func TestIntegrationRunBadName(t *testing.T) {
 	srv, st, _ := testServerRun(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	if rec := authedPost(t, srv, st, "/settings/integrations/bogus/run", url.Values{}); rec.Code != 400 {
 		t.Fatalf("bad name code=%d, want 400", rec.Code)
 	}
@@ -73,7 +73,7 @@ func TestIntegrationRunBadName(t *testing.T) {
 
 func TestIntegrationRunNilRunner(t *testing.T) {
 	srv, st := testServer(t) // nil runner
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/integrations/pihole/run", url.Values{})
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "not available") {
 		t.Fatalf("nil runner code=%d body=%s", rec.Code, rec.Body.String())
@@ -82,10 +82,10 @@ func TestIntegrationRunNilRunner(t *testing.T) {
 
 func TestIntegrationRunRequiresAdmin(t *testing.T) {
 	srv, st, _ := testServerRun(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	addAdmin(t, st)
-	uID, _ := st.CreateUser("eve", "h", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	uID, _ := st.CreateUser(t.Context(), "eve", "h", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	req := httptest.NewRequest("POST", "/settings/integrations/pihole/run", nil)
 	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
 	rec := httptest.NewRecorder()

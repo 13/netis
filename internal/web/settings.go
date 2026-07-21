@@ -26,12 +26,12 @@ var settingsKeys = []string{
 }
 
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
-	subnets, err := s.store.ListSubnets()
+	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	users, err := s.store.ListUsers()
+	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -42,14 +42,14 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 			// Never echo secrets back into the form.
 			continue
 		}
-		v, err := s.store.GetSetting(k)
+		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 		values[k] = v
 	}
-	offlineAfter, err := s.store.GetSetting("offline_after")
+	offlineAfter, err := s.store.GetSetting(r.Context(), "offline_after")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -57,7 +57,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	values["offline_after"] = offlineAfter
 
 	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled"} {
-		v, err := s.store.GetSetting(k)
+		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -87,7 +87,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 	var statuses map[string]store.IntegrationStatus
 	if tab == "integrations" {
-		list, err := s.store.ListIntegrationStatus()
+		list, err := s.store.ListIntegrationStatus(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -110,7 +110,7 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := s.store.CreateSubnet(sn); err != nil {
+	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -123,7 +123,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := s.store.GetSubnet(id); err != nil {
+	if _, err := s.store.GetSubnet(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -136,7 +136,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sn.ID = id
-	if err := s.store.UpdateSubnet(sn); err != nil {
+	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -175,7 +175,7 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := s.store.DeleteSubnet(id); err != nil {
+	if err := s.store.DeleteSubnet(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -200,7 +200,7 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 				v = ""
 			}
 		}
-		if err := s.store.SetSetting(k, v); err != nil {
+		if err := s.store.SetSetting(r.Context(), k, v); err != nil {
 			return err
 		}
 	}
@@ -232,7 +232,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	if _, err := s.store.CreateUser(username, string(hash), role); err != nil {
+	if _, err := s.store.CreateUser(r.Context(), username, string(hash), role); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -250,7 +250,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	// deletes of two different admins can't both succeed and leave zero
 	// admins (a TOCTOU race a separate ListUsers-then-DeleteUser sequence
 	// would be vulnerable to).
-	deleted, err := s.store.DeleteUserGuarded(id)
+	deleted, err := s.store.DeleteUserGuarded(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -258,7 +258,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	if !deleted {
 		// Distinguish "no such user" (404) from "refused: last admin"
 		// (400) for a useful error response.
-		users, err := s.store.ListUsers()
+		users, err := s.store.ListUsers(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -286,7 +286,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "offline_after must be an integer 1-10", 400)
 		return
 	}
-	if err := s.store.SetSetting("offline_after", strconv.Itoa(n)); err != nil {
+	if err := s.store.SetSetting(r.Context(), "offline_after", strconv.Itoa(n)); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -296,7 +296,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "default scan interval must be an integer >= 30", 400)
 			return
 		}
-		if err := s.store.SetSetting("default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
+		if err := s.store.SetSetting(r.Context(), "default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -306,7 +306,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad subnet kind", 400)
 			return
 		}
-		if err := s.store.SetSetting("default_subnet_kind", v); err != nil {
+		if err := s.store.SetSetting(r.Context(), "default_subnet_kind", v); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -316,7 +316,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad default scan enabled", 400)
 			return
 		}
-		if err := s.store.SetSetting("default_scan_enabled", v); err != nil {
+		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}

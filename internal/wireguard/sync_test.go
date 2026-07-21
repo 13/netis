@@ -17,7 +17,7 @@ func (f *fakeRunner) Run(ctx context.Context, cmd string) ([]byte, error) { retu
 func TestSyncCreatesPeersAndStatus(t *testing.T) {
 	st, _ := store.Open(":memory:")
 	defer st.Close()
-	st.CreateSubnet(store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
 
 	fresh := time.Now().Unix()
 	dump := "priv\tpub\t51820\toff\n" +
@@ -30,7 +30,7 @@ func TestSyncCreatesPeersAndStatus(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 2 {
 		t.Fatalf("devices=%+v", rows)
 	}
@@ -85,7 +85,7 @@ func TestRunOnceRespectsContextCancellation(t *testing.T) {
 func TestWireguardRunOnceStats(t *testing.T) {
 	st, _ := store.Open(":memory:")
 	defer st.Close()
-	st.CreateSubnet(store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
 	fresh := time.Now().Unix()
 	dump := "priv\tpub\t51820\toff\n" +
 		fmt.Sprintf("peerA=\t(none)\t1.2.3.4:51820\t10.6.0.2/32\t%d\t1\t1\toff\n", fresh) +

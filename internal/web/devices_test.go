@@ -25,7 +25,7 @@ func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form ur
 
 func TestDialogPersistsVendorModelFunction(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 
 	// The dialog exposes the three inputs.
 	body := authedGet(t, srv, st, "/devices/new").Body.String()
@@ -43,7 +43,7 @@ func TestDialogPersistsVendorModelFunction(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("create code=%d", rec.Code)
 	}
-	d, _ := st.GetDevice(1)
+	d, _ := st.GetDevice(t.Context(), 1)
 	if d.Vendor != "TP-Link" || d.Model != "ARCHER-A8 v1" || d.Function != "AP Dachboden CH:1,36" {
 		t.Fatalf("create persisted %+v", d)
 	}
@@ -56,7 +56,7 @@ func TestDialogPersistsVendorModelFunction(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("update code=%d", rec.Code)
 	}
-	d2, _ := st.GetDevice(1)
+	d2, _ := st.GetDevice(t.Context(), 1)
 	if d2.Vendor != "TP-Link Corp" || d2.Model != "ARCHER-C7 v5" || d2.Function != "AP Garten" {
 		t.Fatalf("update persisted %+v", d2)
 	}
@@ -64,7 +64,7 @@ func TestDialogPersistsVendorModelFunction(t *testing.T) {
 
 func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	for _, path := range []string{"/devices/999/wol", "/devices/999/portscan"} {
 		rec := authedPost(t, srv, st, path, url.Values{})
 		if rec.Code != http.StatusNotFound {
@@ -75,9 +75,9 @@ func TestWOLAndPortScanUnknownDevice404(t *testing.T) {
 
 func TestWOLDeviceWithoutMAC400(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "nomac", Kind: "other", Source: "manual"})
-	st.AddIface(devID, nil, nil) // iface but no MAC
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "nomac", Kind: "other", Source: "manual"})
+	st.AddIface(t.Context(), devID, nil, nil) // iface but no MAC
 	rec := authedPost(t, srv, st, "/devices/1/wol", url.Values{})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("WOL on device without MAC = %d, want 400", rec.Code)
@@ -87,8 +87,8 @@ func TestWOLDeviceWithoutMAC400(t *testing.T) {
 
 func TestDetailPageHasEditButtonNoInlineForm(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Notes: "shelf", Source: "manual"})
 	body := authedGet(t, srv, st, "/devices/1").Body.String()
 
 	if !strings.Contains(body, `hx-get="/devices/1/edit"`) {
@@ -106,14 +106,14 @@ func TestDetailPageHasEditButtonNoInlineForm(t *testing.T) {
 
 func TestCreateAndShowDevice(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/devices", url.Values{
 		"name": {"office-switch"}, "kind": {"switch"}, "notes": {"rack top"},
 	})
 	if rec.Code != 303 {
 		t.Fatalf("create code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rows, _ := st.ListDevices()
+	rows, _ := st.ListDevices(t.Context())
 	if len(rows) != 1 || rows[0].Kind != "switch" {
 		t.Fatalf("rows=%+v", rows)
 	}
@@ -125,9 +125,9 @@ func TestCreateAndShowDevice(t *testing.T) {
 
 func TestDeviceListFilter(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateDevice(store.Device{Name: "alpha", Kind: "computer", Source: "manual"})
-	st.CreateDevice(store.Device{Name: "beta", Kind: "phone", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateDevice(t.Context(), store.Device{Name: "alpha", Kind: "computer", Source: "manual"})
+	st.CreateDevice(t.Context(), store.Device{Name: "beta", Kind: "phone", Source: "manual"})
 	rec := authedGet(t, srv, st, "/devices?q=alp")
 	body := rec.Body.String()
 	if !strings.Contains(body, "alpha") || strings.Contains(body, "beta") {
@@ -137,12 +137,12 @@ func TestDeviceListFilter(t *testing.T) {
 
 func TestDeviceListDefaultSortIPNumeric(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
 	mk := func(name, ip string) {
-		d, _ := st.CreateDevice(store.Device{Name: name, Kind: "other", Source: "manual"})
-		f, _ := st.AddIface(d, nil, nil)
-		st.AssignIP(f, snID, ip, "dhcp")
+		d, _ := st.CreateDevice(t.Context(), store.Device{Name: name, Kind: "other", Source: "manual"})
+		f, _ := st.AddIface(t.Context(), d, nil, nil)
+		st.AssignIP(t.Context(), f, snID, ip, "dhcp")
 	}
 	mk("c", "10.0.0.100")
 	mk("a", "10.0.0.2")
@@ -157,12 +157,12 @@ func TestDeviceListDefaultSortIPNumeric(t *testing.T) {
 
 func TestDeviceListLeaseChipsAndGrid(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
-	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	f, _ := st.AddIface(d, nil, nil)
-	st.AssignIP(f, snID, "10.0.0.5", "static")
-	st.AssignIP(f, snID, "10.0.0.6", "dhcp")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(t.Context(), d, nil, nil)
+	st.AssignIP(t.Context(), f, snID, "10.0.0.5", "static")
+	st.AssignIP(t.Context(), f, snID, "10.0.0.6", "dhcp")
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	for _, want := range []string{"chip static", "chip", `id="dev-grid"`, `id="dev-list"`, `class="seg"`} {
 		if !strings.Contains(body, want) {
@@ -173,8 +173,8 @@ func TestDeviceListLeaseChipsAndGrid(t *testing.T) {
 
 func TestDeviceListNewMarker(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateDevice(t.Context(), store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	if !strings.Contains(body, "new") {
 		t.Fatal("unreviewed scan device should show a 'new' marker")
@@ -183,8 +183,8 @@ func TestDeviceListNewMarker(t *testing.T) {
 
 func TestApproveDevice(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "unknown-bb", Kind: "other", Source: "scan"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "unknown-bb", Kind: "other", Source: "scan"})
 	// The unreviewed device shows an Approve control.
 	if !strings.Contains(authedGet(t, srv, st, "/devices").Body.String(), "/devices/1/approve") {
 		t.Fatal("unreviewed device should show an Approve control")
@@ -193,7 +193,7 @@ func TestApproveDevice(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("approve code=%d", rec.Code)
 	}
-	d, _ := st.GetDevice(devID)
+	d, _ := st.GetDevice(t.Context(), devID)
 	if !d.Reviewed {
 		t.Fatal("approve did not set reviewed")
 	}
@@ -205,11 +205,11 @@ func TestApproveDevice(t *testing.T) {
 
 func TestApproveRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	addAdmin(t, st)
-	st.CreateDevice(store.Device{Name: "unknown-cc", Kind: "other", Source: "scan"})
-	uID, _ := st.CreateUser("eve", "h", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	st.CreateDevice(t.Context(), store.Device{Name: "unknown-cc", Kind: "other", Source: "scan"})
+	uID, _ := st.CreateUser(t.Context(), "eve", "h", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	req := httptest.NewRequest("POST", "/devices/1/approve", nil)
 	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
 	rec := httptest.NewRecorder()
@@ -221,13 +221,13 @@ func TestApproveRequiresAdmin(t *testing.T) {
 
 func TestGridShowsLowestIP(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
-	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	f, _ := st.AddIface(d, nil, nil)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(t.Context(), d, nil, nil)
 	// Assign in non-ascending order so the insertion-order index 0 would be wrong.
-	st.AssignIP(f, snID, "10.0.0.50", "dhcp")
-	st.AssignIP(f, snID, "10.0.0.5", "static")
+	st.AssignIP(t.Context(), f, snID, "10.0.0.50", "dhcp")
+	st.AssignIP(t.Context(), f, snID, "10.0.0.5", "static")
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	gridIdx := strings.Index(body, `id="dev-grid"`)
 	if gridIdx < 0 {
@@ -244,8 +244,8 @@ func TestGridShowsLowestIP(t *testing.T) {
 
 func TestApproveClearsDashboardUnknown(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "unknown-aa", Kind: "other", Source: "scan"})
 
 	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
 	if err != nil {
@@ -264,7 +264,7 @@ func TestApproveClearsDashboardUnknown(t *testing.T) {
 		t.Fatal("unknown device missing from attention list before approve")
 	}
 
-	if err := st.SetDeviceReviewed(devID, true); err != nil {
+	if err := st.SetDeviceReviewed(t.Context(), devID, true); err != nil {
 		t.Fatal(err)
 	}
 	data2, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
@@ -283,7 +283,7 @@ func TestApproveClearsDashboardUnknown(t *testing.T) {
 
 func TestApproveNonexistentDevice404(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/devices/999/approve", url.Values{})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("approve nonexistent device code=%d, want 404", rec.Code)
@@ -292,8 +292,8 @@ func TestApproveNonexistentDevice404(t *testing.T) {
 
 func TestDeviceListShowsStoredIcon(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateDevice(store.Device{Name: "console", Kind: "other", Icon: "🎮", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateDevice(t.Context(), store.Device{Name: "console", Kind: "other", Icon: "🎮", Source: "manual"})
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	if !strings.Contains(body, "🎮") {
 		t.Fatal("device list should render the stored icon")
@@ -302,11 +302,11 @@ func TestDeviceListShowsStoredIcon(t *testing.T) {
 
 func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "x", Kind: "other", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "x", Kind: "other", Source: "manual"})
 	// viewer session
-	uID, _ := st.CreateUser("eve", "hash", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	uID, _ := st.CreateUser(t.Context(), "eve", "hash", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	req := httptest.NewRequest("POST", "/devices/1/delete", nil)
 	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
 	rec := httptest.NewRecorder()
@@ -314,14 +314,14 @@ func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 	if rec.Code != 403 {
 		t.Fatalf("viewer delete code=%d", rec.Code)
 	}
-	if _, err := st.GetDevice(devID); err != nil {
+	if _, err := st.GetDevice(t.Context(), devID); err != nil {
 		t.Fatal("device must still exist")
 	}
 }
 
 func TestDeviceNewDialogFragment(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/devices/new").Body.String()
 	for _, want := range []string{`class="dialog"`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
 		if !strings.Contains(body, want) {
@@ -335,11 +335,11 @@ func TestDeviceNewDialogFragment(t *testing.T) {
 
 func TestDeviceEditDialogPrefilled(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	parentID, _ := st.CreateDevice(store.Device{Name: "core-switch", Kind: "switch", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	parentID, _ := st.CreateDevice(t.Context(), store.Device{Name: "core-switch", Kind: "switch", Source: "manual"})
 	pid := parentID
-	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Notes: "shelf", ParentDeviceID: &pid, Source: "manual"})
-	st.SetDeviceTags(devID, []string{"storage"})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Notes: "shelf", ParentDeviceID: &pid, Source: "manual"})
+	st.SetDeviceTags(t.Context(), devID, []string{"storage"})
 
 	body := authedGet(t, srv, st, "/devices/2/edit").Body.String()
 	if !strings.Contains(body, `value="nas"`) {
@@ -363,7 +363,7 @@ func TestDeviceEditDialogPrefilled(t *testing.T) {
 
 func TestDeviceEditDialogBadID404(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	if rec := authedGet(t, srv, st, "/devices/999/edit"); rec.Code != http.StatusNotFound {
 		t.Fatalf("edit unknown device = %d, want 404", rec.Code)
 	}
@@ -371,8 +371,8 @@ func TestDeviceEditDialogBadID404(t *testing.T) {
 
 func TestCreateDeviceWithIconParentTags(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	parentID, _ := st.CreateDevice(store.Device{Name: "rack", Kind: "switch", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	parentID, _ := st.CreateDevice(t.Context(), store.Device{Name: "rack", Kind: "switch", Source: "manual"})
 
 	rec := authedPost(t, srv, st, "/devices", url.Values{
 		"name": {"nas"}, "kind": {"server"}, "icon": {"🗄️"},
@@ -383,7 +383,7 @@ func TestCreateDeviceWithIconParentTags(t *testing.T) {
 		t.Fatalf("create code=%d body=%s", rec.Code, rec.Body.String())
 	}
 	// The new device is id 2 (parent is id 1).
-	d, err := st.GetDevice(2)
+	d, err := st.GetDevice(t.Context(), 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +393,7 @@ func TestCreateDeviceWithIconParentTags(t *testing.T) {
 	if d.ParentDeviceID == nil || *d.ParentDeviceID != parentID {
 		t.Errorf("parent=%v, want %d", d.ParentDeviceID, parentID)
 	}
-	tags, _ := st.DeviceTags(2)
+	tags, _ := st.DeviceTags(t.Context(), 2)
 	if len(tags) != 2 {
 		t.Fatalf("tags=%v, want 2", tags)
 	}
@@ -401,9 +401,9 @@ func TestCreateDeviceWithIconParentTags(t *testing.T) {
 
 func TestUpdateDeviceSyncsTags(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	st.SetDeviceTags(devID, []string{"a", "b"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(t.Context(), devID, []string{"a", "b"})
 
 	rec := authedPost(t, srv, st, "/devices/1", url.Values{
 		"name": {"nas"}, "kind": {"server"}, "tags": {"a"},
@@ -411,7 +411,7 @@ func TestUpdateDeviceSyncsTags(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("update code=%d", rec.Code)
 	}
-	tags, _ := st.DeviceTags(devID)
+	tags, _ := st.DeviceTags(t.Context(), devID)
 	if len(tags) != 1 || tags[0].Name != "a" {
 		t.Fatalf("after update tags=%v, want [a]", tags)
 	}
@@ -419,7 +419,7 @@ func TestUpdateDeviceSyncsTags(t *testing.T) {
 
 func TestLayoutHasModalContainer(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	for _, want := range []string{`id="modal"`, "/static/dialog.js"} {
 		if !strings.Contains(body, want) {
@@ -430,7 +430,7 @@ func TestLayoutHasModalContainer(t *testing.T) {
 
 func TestRouterModemKind(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 
 	// The dialog offers the new kinds.
 	body := authedGet(t, srv, st, "/devices/new").Body.String()
@@ -445,7 +445,7 @@ func TestRouterModemKind(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("create router code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	d, _ := st.GetDevice(1)
+	d, _ := st.GetDevice(t.Context(), 1)
 	if d.Kind != "router" {
 		t.Fatalf("kind=%q, want router", d.Kind)
 	}
@@ -453,10 +453,10 @@ func TestRouterModemKind(t *testing.T) {
 
 func TestListShowsAndFiltersNewFields(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateDevice(store.Device{Name: "pv", Kind: "iot", Source: "manual",
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateDevice(t.Context(), store.Device{Name: "pv", Kind: "iot", Source: "manual",
 		Vendor: "Espressif Inc.", Model: "Shelly Plus Plug", Function: "PV Powermeter"})
-	st.CreateDevice(store.Device{Name: "printer0", Kind: "printer", Source: "manual",
+	st.CreateDevice(t.Context(), store.Device{Name: "printer0", Kind: "printer", Source: "manual",
 		Vendor: "Acme"})
 
 	body := authedGet(t, srv, st, "/devices").Body.String()
@@ -477,11 +477,11 @@ func TestListShowsAndFiltersNewFields(t *testing.T) {
 
 func TestDeviceRowRegression(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
-	d, _ := st.CreateDevice(store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	f, _ := st.AddIface(d, nil, nil)
-	st.AssignIP(f, snID, "10.0.0.5", "static")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	d, _ := st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	f, _ := st.AddIface(t.Context(), d, nil, nil)
+	st.AssignIP(t.Context(), f, snID, "10.0.0.5", "static")
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	if !strings.Contains(body, "nas") || !strings.Contains(body, "chip static") {
 		t.Fatal("devices list should still render device rows after deviceRow extraction")
@@ -490,8 +490,8 @@ func TestDeviceRowRegression(t *testing.T) {
 
 func TestNewDeviceSubnetPreselect(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
 	body := authedGet(t, srv, st, "/devices/new?subnet=1").Body.String()
 	if !strings.Contains(body, `value="1" selected`) {
 		t.Fatalf("new device dialog should preselect subnet 1: %s", body)
@@ -500,7 +500,7 @@ func TestNewDeviceSubnetPreselect(t *testing.T) {
 
 func TestNavDevicesBeforeSubnets(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/devices").Body.String()
 	di := strings.Index(body, `href="/devices"`)
 	si := strings.Index(body, `href="/subnets"`)
@@ -514,11 +514,11 @@ func TestNavDevicesBeforeSubnets(t *testing.T) {
 
 func TestDeviceIPKindToggle(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
-	ifID, _ := st.AddIface(devID, nil, nil)
-	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
 
 	// Toggle static -> dhcp.
 	rec := authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
@@ -533,7 +533,7 @@ func TestDeviceIPKindToggle(t *testing.T) {
 	if !strings.Contains(body, "dhcp") || !strings.Contains(body, `&#34;kind&#34;:&#34;static&#34;`) {
 		t.Fatalf("fragment did not reflect flip: %q", body)
 	}
-	ips, _ := st.ListIPs(ifID)
+	ips, _ := st.ListIPs(t.Context(), ifID)
 	if len(ips) != 1 || ips[0].Kind != "dhcp" {
 		t.Fatalf("kind not persisted: %+v", ips)
 	}
@@ -542,7 +542,7 @@ func TestDeviceIPKindToggle(t *testing.T) {
 	authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
 		"subnet_id": {strconv.FormatInt(snID, 10)}, "ip": {"10.0.0.1"}, "kind": {"static"},
 	})
-	ips, _ = st.ListIPs(ifID)
+	ips, _ = st.ListIPs(t.Context(), ifID)
 	if ips[0].Kind != "static" {
 		t.Fatalf("toggle back failed: %+v", ips)
 	}
@@ -550,8 +550,8 @@ func TestDeviceIPKindToggle(t *testing.T) {
 
 func TestEditServesDrawer(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
 	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/edit").Body.String()
 	if !strings.Contains(body, "drawer") {
 		t.Fatalf("edit form is not a drawer: %q", body)
@@ -563,7 +563,7 @@ func TestEditServesDrawer(t *testing.T) {
 
 func TestNewStaysDialog(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/devices/new").Body.String()
 	if !strings.Contains(body, "dialog-scrim") {
 		t.Fatalf("new form lost dialog shell: %q", body)
@@ -575,11 +575,11 @@ func TestNewStaysDialog(t *testing.T) {
 
 func TestDeviceIPKindBadKind(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual"})
-	ifID, _ := st.AddIface(devID, nil, nil)
-	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
 	rec := authedPost(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/ip/kind", url.Values{
 		"subnet_id": {strconv.FormatInt(snID, 10)}, "ip": {"10.0.0.1"}, "kind": {"bogus"},
 	})
@@ -590,11 +590,11 @@ func TestDeviceIPKindBadKind(t *testing.T) {
 
 func TestDeviceDetailRedesign(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	snID, _ := st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	devID, _ := st.CreateDevice(store.Device{Name: "gw", Kind: "router", Source: "manual", Vendor: "TP-Link"})
-	ifID, _ := st.AddIface(devID, nil, nil)
-	st.AssignIP(ifID, snID, "10.0.0.1", "static")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual", Vendor: "TP-Link"})
+	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
 
 	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)).Body.String()
 	for _, want := range []string{"dev-hero", "dev-cols", "gw", "TP-Link", "Interfaces", "/devices/" + strconv.FormatInt(devID, 10) + "/ip/kind"} {
@@ -606,10 +606,10 @@ func TestDeviceDetailRedesign(t *testing.T) {
 
 func TestDeviceListParentChildGrouping(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	pid, _ := st.CreateDevice(store.Device{Name: "aaa-parent", Kind: "switch", Source: "manual"})
-	st.CreateDevice(store.Device{Name: "mmm-mid", Kind: "computer", Source: "manual"})
-	st.CreateDevice(store.Device{Name: "zzz-child", Kind: "computer", Source: "manual", ParentDeviceID: &pid})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	pid, _ := st.CreateDevice(t.Context(), store.Device{Name: "aaa-parent", Kind: "switch", Source: "manual"})
+	st.CreateDevice(t.Context(), store.Device{Name: "mmm-mid", Kind: "computer", Source: "manual"})
+	st.CreateDevice(t.Context(), store.Device{Name: "zzz-child", Kind: "computer", Source: "manual", ParentDeviceID: &pid})
 
 	body := authedGet(t, srv, st, "/devices?sort=name&dir=asc").Body.String()
 	iParent := strings.Index(body, "aaa-parent")
@@ -629,8 +629,8 @@ func TestDeviceListParentChildGrouping(t *testing.T) {
 
 func TestNewDevicePrefillsIP(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 
 	body := authedGet(t, srv, st, "/devices/new?subnet=1&ip=10.0.0.5").Body.String()
 	if !strings.Contains(body, `name="ip"`) || !strings.Contains(body, `value="10.0.0.5"`) {
@@ -645,7 +645,7 @@ func TestNewDevicePrefillsIP(t *testing.T) {
 
 func TestDeviceListOrphanChildIsRoot(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	// A parent_device_id with no matching row (e.g. a parent excluded from
 	// this result set). The device table's parent_device_id FK is enforced
 	// immediately, so st.CreateDevice would reject a literally nonexistent

@@ -7,21 +7,21 @@ import (
 
 func TestSetIPKindAndOccupancyKind(t *testing.T) {
 	s := openTest(t)
-	snID, _ := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	devID, _ := s.CreateDevice(Device{Name: "gw", Kind: "other", Source: "manual"})
-	ifID, _ := s.AddIface(devID, nil, nil)
-	if _, err := s.AssignIP(ifID, snID, "10.0.0.1", "static"); err != nil {
+	snID, _ := s.CreateSubnet(t.Context(), Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	devID, _ := s.CreateDevice(t.Context(), Device{Name: "gw", Kind: "other", Source: "manual"})
+	ifID, _ := s.AddIface(t.Context(), devID, nil, nil)
+	if _, err := s.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static"); err != nil {
 		t.Fatal(err)
 	}
 
-	occ, _ := s.SubnetOccupancy(snID)
+	occ, _ := s.SubnetOccupancy(t.Context(), snID)
 	if occ["10.0.0.1"].Kind != "static" {
 		t.Fatalf("kind=%q, want static", occ["10.0.0.1"].Kind)
 	}
-	if err := s.SetIPKind(snID, "10.0.0.1", "dhcp"); err != nil {
+	if err := s.SetIPKind(t.Context(), snID, "10.0.0.1", "dhcp"); err != nil {
 		t.Fatal(err)
 	}
-	occ2, _ := s.SubnetOccupancy(snID)
+	occ2, _ := s.SubnetOccupancy(t.Context(), snID)
 	if occ2["10.0.0.1"].Kind != "dhcp" {
 		t.Fatalf("kind after SetIPKind=%q, want dhcp", occ2["10.0.0.1"].Kind)
 	}
@@ -29,26 +29,26 @@ func TestSetIPKindAndOccupancyKind(t *testing.T) {
 
 func TestSubnetOccupancy(t *testing.T) {
 	s := openTest(t)
-	snID, err := s.CreateSubnet(Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	snID, err := s.CreateSubnet(t.Context(), Subnet{CIDR: "10.0.0.0/30", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
 	if err != nil {
 		t.Fatal(err)
 	}
-	devID, err := s.CreateDevice(Device{Name: "gw", Kind: "other", Source: "manual"})
+	devID, err := s.CreateDevice(t.Context(), Device{Name: "gw", Kind: "other", Source: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ifID, err := s.AddIface(devID, nil, nil)
+	ifID, err := s.AddIface(t.Context(), devID, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AssignIP(ifID, snID, "10.0.0.1", "static"); err != nil {
+	if _, err := s.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.MarkSeen(ifID, 1, time.Now()); err != nil {
+	if _, err := s.MarkSeen(t.Context(), ifID, 1, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 
-	occ, err := s.SubnetOccupancy(snID)
+	occ, err := s.SubnetOccupancy(t.Context(), snID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +61,12 @@ func TestSubnetOccupancy(t *testing.T) {
 	}
 
 	// Second iface claiming the same IP -> conflict, Count=2.
-	devID2, _ := s.CreateDevice(Device{Name: "dup", Kind: "other", Source: "manual"})
-	ifID2, _ := s.AddIface(devID2, nil, nil)
-	if _, err := s.AssignIP(ifID2, snID, "10.0.0.1", "static"); err != nil {
+	devID2, _ := s.CreateDevice(t.Context(), Device{Name: "dup", Kind: "other", Source: "manual"})
+	ifID2, _ := s.AddIface(t.Context(), devID2, nil, nil)
+	if _, err := s.AssignIP(t.Context(), ifID2, snID, "10.0.0.1", "static"); err != nil {
 		t.Fatal(err)
 	}
-	occ2, err := s.SubnetOccupancy(snID)
+	occ2, err := s.SubnetOccupancy(t.Context(), snID)
 	if err != nil {
 		t.Fatal(err)
 	}

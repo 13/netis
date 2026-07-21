@@ -18,10 +18,10 @@ import (
 // that /settings/* enforces.
 func TestWelcomePostsRequireAdmin(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	addAdmin(t, st)
-	uID, _ := st.CreateUser("eve", "h", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	uID, _ := st.CreateUser(t.Context(), "eve", "h", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	for _, path := range []string{"/welcome/subnets", "/welcome/integrations", "/welcome/skip"} {
 		req := httptest.NewRequest("POST", path, nil)
 		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
@@ -47,7 +47,7 @@ func TestOnboardingRedirect(t *testing.T) {
 		t.Fatalf("/welcome code=%d", rec.Code)
 	}
 	// After onboarding, "/" is served normally.
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec = authedGet(t, srv, st, "/")
 	if rec.Code != 200 {
 		t.Fatalf("post-onboarding / code=%d", rec.Code)
@@ -68,7 +68,7 @@ func TestWelcomeShowsDetectedAndCreates(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/welcome/integrations" {
 		t.Fatalf("subnets post: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
-	subnets, _ := st.ListSubnets()
+	subnets, _ := st.ListSubnets(t.Context())
 	if len(subnets) != 1 || subnets[0].CIDR != "192.168.5.0/24" || subnets[0].Name != "eth0" ||
 		!subnets[0].ScanEnabled || subnets[0].ScanIntervalSec != 120 || subnets[0].Kind != "lan" {
 		t.Fatalf("subnet not created with defaults: %+v", subnets)
@@ -81,7 +81,7 @@ func TestWelcomeSkipSetsOnboarded(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
 		t.Fatalf("skip: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
-	if v, _ := st.GetSetting("onboarded"); v != "1" {
+	if v, _ := st.GetSetting(t.Context(), "onboarded"); v != "1" {
 		t.Fatalf("onboarded not set: %q", v)
 	}
 }

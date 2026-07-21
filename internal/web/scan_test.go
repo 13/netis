@@ -45,8 +45,8 @@ func testServerTrig(t *testing.T) (*Server, *store.Store, *recordingTrigger) {
 
 func TestScanNowLanTriggersAndToasts(t *testing.T) {
 	srv, st, trig := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: false, ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: false, ScanIntervalSec: 120})
 	rec := authedPost(t, srv, st, "/subnets/1/scan", url.Values{})
 	if rec.Code != 200 {
 		t.Fatalf("scan now code=%d", rec.Code)
@@ -62,8 +62,8 @@ func TestScanNowLanTriggersAndToasts(t *testing.T) {
 
 func TestScanNowWireGuardDoesNotTrigger(t *testing.T) {
 	srv, st, trig := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.9.0.0/24", Name: "wg", Kind: "wireguard", ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.9.0.0/24", Name: "wg", Kind: "wireguard", ScanIntervalSec: 120})
 	rec := authedPost(t, srv, st, "/subnets/1/scan", url.Values{})
 	if rec.Code != 200 {
 		t.Fatalf("code=%d", rec.Code)
@@ -78,7 +78,7 @@ func TestScanNowWireGuardDoesNotTrigger(t *testing.T) {
 
 func TestScanNowNonexistent404(t *testing.T) {
 	srv, st, _ := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/subnets/999/scan", url.Values{})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("code=%d, want 404", rec.Code)
@@ -87,9 +87,9 @@ func TestScanNowNonexistent404(t *testing.T) {
 
 func TestScanAllTriggersNonWireGuard(t *testing.T) {
 	srv, st, trig := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
-	st.CreateSubnet(store.Subnet{CIDR: "10.9.0.0/24", Name: "wg", Kind: "wireguard", ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.9.0.0/24", Name: "wg", Kind: "wireguard", ScanIntervalSec: 120})
 	rec := authedPost(t, srv, st, "/scan", url.Values{})
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "all subnets") {
 		t.Fatalf("scan-all code=%d body=%s", rec.Code, rec.Body.String())
@@ -101,8 +101,8 @@ func TestScanAllTriggersNonWireGuard(t *testing.T) {
 
 func TestScanButtonsRendered(t *testing.T) {
 	srv, st, _ := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 
 	dash := authedGet(t, srv, st, "/").Body.String()
 	if !strings.Contains(dash, `hx-post="/scan"`) {
@@ -128,11 +128,11 @@ func TestScanButtonsRendered(t *testing.T) {
 
 func TestScanRoutesRequireAdmin(t *testing.T) {
 	srv, st, _ := testServerTrig(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	addAdmin(t, st)
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
-	uID, _ := st.CreateUser("eve", "h", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+	uID, _ := st.CreateUser(t.Context(), "eve", "h", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	for _, path := range []string{"/subnets/1/scan", "/scan"} {
 		req := httptest.NewRequest("POST", path, nil)
 		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})

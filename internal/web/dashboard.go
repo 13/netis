@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,15 +12,15 @@ import (
 
 // subnetRows builds the per-subnet occupancy rows (shared by the dashboard and
 // the subnets index) plus any IP conflicts found while scanning occupancy.
-func (s *Server) subnetRows() ([]views.DashRow, []views.AttentionConflict, error) {
-	subnets, err := s.store.ListSubnets()
+func (s *Server) subnetRows(ctx context.Context) ([]views.DashRow, []views.AttentionConflict, error) {
+	subnets, err := s.store.ListSubnets(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	var rows []views.DashRow
 	var conflicts []views.AttentionConflict
 	for _, sn := range subnets {
-		occ, err := s.store.SubnetOccupancy(sn.ID)
+		occ, err := s.store.SubnetOccupancy(ctx, sn.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -51,7 +52,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	u, _ := userFrom(r)
 	data := views.DashboardData{Username: u.Username}
 
-	devices, err := s.store.ListDevices()
+	devices, err := s.store.ListDevices(r.Context())
 	if err != nil {
 		return data, err
 	}
@@ -67,7 +68,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	}
 	data.Stats.Offline = data.Stats.Total - data.Stats.Online
 
-	rows, conflicts, err := s.subnetRows()
+	rows, conflicts, err := s.subnetRows(r.Context())
 	if err != nil {
 		return data, err
 	}
@@ -76,13 +77,13 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	data.Conflicts = conflicts
 	sort.Slice(data.Conflicts, func(i, j int) bool { return data.Conflicts[i].IP < data.Conflicts[j].IP })
 
-	statuses, err := s.store.ListIntegrationStatus()
+	statuses, err := s.store.ListIntegrationStatus(r.Context())
 	if err != nil {
 		return data, err
 	}
 	data.Integrations = statuses
 
-	evs, err := s.store.ListEvents(15)
+	evs, err := s.store.ListEvents(r.Context(), 15)
 	if err != nil {
 		return data, err
 	}
@@ -109,7 +110,7 @@ func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
-	rows, _, err := s.subnetRows()
+	rows, _, err := s.subnetRows(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

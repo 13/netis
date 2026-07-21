@@ -1,5 +1,7 @@
 package store
 
+import "context"
+
 type IntegrationStatus struct {
 	Name      string
 	LastRun   string
@@ -8,8 +10,8 @@ type IntegrationStatus struct {
 	ItemCount int
 }
 
-func (s *Store) SetIntegrationStatus(st IntegrationStatus) error {
-	_, err := s.DB.Exec(`INSERT INTO integration_status (name,last_run,ok,detail,item_count)
+func (s *Store) SetIntegrationStatus(ctx context.Context, st IntegrationStatus) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO integration_status (name,last_run,ok,detail,item_count)
 		VALUES (?,?,?,?,?)
 		ON CONFLICT(name) DO UPDATE SET
 			last_run=excluded.last_run, ok=excluded.ok,
@@ -18,8 +20,8 @@ func (s *Store) SetIntegrationStatus(st IntegrationStatus) error {
 	return err
 }
 
-func (s *Store) ListIntegrationStatus() ([]IntegrationStatus, error) {
-	rows, err := s.DB.Query(`SELECT name,last_run,ok,detail,item_count
+func (s *Store) ListIntegrationStatus(ctx context.Context) ([]IntegrationStatus, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT name,last_run,ok,detail,item_count
 		FROM integration_status ORDER BY name`)
 	if err != nil {
 		return nil, err

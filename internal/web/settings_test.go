@@ -16,7 +16,7 @@ import (
 
 func TestCreateSubnetViaSettings(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/subnets", url.Values{
 		"cidr": {"192.168.1.0/24"}, "name": {"main"}, "kind": {"lan"},
 		"scan_interval_sec": {"120"}, "scan_enabled": {"on"},
@@ -24,7 +24,7 @@ func TestCreateSubnetViaSettings(t *testing.T) {
 	if rec.Code != 303 {
 		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	subnets, _ := st.ListSubnets()
+	subnets, _ := st.ListSubnets(t.Context())
 	if len(subnets) != 1 || subnets[0].Name != "main" || !subnets[0].ScanEnabled {
 		t.Fatalf("subnets=%+v", subnets)
 	}
@@ -39,10 +39,10 @@ func TestCreateSubnetViaSettings(t *testing.T) {
 
 func TestViewerCannotPostSettings(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	addAdmin(t, st)
-	uID, _ := st.CreateUser("eve", "h", "viewer")
-	st.CreateSession("viewertok", uID, "2099-01-01T00:00:00Z")
+	uID, _ := st.CreateUser(t.Context(), "eve", "h", "viewer")
+	st.CreateSession(t.Context(), "viewertok", uID, "2099-01-01T00:00:00Z")
 	req := httptest.NewRequest("POST", "/settings/general",
 		nil)
 	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
@@ -55,23 +55,23 @@ func TestViewerCannotPostSettings(t *testing.T) {
 
 func TestCannotDeleteLastAdmin(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedGet(t, srv, st, "/") // creates admin "ben" id=1
 	_ = rec
 	del := authedPost(t, srv, st, "/settings/users/1/delete", url.Values{})
 	if del.Code != 400 {
 		t.Fatalf("code=%d", del.Code)
 	}
-	if n, _ := st.CountUsers(); n != 1 {
+	if n, _ := st.CountUsers(t.Context()); n != 1 {
 		t.Fatal("admin must survive")
 	}
 }
 
 func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	// Seed a stored password, then load the settings page as admin.
-	st.SetSetting("pihole_password", "topsecret")
+	st.SetSetting(t.Context(), "pihole_password", "topsecret")
 	rec := authedGet(t, srv, st, "/settings?tab=integrations")
 	if rec.Code != 200 {
 		t.Fatalf("settings page code=%d", rec.Code)
@@ -85,13 +85,13 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 		"pihole_password": {""},
 		"pihole_insecure": {"on"},
 	})
-	if v, _ := st.GetSetting("pihole_password"); v != "topsecret" {
+	if v, _ := st.GetSetting(t.Context(), "pihole_password"); v != "topsecret" {
 		t.Fatalf("blank password should keep stored value, got %q", v)
 	}
-	if v, _ := st.GetSetting("pihole_insecure"); v != "1" {
+	if v, _ := st.GetSetting(t.Context(), "pihole_insecure"); v != "1" {
 		t.Fatalf("insecure checkbox should normalize to '1', got %q", v)
 	}
-	if v, _ := st.GetSetting("pihole_url"); v != "https://pi.hole" {
+	if v, _ := st.GetSetting(t.Context(), "pihole_url"); v != "https://pi.hole" {
 		t.Fatalf("url not saved: %q", v)
 	}
 }
@@ -102,13 +102,13 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 // lockout, since /setup refuses once any user exists).
 func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	authedGet(t, srv, st, "/") // creates admin "ben" (id=1) + session "testtok"
-	ben, ok, err := st.GetUserByName("ben")
+	ben, ok, err := st.GetUserByName(t.Context(), "ben")
 	if err != nil || !ok {
 		t.Fatalf("ben=%+v ok=%v err=%v", ben, ok, err)
 	}
-	admin2ID, err := st.CreateUser("admin2", "hash", "admin")
+	admin2ID, err := st.CreateUser(t.Context(), "admin2", "hash", "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 	}
 	wg.Wait()
 
-	users, err := st.ListUsers()
+	users, err := st.ListUsers(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,12 +144,12 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 
 func TestIntegrationStatusRendered(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.SetSetting("pihole_url", "https://pi.hole")
-	st.SetSetting("proxmox_url", "https://pve:8006")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetSetting(t.Context(), "pihole_url", "https://pi.hole")
+	st.SetSetting(t.Context(), "proxmox_url", "https://pve:8006")
 	now := time.Now().UTC().Format(time.RFC3339)
-	st.SetIntegrationStatus(store.IntegrationStatus{Name: "pihole", OK: true, LastRun: now, Detail: "48 leases, 2 new"})
-	st.SetIntegrationStatus(store.IntegrationStatus{Name: "proxmox", OK: false, LastRun: now, Detail: "auth failed"})
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "pihole", OK: true, LastRun: now, Detail: "48 leases, 2 new"})
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "proxmox", OK: false, LastRun: now, Detail: "auth failed"})
 
 	body := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
 	for _, want := range []string{"Pi-hole", "connected", "48 leases, 2 new", "failing", "not configured"} {
@@ -171,7 +171,7 @@ func TestWelcomeIntegrationsStillRenders(t *testing.T) {
 
 func TestSettingsTabsShowOneSection(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	// Users tab shows the users section, not the subnet "Add subnet" form.
 	rec := authedGet(t, srv, st, "/settings?tab=users")
 	body := rec.Body.String()
@@ -190,8 +190,8 @@ func TestSettingsTabsShowOneSection(t *testing.T) {
 
 func TestSettingsTabsRender(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 
 	subnets := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
 	if !strings.Contains(subnets, "10.0.0.0/24") || !strings.Contains(subnets, "setting-card") {
@@ -212,8 +212,8 @@ func TestSettingsTabsRender(t *testing.T) {
 
 func TestSettingsRunButtonAndAlignment(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.CreateSubnet(store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 
 	integ := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
 	for _, want := range []string{
@@ -234,7 +234,7 @@ func TestSettingsRunButtonAndAlignment(t *testing.T) {
 
 func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	// Inject a detected subnet not yet configured.
 	srv.detect = func() ([]netdetect.Detected, error) {
 		return []netdetect.Detected{{CIDR: "192.168.7.0/24", Iface: "eth0"}}, nil
@@ -244,7 +244,7 @@ func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 		t.Fatal("detected subnet should appear on the subnets tab")
 	}
 	// Once configured, it is no longer offered.
-	st.CreateSubnet(store.Subnet{CIDR: "192.168.7.0/24", Name: "eth0", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "192.168.7.0/24", Name: "eth0", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 	rec = authedGet(t, srv, st, "/settings?tab=subnets")
 	// The configured subnet shows in the table, but not as a fresh "add" row.
 	if strings.Contains(rec.Body.String(), "no new subnets detected") == false {
@@ -254,7 +254,7 @@ func TestSettingsSubnetsTabShowsDetected(t *testing.T) {
 
 func TestGeneralSavesSubnetDefaults(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/general", url.Values{
 		"offline_after":             {"3"},
 		"default_scan_interval_sec": {"300"},
@@ -264,20 +264,20 @@ func TestGeneralSavesSubnetDefaults(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("code=%d", rec.Code)
 	}
-	if v, _ := st.GetSetting("default_scan_interval_sec"); v != "300" {
+	if v, _ := st.GetSetting(t.Context(), "default_scan_interval_sec"); v != "300" {
 		t.Fatalf("interval=%q", v)
 	}
-	if v, _ := st.GetSetting("default_subnet_kind"); v != "proxmox-bridge" {
+	if v, _ := st.GetSetting(t.Context(), "default_subnet_kind"); v != "proxmox-bridge" {
 		t.Fatalf("kind=%q", v)
 	}
-	if v, _ := st.GetSetting("default_scan_enabled"); v != "off" {
+	if v, _ := st.GetSetting(t.Context(), "default_scan_enabled"); v != "off" {
 		t.Fatalf("enabled=%q", v)
 	}
 }
 
 func TestGeneralSaveRejectsBadDefaults(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/general", url.Values{
 		"offline_after":             {"3"},
 		"default_scan_interval_sec": {"5"}, // < 30
@@ -289,7 +289,7 @@ func TestGeneralSaveRejectsBadDefaults(t *testing.T) {
 
 func TestGeneralTabRendersDefaults(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
+	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/settings?tab=general").Body.String()
 	for _, want := range []string{`name="default_scan_interval_sec"`, `name="default_subnet_kind"`, `name="default_scan_enabled"`} {
 		if !strings.Contains(body, want) {
@@ -300,9 +300,9 @@ func TestGeneralTabRendersDefaults(t *testing.T) {
 
 func TestAddSubnetFormUsesDefaults(t *testing.T) {
 	srv, st := testServer(t)
-	st.SetSetting("onboarded", "1")
-	st.SetSetting("default_scan_interval_sec", "300")
-	st.SetSetting("default_subnet_kind", "proxmox-bridge")
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetSetting(t.Context(), "default_scan_interval_sec", "300")
+	st.SetSetting(t.Context(), "default_subnet_kind", "proxmox-bridge")
 	body := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
 	if !strings.Contains(body, `value="300"`) {
 		t.Errorf("add-subnet form should default interval to 300")

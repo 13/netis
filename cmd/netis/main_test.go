@@ -27,7 +27,7 @@ func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
 	// Configured but unreachable → a real error that is NOT the sentinel, proving
 	// the runner read the current setting and attempted the run (run-now no longer
 	// reports "not configured" for a configured integration).
-	if err := st.SetSetting("pihole_url", "http://127.0.0.1:9"); err != nil {
+	if err := st.SetSetting(t.Context(), "pihole_url", "http://127.0.0.1:9"); err != nil {
 		t.Fatal(err)
 	}
 	err = runner.Run(context.Background(), "pihole")

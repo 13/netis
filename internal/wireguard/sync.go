@@ -41,13 +41,13 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	if err != nil {
 		return Stats{}, err
 	}
-	subnets, err := s.store.ListSubnets()
+	subnets, err := s.store.ListSubnets(ctx)
 	if err != nil {
 		return Stats{}, err
 	}
 	now := time.Now().UTC()
 	for _, p := range peers {
-		if err := s.upsertPeer(p, subnets, now); err != nil {
+		if err := s.upsertPeer(ctx, p, subnets, now); err != nil {
 			return Stats{}, err
 		}
 	}
@@ -58,13 +58,13 @@ func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
 	return s.RunOnce(ctx)
 }
 
-func (s *Sync) recordStatus(stats Stats, err error) {
+func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	st := store.IntegrationStatus{Name: "wireguard", LastRun: now}
 	if err != nil {
 		if !s.failing {
 			s.failing = true
-			s.events.Emit("scan_error", nil, "wireguard sync failing: "+err.Error())
+			s.events.Emit(ctx, "scan_error", nil, "wireguard sync failing: "+err.Error())
 		}
 		st.OK = false
 		st.Detail = err.Error()
@@ -74,15 +74,15 @@ func (s *Sync) recordStatus(stats Stats, err error) {
 		st.ItemCount = stats.Peers
 		st.Detail = fmt.Sprintf("%d peers", stats.Peers)
 	}
-	if serr := s.store.SetIntegrationStatus(st); serr != nil {
+	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
 		log.Printf("wireguard status write: %v", serr)
 	}
 	s.events.Broker().Publish("dashboard", "refresh")
 }
 
-func (s *Sync) upsertPeer(p Peer, subnets []store.Subnet, now time.Time) error {
+func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, now time.Time) error {
 	var devID, ifaceID int64
-	err := s.store.DB.QueryRow(`SELECT id FROM device WHERE wg_pubkey=?`, p.PubKey).Scan(&devID)
+	err := s.store.DB.QueryRowContext(ctx, `SELECT id FROM device WHERE wg_pubkey=?`, p.PubKey).Scan(&devID)
 	// PROJECT DECISION: distinguish sql.ErrNoRows (new peer) from real errors.
 	// device has no unique constraint on wg_pubkey, so falling through to
 	// CreateDevice on a transient error would create a duplicate peer.
@@ -98,20 +98,20 @@ func (s *Sync) upsertPeer(p Peer, subnets []store.Subnet, now time.Time) error {
 			name = strings.SplitN(p.AllowedIPs[0], "/", 2)[0]
 		}
 		pk := p.PubKey
-		devID, err = s.store.CreateDevice(store.Device{
+		devID, err = s.store.CreateDevice(ctx, store.Device{
 			Name: name, Kind: "wg-peer", Source: "wireguard", WGPubKey: &pk,
 		})
 		if err != nil {
 			return err
 		}
-		ifaceID, err = s.store.AddIface(devID, nil, nil)
+		ifaceID, err = s.store.AddIface(ctx, devID, nil, nil)
 		if err != nil {
 			return err
 		}
-		s.assignAllowedIPs(ifaceID, p, subnets)
-		s.events.Emit("device_new", &devID, fmt.Sprintf("wireguard peer %s", name))
+		s.assignAllowedIPs(ctx, ifaceID, p, subnets)
+		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("wireguard peer %s", name))
 	} else {
-		ifaces, err := s.store.ListIfaces(devID)
+		ifaces, err := s.store.ListIfaces(ctx, devID)
 		if err != nil || len(ifaces) == 0 {
 			return fmt.Errorf("peer %s has no iface: %v", p.PubKey, err)
 		}
@@ -119,22 +119,22 @@ func (s *Sync) upsertPeer(p Peer, subnets []store.Subnet, now time.Time) error {
 	}
 
 	if !p.LastHandshake.IsZero() && now.Sub(p.LastHandshake) < onlineWindow {
-		wasOffline, _ := s.store.MarkSeen(ifaceID, 0, now)
+		wasOffline, _ := s.store.MarkSeen(ctx, ifaceID, 0, now)
 		if wasOffline {
-			d, _ := s.store.GetDevice(devID)
-			s.events.Emit("online", &devID, fmt.Sprintf("wg peer %s connected", d.Name))
+			d, _ := s.store.GetDevice(ctx, devID)
+			s.events.Emit(ctx, "online", &devID, fmt.Sprintf("wg peer %s connected", d.Name))
 		}
 	} else {
-		went, _ := s.store.MarkMissed(ifaceID, 1)
+		went, _ := s.store.MarkMissed(ctx, ifaceID, 1)
 		if went {
-			d, _ := s.store.GetDevice(devID)
-			s.events.Emit("offline", &devID, fmt.Sprintf("wg peer %s disconnected", d.Name))
+			d, _ := s.store.GetDevice(ctx, devID)
+			s.events.Emit(ctx, "offline", &devID, fmt.Sprintf("wg peer %s disconnected", d.Name))
 		}
 	}
 	return nil
 }
 
-func (s *Sync) assignAllowedIPs(ifaceID int64, p Peer, subnets []store.Subnet) {
+func (s *Sync) assignAllowedIPs(ctx context.Context, ifaceID int64, p Peer, subnets []store.Subnet) {
 	for _, cidr := range p.AllowedIPs {
 		ipStr := strings.SplitN(cidr, "/", 2)[0]
 		addr, err := netip.ParseAddr(ipStr)
@@ -149,7 +149,7 @@ func (s *Sync) assignAllowedIPs(ifaceID int64, p Peer, subnets []store.Subnet) {
 			if err != nil || !prefix.Contains(addr) {
 				continue
 			}
-			s.store.AssignIP(ifaceID, sn.ID, addr.String(), "static")
+			s.store.AssignIP(ctx, ifaceID, sn.ID, addr.String(), "static")
 		}
 	}
 }
@@ -162,7 +162,8 @@ func (s *Sync) Start(ctx context.Context, interval time.Duration) {
 		// poller forever; a deadline surfaces as a RunOnce error and is
 		// recorded as a failing status.
 		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		s.recordStatus(s.runAndCount(cctx))
+		stats, err := s.runAndCount(cctx)
+		s.recordStatus(cctx, stats, err)
 		cancel()
 		select {
 		case <-ctx.Done():
