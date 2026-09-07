@@ -115,8 +115,18 @@ func runIntegrationLoop(ctx context.Context, runNow integrationRunner, name stri
 }
 
 func main() {
+	// A subcommand runs a one-shot job and exits; with no subcommand netis
+	// starts the server.
+	if len(os.Args) > 1 && os.Args[1] == "migrate-db" {
+		if err := runMigrateDB(context.Background(), os.Args[2:]); err != nil {
+			slog.Error("migrate-db", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfg := config.Load()
-	st, err := store.Open(cfg.DBPath)
+	st, err := store.Open(cfg.DSN)
 	if err != nil {
 		slog.Error("open db", "err", err)
 		os.Exit(1)

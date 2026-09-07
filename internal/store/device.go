@@ -63,49 +63,41 @@ func (s *Store) CreateDevice(ctx context.Context, d Device) (int64, error) {
 	// Scan-discovered devices start unreviewed; anything from a named source
 	// (manual/proxmox/wireguard/pihole) is reviewed on creation.
 	reviewed := d.Source != "scan"
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
+	return s.insertReturningID(ctx, `INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID, d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 func (s *Store) GetDevice(ctx context.Context, id int64) (Device, error) {
-	return scanDevice(s.DB.QueryRowContext(ctx, `SELECT `+deviceCols+` FROM device WHERE id=?`, id))
+	return scanDevice(s.queryRow(ctx, `SELECT `+deviceCols+` FROM device WHERE id=?`, id))
 }
 
 func (s *Store) UpdateDevice(ctx context.Context, d Device) error {
 	// Editing a device counts as reviewing it.
-	_, err := s.DB.ExecContext(ctx, `UPDATE device SET name=?,kind=?,notes=?,vendor=?,source=?,
-		parent_device_id=?,proxmox_vmid=?,wg_pubkey=?,icon=?,reviewed=1,model=?,function=? WHERE id=?`,
+	_, err := s.exec(ctx, `UPDATE device SET name=?,kind=?,notes=?,vendor=?,source=?,
+		parent_device_id=?,proxmox_vmid=?,wg_pubkey=?,icon=?,reviewed=TRUE,model=?,function=? WHERE id=?`,
 		d.Name, d.Kind, d.Notes, d.Vendor, d.Source,
 		d.ParentDeviceID, d.ProxmoxVMID, d.WGPubKey, d.Icon, d.Model, d.Function, d.ID)
 	return err
 }
 
 func (s *Store) SetDeviceReviewed(ctx context.Context, id int64, reviewed bool) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE device SET reviewed=? WHERE id=?`, reviewed, id)
+	_, err := s.exec(ctx, `UPDATE device SET reviewed=? WHERE id=?`, reviewed, id)
 	return err
 }
 
 func (s *Store) DeleteDevice(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM device WHERE id=?`, id)
+	_, err := s.exec(ctx, `DELETE FROM device WHERE id=?`, id)
 	return err
 }
 
 func (s *Store) AddIface(ctx context.Context, deviceID int64, mac, hostname *string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO iface (device_id,mac,hostname) VALUES (?,?,?)`,
+	return s.insertReturningID(ctx, `INSERT INTO iface (device_id,mac,hostname) VALUES (?,?,?)`,
 		deviceID, mac, hostname)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 func (s *Store) ListIfaces(ctx context.Context, deviceID int64) ([]Iface, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,device_id,mac,hostname FROM iface WHERE device_id=?`, deviceID)
+	rows, err := s.query(ctx, `SELECT id,device_id,mac,hostname FROM iface WHERE device_id=?`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +115,7 @@ func (s *Store) ListIfaces(ctx context.Context, deviceID int64) ([]Iface, error)
 
 func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, error) {
 	var i Iface
-	err := s.DB.QueryRowContext(ctx, `SELECT id,device_id,mac,hostname FROM iface WHERE mac=?`, mac).
+	err := s.queryRow(ctx, `SELECT id,device_id,mac,hostname FROM iface WHERE mac=?`, mac).
 		Scan(&i.ID, &i.DeviceID, &i.MAC, &i.Hostname)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -136,7 +128,7 @@ func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, er
 
 func (s *Store) FindIfaceByIP(ctx context.Context, subnetID int64, ip string) (Iface, bool, error) {
 	var i Iface
-	err := s.DB.QueryRowContext(ctx, `SELECT f.id,f.device_id,f.mac,f.hostname FROM iface f
+	err := s.queryRow(ctx, `SELECT f.id,f.device_id,f.mac,f.hostname FROM iface f
 		JOIN ip_assignment a ON a.iface_id=f.id WHERE a.subnet_id=? AND a.ip=?`, subnetID, ip).
 		Scan(&i.ID, &i.DeviceID, &i.MAC, &i.Hostname)
 	if err != nil {
@@ -149,12 +141,8 @@ func (s *Store) FindIfaceByIP(ctx context.Context, subnetID int64, ip string) (I
 }
 
 func (s *Store) AssignIP(ctx context.Context, ifaceID, subnetID int64, ip, kind string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
+	return s.insertReturningID(ctx, `INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
 		ifaceID, subnetID, ip, kind)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 // RemoveIfaceIPsInSubnetExcept retires an iface's stale DHCP IP assignments
@@ -163,7 +151,7 @@ func (s *Store) AssignIP(ctx context.Context, ifaceID, subnetID int64, ip, kind 
 // Only kind='dhcp' rows are removed: a user-assigned static IP on the same
 // iface must survive a DHCP renewal to a different address.
 func (s *Store) RemoveIfaceIPsInSubnetExcept(ctx context.Context, ifaceID, subnetID int64, keepIP string) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
+	_, err := s.exec(ctx, `DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
 		ifaceID, subnetID, keepIP)
 	return err
 }
@@ -174,12 +162,12 @@ func (s *Store) RemoveIfaceIPsInSubnetExcept(ctx context.Context, ifaceID, subne
 // duplicate row.
 func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64, ip, kind string) error {
 	var id int64
-	err := s.DB.QueryRowContext(ctx,
+	err := s.queryRow(ctx,
 		`SELECT id FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip=?`,
 		ifaceID, subnetID, ip).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			_, err = s.DB.ExecContext(ctx,
+			_, err = s.exec(ctx,
 				`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
 				ifaceID, subnetID, ip, kind)
 			return err
@@ -188,7 +176,7 @@ func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64,
 	}
 	// Never downgrade a static assignment to dhcp: a user (or a reservation)
 	// marked this IP static, and a dhcp-lease observation must not clobber it.
-	_, err = s.DB.ExecContext(ctx,
+	_, err = s.exec(ctx,
 		`UPDATE ip_assignment SET kind=? WHERE id=? AND NOT (kind='static' AND ?='dhcp')`,
 		kind, id, kind)
 	return err
@@ -197,14 +185,14 @@ func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64,
 // SetIfaceHostnameIfEmpty sets the interface hostname only when it is not
 // already set, so an integration never clobbers a user- or scan-provided name.
 func (s *Store) SetIfaceHostnameIfEmpty(ctx context.Context, ifaceID int64, hostname string) error {
-	_, err := s.DB.ExecContext(ctx,
+	_, err := s.exec(ctx,
 		`UPDATE iface SET hostname=? WHERE id=? AND (hostname IS NULL OR hostname='')`,
 		hostname, ifaceID)
 	return err
 }
 
 func (s *Store) ListIPs(ctx context.Context, ifaceID int64) ([]IPRow, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,ip,subnet_id,kind FROM ip_assignment WHERE iface_id=?`, ifaceID)
+	rows, err := s.query(ctx, `SELECT id,ip,subnet_id,kind FROM ip_assignment WHERE iface_id=?`, ifaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +209,7 @@ func (s *Store) ListIPs(ctx context.Context, ifaceID int64) ([]IPRow, error) {
 }
 
 func (s *Store) ListDevices(ctx context.Context) ([]DeviceRow, error) {
-	devRows, err := s.DB.QueryContext(ctx, `SELECT `+deviceCols+` FROM device ORDER BY name`)
+	devRows, err := s.query(ctx, `SELECT `+deviceCols+` FROM device ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +269,7 @@ type SubnetIfaceIP struct {
 }
 
 func (s *Store) ListSubnetIfaceIPs(ctx context.Context, subnetID int64) ([]SubnetIfaceIP, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT f.id, f.device_id, a.ip, f.mac
+	rows, err := s.query(ctx, `SELECT f.id, f.device_id, a.ip, f.mac
 		FROM ip_assignment a JOIN iface f ON f.id=a.iface_id
 		WHERE a.subnet_id=?`, subnetID)
 	if err != nil {
@@ -311,7 +299,7 @@ func (s *Store) IfaceOnline(ctx context.Context, ifaceID int64) (bool, *string, 
 func (s *Store) ifaceOnline(ctx context.Context, ifaceID int64) (bool, *string, error) {
 	var online bool
 	var lastSeen *string
-	err := s.DB.QueryRowContext(ctx, `SELECT online,last_seen FROM iface_status WHERE iface_id=?`, ifaceID).
+	err := s.queryRow(ctx, `SELECT online,last_seen FROM iface_status WHERE iface_id=?`, ifaceID).
 		Scan(&online, &lastSeen)
 	if err != nil {
 		return false, nil, nil // no status row yet
@@ -322,7 +310,7 @@ func (s *Store) ifaceOnline(ctx context.Context, ifaceID int64) (bool, *string, 
 // ListDeviceEvents returns the most recent events for a single device, same
 // shape as ListEvents but filtered to deviceID.
 func (s *Store) ListDeviceEvents(ctx context.Context, deviceID int64, limit int) ([]Event, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,ts,type,device_id,details FROM event
+	rows, err := s.query(ctx, `SELECT id,ts,type,device_id,details FROM event
 		WHERE device_id=? ORDER BY id DESC LIMIT ?`, deviceID, limit)
 	if err != nil {
 		return nil, err
@@ -341,7 +329,7 @@ func (s *Store) ListDeviceEvents(ctx context.Context, deviceID int64, limit int)
 
 // ListChildren returns devices whose parent_device_id is deviceID.
 func (s *Store) ListChildren(ctx context.Context, deviceID int64) ([]Device, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+deviceCols+` FROM device WHERE parent_device_id=? ORDER BY name`, deviceID)
+	rows, err := s.query(ctx, `SELECT `+deviceCols+` FROM device WHERE parent_device_id=? ORDER BY name`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +348,7 @@ func (s *Store) ListChildren(ctx context.Context, deviceID int64) ([]Device, err
 // DeviceTags returns the full Tag rows attached to a device (compare
 // deviceTagNames, which only returns names for the filterable list view).
 func (s *Store) DeviceTags(ctx context.Context, deviceID int64) ([]Tag, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT t.id,t.name,t.color FROM tag t
+	rows, err := s.query(ctx, `SELECT t.id,t.name,t.color FROM tag t
 		JOIN device_tag dt ON dt.tag_id=t.id WHERE dt.device_id=? ORDER BY t.name`, deviceID)
 	if err != nil {
 		return nil, err
@@ -378,7 +366,7 @@ func (s *Store) DeviceTags(ctx context.Context, deviceID int64) ([]Tag, error) {
 }
 
 func (s *Store) deviceTagNames(ctx context.Context, deviceID int64) ([]string, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT t.name FROM tag t
+	rows, err := s.query(ctx, `SELECT t.name FROM tag t
 		JOIN device_tag dt ON dt.tag_id=t.id WHERE dt.device_id=? ORDER BY t.name`, deviceID)
 	if err != nil {
 		return nil, err

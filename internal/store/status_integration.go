@@ -11,7 +11,7 @@ type IntegrationStatus struct {
 }
 
 func (s *Store) SetIntegrationStatus(ctx context.Context, st IntegrationStatus) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO integration_status (name,last_run,ok,detail,item_count)
+	_, err := s.exec(ctx, `INSERT INTO integration_status (name,last_run,ok,detail,item_count)
 		VALUES (?,?,?,?,?)
 		ON CONFLICT(name) DO UPDATE SET
 			last_run=excluded.last_run, ok=excluded.ok,
@@ -21,7 +21,7 @@ func (s *Store) SetIntegrationStatus(ctx context.Context, st IntegrationStatus) 
 }
 
 func (s *Store) ListIntegrationStatus(ctx context.Context) ([]IntegrationStatus, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT name,last_run,ok,detail,item_count
+	rows, err := s.query(ctx, `SELECT name,last_run,ok,detail,item_count
 		FROM integration_status ORDER BY name`)
 	if err != nil {
 		return nil, err

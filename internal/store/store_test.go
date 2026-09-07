@@ -24,7 +24,7 @@ func TestMigration0002AgainstPopulatedTable(t *testing.T) {
 	}
 	// Apply only the 0001 schema and record it, so a later Open() runs 0002
 	// against the rows we insert below.
-	sql0001, err := migrationsFS.ReadFile("migrations/0001_init.sql")
+	sql0001, err := migrationsFS.ReadFile("migrations/sqlite/0001_init.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

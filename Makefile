@@ -1,4 +1,4 @@
-.PHONY: generate build test race lint vuln run docker
+.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker
 
 generate:
 	go tool templ generate
@@ -11,6 +11,19 @@ test: generate
 
 race: generate
 	go test -race ./...
+
+# Runs the store suite against Postgres as well as SQLite. Needs a server;
+# `make pg` starts a throwaway one on port 55432.
+test-pg: generate
+	NETIS_TEST_PG_DSN=postgres://netis:netis@127.0.0.1:55432/netis?sslmode=disable go test ./...
+
+pg:
+	docker run -d --rm --name netis-pg -p 55432:5432 \
+		-e POSTGRES_USER=netis -e POSTGRES_PASSWORD=netis -e POSTGRES_DB=netis \
+		postgres:17-alpine
+
+pg-stop:
+	docker rm -f netis-pg
 
 lint:
 	go vet ./...

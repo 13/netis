@@ -104,7 +104,7 @@ Environment variables:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NETIS_ADDR` | `:8080` | HTTP listen address. |
-| `NETIS_DB` | `netis.db` | Path to the SQLite database file. |
+| `NETIS_DB` | `netis.db` | Database to use. A path selects SQLite; a `postgres://` URL selects Postgres. See [Database backends](#database-backends). |
 | `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
 
 Settings configured in the web UI (Settings page), stored in the
@@ -144,6 +144,40 @@ subnet you've configured in netis.
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.
+
+## Database backends
+
+netis runs on SQLite (the default) or PostgreSQL. `NETIS_DB` decides which:
+a filesystem path is a SQLite database, a `postgres://` URL is a Postgres
+server.
+
+```sh
+NETIS_DB=/var/lib/netis/netis.db ./netis                       # SQLite
+NETIS_DB='postgres://netis:secret@db:5432/netis' ./netis       # Postgres
+```
+
+The backend is chosen once at startup, so switching means restarting netis
+with a different `NETIS_DB`. Nothing moves between the two on its own: point
+netis at an empty Postgres database and it creates its schema and starts
+fresh.
+
+To carry an existing SQLite database over instead, stop netis and run the
+one-shot importer, then restart with the Postgres URL:
+
+```sh
+netis migrate-db --from /var/lib/netis/netis.db \
+                 --to 'postgres://netis:secret@db:5432/netis'
+```
+
+It creates the schema on the destination, copies every table preserving ids
+and foreign keys, and advances the id sequences past the imported rows. It
+refuses to write into a database that already holds netis rows unless
+`--force` is given. The source database is only read.
+
+SQLite remains the right default for a single netis instance: it is a file,
+needs no server, and the binary stays static. Postgres is worth it when the
+database has to live outside the container, be backed up by existing
+infrastructure, or be read by something else.
 
 ## Limitations
 

@@ -8,6 +8,23 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # The store's queries run on both backends, so the suite runs on both. The
+    # SQLite tests need nothing; NETIS_TEST_PG_DSN switches on the Postgres half.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: netis
+          POSTGRES_PASSWORD: netis
+          POSTGRES_DB: netis
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U netis"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NETIS_TEST_PG_DSN: postgres://netis:netis@127.0.0.1:5432/netis?sslmode=disable
     steps:
       - uses: actions/checkout@v5
 
