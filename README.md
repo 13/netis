@@ -51,6 +51,14 @@ for the background scan loop (every 120s by default).
 
 ## Docker
 
+Released images are published to GHCR on every `v*` tag:
+
+```sh
+docker pull ghcr.io/13/netis:latest
+```
+
+Or build locally:
+
 ```sh
 docker build -t netis .
 docker run -d --name netis \

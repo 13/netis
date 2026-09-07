@@ -34,3 +34,19 @@ jobs:
 
       - name: build
         run: CGO_ENABLED=0 go build -ldflags="-s -w" ./cmd/netis
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build only — catches a broken Dockerfile before a release tag is cut.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
