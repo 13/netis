@@ -306,7 +306,7 @@ func TestMigration0004Backfill(t *testing.T) {
 	db.Exec(`PRAGMA foreign_keys = ON;`)
 	// Apply migrations 0001..0003 only, then insert rows without a reviewed column.
 	for _, name := range []string{"0001_init.sql", "0002_pihole_source.sql", "0003_integration_status.sql"} {
-		b, err := migrationsFS.ReadFile("migrations/" + name)
+		b, err := migrationsFS.ReadFile("migrations/sqlite/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}

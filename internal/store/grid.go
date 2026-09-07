@@ -14,9 +14,9 @@ type Occupant struct {
 }
 
 func (s *Store) SubnetOccupancy(ctx context.Context, subnetID int64) (map[string]Occupant, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT a.ip, f.id, d.id, d.name,
+	rows, err := s.query(ctx, `SELECT a.ip, f.id, d.id, d.name,
 			COALESCE(f.mac,''), COALESCE(st.last_seen,''),
-			COALESCE(st.online,0), st.first_seen IS NOT NULL, a.kind
+			COALESCE(st.online,FALSE), st.first_seen IS NOT NULL, a.kind
 		FROM ip_assignment a
 		JOIN iface f ON f.id=a.iface_id
 		JOIN device d ON d.id=f.device_id
@@ -58,7 +58,7 @@ func (s *Store) SubnetOccupancy(ctx context.Context, subnetID int64) (map[string
 // its subnet and IP. Callers validate the kind; a 0-row update (no such
 // assignment) is not an error.
 func (s *Store) SetIPKind(ctx context.Context, subnetID int64, ip, kind string) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE ip_assignment SET kind=? WHERE subnet_id=? AND ip=?`,
+	_, err := s.exec(ctx, `UPDATE ip_assignment SET kind=? WHERE subnet_id=? AND ip=?`,
 		kind, subnetID, ip)
 	return err
 }

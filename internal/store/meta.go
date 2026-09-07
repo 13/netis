@@ -25,15 +25,11 @@ type OpenPort struct {
 }
 
 func (s *Store) CreateTag(ctx context.Context, name, color string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO tag (name,color) VALUES (?,?)`, name, color)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	return s.insertReturningID(ctx, `INSERT INTO tag (name,color) VALUES (?,?)`, name, color)
 }
 
 func (s *Store) ListTags(ctx context.Context) ([]Tag, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,name,color FROM tag ORDER BY name`)
+	rows, err := s.query(ctx, `SELECT id,name,color FROM tag ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -50,13 +46,13 @@ func (s *Store) ListTags(ctx context.Context) ([]Tag, error) {
 }
 
 func (s *Store) TagDevice(ctx context.Context, deviceID, tagID int64) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT OR IGNORE INTO device_tag (device_id,tag_id) VALUES (?,?)`,
+	_, err := s.exec(ctx, `INSERT INTO device_tag (device_id,tag_id) VALUES (?,?) ON CONFLICT DO NOTHING`,
 		deviceID, tagID)
 	return err
 }
 
 func (s *Store) UntagDevice(ctx context.Context, deviceID, tagID int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, tagID)
+	_, err := s.exec(ctx, `DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, tagID)
 	return err
 }
 
@@ -124,18 +120,18 @@ func (s *Store) findOrCreateTag(ctx context.Context, name string) (int64, error)
 }
 
 func (s *Store) SetCustomField(ctx context.Context, deviceID int64, key, value string) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO custom_field (device_id,key,value) VALUES (?,?,?)
+	_, err := s.exec(ctx, `INSERT INTO custom_field (device_id,key,value) VALUES (?,?,?)
 		ON CONFLICT(device_id,key) DO UPDATE SET value=excluded.value`, deviceID, key, value)
 	return err
 }
 
 func (s *Store) DeleteCustomField(ctx context.Context, deviceID int64, key string) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM custom_field WHERE device_id=? AND key=?`, deviceID, key)
+	_, err := s.exec(ctx, `DELETE FROM custom_field WHERE device_id=? AND key=?`, deviceID, key)
 	return err
 }
 
 func (s *Store) ListCustomFields(ctx context.Context, deviceID int64) ([]CustomField, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT key,value FROM custom_field WHERE device_id=? ORDER BY key`, deviceID)
+	rows, err := s.query(ctx, `SELECT key,value FROM custom_field WHERE device_id=? ORDER BY key`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -152,21 +148,17 @@ func (s *Store) ListCustomFields(ctx context.Context, deviceID int64) ([]CustomF
 }
 
 func (s *Store) AddLink(ctx context.Context, deviceID int64, label, url string) (int64, error) {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO device_link (device_id,label,url) VALUES (?,?,?)`,
+	return s.insertReturningID(ctx, `INSERT INTO device_link (device_id,label,url) VALUES (?,?,?)`,
 		deviceID, label, url)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
 }
 
 func (s *Store) DeleteLink(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM device_link WHERE id=?`, id)
+	_, err := s.exec(ctx, `DELETE FROM device_link WHERE id=?`, id)
 	return err
 }
 
 func (s *Store) ListLinks(ctx context.Context, deviceID int64) ([]Link, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id,label,url FROM device_link WHERE device_id=?`, deviceID)
+	rows, err := s.query(ctx, `SELECT id,label,url FROM device_link WHERE device_id=?`, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +175,7 @@ func (s *Store) ListLinks(ctx context.Context, deviceID int64) ([]Link, error) {
 }
 
 func (s *Store) UpsertOpenPort(ctx context.Context, ifaceID int64, port int, proto, guess, seenAt string) error {
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO open_port (iface_id,port,proto,service_guess,first_seen,last_seen)
+	_, err := s.exec(ctx, `INSERT INTO open_port (iface_id,port,proto,service_guess,first_seen,last_seen)
 		VALUES (?,?,?,?,?,?)
 		ON CONFLICT(iface_id,port,proto) DO UPDATE SET
 			last_seen=excluded.last_seen, service_guess=excluded.service_guess`,
@@ -192,7 +184,7 @@ func (s *Store) UpsertOpenPort(ctx context.Context, ifaceID int64, port int, pro
 }
 
 func (s *Store) ListOpenPorts(ctx context.Context, ifaceID int64) ([]OpenPort, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT port,proto,service_guess,first_seen,last_seen
+	rows, err := s.query(ctx, `SELECT port,proto,service_guess,first_seen,last_seen
 		FROM open_port WHERE iface_id=? ORDER BY port`, ifaceID)
 	if err != nil {
 		return nil, err
