@@ -163,6 +163,7 @@ func main() {
 
 	runNow := newIntegrationRunner(st, evs)
 	startIntegrationSyncs(ctx, runNow, time.Minute)
+	startRetention(ctx, st, retentionInterval)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

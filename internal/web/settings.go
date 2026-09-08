@@ -58,7 +58,8 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	values["offline_after"] = offlineAfter
 
-	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled"} {
+	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled",
+		"event_retention_days", "availability_retention_days"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -325,6 +326,23 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+	// Retention windows, in days. Zero is meaningful — keep forever — so it is
+	// accepted rather than treated as unset.
+	for _, k := range []string{"event_retention_days", "availability_retention_days"} {
+		v := r.FormValue(k)
+		if v == "" {
+			continue
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			http.Error(w, k+" must be a non-negative integer", 400)
+			return
+		}
+		if err := s.store.SetSetting(r.Context(), k, strconv.Itoa(n)); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}

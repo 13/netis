@@ -115,6 +115,8 @@ database's key/value settings table:
 | Key | Meaning |
 | --- | --- |
 | `offline_after` | Consecutive missed scan sweeps before a device is marked offline (default 3). |
+| `event_retention_days` | Days of event history to keep, swept every 6h; `0` keeps everything (default 30). |
+| `availability_retention_days` | Days of availability history to keep (default 365). One row per interface per hour, so this is the fastest-growing table. |
 | `proxmox_url` | Base URL of the Proxmox API, e.g. `https://pve.local:8006`. |
 | `proxmox_token_id` | Proxmox API token ID, e.g. `user@pam!netis`. |
 | `proxmox_secret` | Proxmox API token secret. |

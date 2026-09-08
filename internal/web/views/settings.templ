@@ -284,6 +284,18 @@ templ generalTab(d SettingsData) {
 			</div>
 			<p class="muted" style="margin:6px 0 4px">Prefilled into the Add-subnet form.</p>
 		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Retention</h3></div>
+			<div class="field-grid">
+				<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
+				<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
+			</div>
+			<p class="muted" style="margin:6px 0 4px">
+				Older rows are deleted every six hours. Availability history is one row
+				per interface per hour, so it is the fastest-growing table. Set a value
+				to 0 to keep everything.
+			</p>
+		</div>
 		<button type="submit" class="primary">Save</button>
 	</form>
 }
