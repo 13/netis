@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 
+	"netis/internal/buildinfo"
 	"netis/internal/netdetect"
 	"netis/internal/store"
 )
@@ -19,6 +20,16 @@ type SettingsData struct {
 	ActiveTab string
 	Detected  []netdetect.Detected
 	Statuses  map[string]store.IntegrationStatus
+	About     AboutData
+}
+
+// AboutData is what the About tab reports: the build the binary came from plus
+// the facts about the process serving this request.
+type AboutData struct {
+	Info    buildinfo.Info
+	Uptime  string
+	Backend string // "sqlite" or "postgres"
+	Now     string
 }
 
 templ tabLink(active, tab, label string) {
@@ -277,6 +288,75 @@ templ generalTab(d SettingsData) {
 	</form>
 }
 
+// aboutRow renders one label/value pair, blanking out anything unknown so an
+// unstamped local build shows an em dash rather than an empty cell.
+templ aboutRow(label, value string) {
+	<tr>
+		<td class="muted">{ label }</td>
+		if value == "" {
+			<td class="mono">—</td>
+		} else {
+			<td class="mono">{ value }</td>
+		}
+	</tr>
+}
+
+templ aboutTab(a AboutData) {
+	<div class="cards">
+		<div class="card">
+			<h3>Build</h3>
+			<table>
+				<tbody>
+					@aboutRow("Version", a.Info.Label())
+					@aboutRow("Build number", a.Info.Build)
+					<tr>
+						<td class="muted">Commit</td>
+						if a.Info.Commit == "" {
+							<td class="mono">—</td>
+						} else {
+							<td class="mono">
+								<a href={ templ.URL(a.Info.CommitURL()) } target="_blank" rel="noreferrer noopener">
+									{ a.Info.ShortCommit() }
+								</a>
+								if a.Info.Modified {
+									<span class="muted">(dirty tree)</span>
+								}
+							</td>
+						}
+					</tr>
+					@aboutRow("Built", a.Info.Date)
+				</tbody>
+			</table>
+		</div>
+		<div class="card">
+			<h3>Runtime</h3>
+			<table>
+				<tbody>
+					@aboutRow("Go", a.Info.GoVersion)
+					@aboutRow("Platform", a.Info.OS+"/"+a.Info.Arch)
+					@aboutRow("Database", a.Backend)
+					@aboutRow("Uptime", a.Uptime)
+					@aboutRow("Server time", a.Now)
+				</tbody>
+			</table>
+		</div>
+		<div class="card">
+			<h3>Dependencies</h3>
+			if len(a.Info.Deps) == 0 {
+				<p class="muted">Not recorded in this binary.</p>
+			} else {
+				<table>
+					<tbody>
+						for _, dep := range a.Info.Deps {
+							@aboutRow(dep.Path, dep.Version)
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}
+
 templ SettingsPage(username string, d SettingsData) {
 	@Layout("Settings", username) {
 		<h1>Settings</h1>
@@ -285,6 +365,7 @@ templ SettingsPage(username string, d SettingsData) {
 			@tabLink(d.ActiveTab, "integrations", "Integrations")
 			@tabLink(d.ActiveTab, "users", "Users")
 			@tabLink(d.ActiveTab, "general", "General")
+			@tabLink(d.ActiveTab, "about", "About")
 		</nav>
 
 		if d.ActiveTab == "subnets" {
@@ -295,6 +376,8 @@ templ SettingsPage(username string, d SettingsData) {
 			@usersTab(d)
 		} else if d.ActiveTab == "general" {
 			@generalTab(d)
+		} else if d.ActiveTab == "about" {
+			@aboutTab(d.About)
 		}
 	}
 }

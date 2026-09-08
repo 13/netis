@@ -6,12 +6,23 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# VERSION is stamped into the binary; defaults to "dev" for local builds so an
-# unstamped image is distinguishable from a released one.
+# Build identity, stamped into the binary and shown on the About tab. VERSION
+# defaults to "dev" so an unstamped image is distinguishable from a released
+# one; the rest are empty locally and filled in by the release workflow. They
+# cannot be derived here: the build context is a source copy with no .git, so
+# the toolchain's own VCS stamps are unavailable.
 ARG VERSION=dev
+ARG COMMIT=""
+ARG BUILD=""
+ARG DATE=""
 # templ version comes from go.mod's tool directive — single source of truth
 RUN go tool templ generate && \
-    CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /netis ./cmd/netis
+    CGO_ENABLED=0 go build -ldflags="-s -w \
+      -X netis/internal/buildinfo.Version=${VERSION} \
+      -X netis/internal/buildinfo.Commit=${COMMIT} \
+      -X netis/internal/buildinfo.Build=${BUILD} \
+      -X netis/internal/buildinfo.Date=${DATE}" \
+      -o /netis ./cmd/netis
 
 # root (not :nonroot): scanning needs CAP_NET_RAW for privileged ICMP and
 # docker's --cap-add only survives execve for root; UDP-ICMP fallback would
