@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Go modules. Grouped so a routine bump is one PR to review rather than a
+  # dozen; a major version still arrives on its own, because those are the ones
+  # worth reading.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The workflows pin action majors, which is exactly what goes stale quietly —
+  # the Node 20 deprecation in this repo's CI annotations was noticed by hand.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The builder and runtime base images.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
