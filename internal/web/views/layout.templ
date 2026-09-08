@@ -1,5 +1,17 @@
 package views
 
+import "netis/internal/buildinfo"
+
+// footer carries the running version, linking to the About tab for the full
+// build detail. It reads buildinfo directly rather than taking a parameter:
+// the version is the same on every page, so threading it through Layout's
+// callers would add an argument that never varies.
+templ footer() {
+	<footer class="footer">
+		<a href="/settings?tab=about" title="Build details">netis { buildinfo.Get().Label() }</a>
+	</footer>
+}
+
 templ Layout(title string, username string) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -46,6 +58,7 @@ templ Layout(title string, username string) {
 			<main>
 				{ children... }
 			</main>
+			@footer()
 			<div id="modal"></div>
 			<div id="toasts" class="toasts"></div>
 			<script src="/static/theme.js"></script>

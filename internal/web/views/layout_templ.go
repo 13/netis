@@ -8,7 +8,13 @@ package views
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func Layout(title string, username string) templ.Component {
+import "netis/internal/buildinfo"
+
+// footer carries the running version, linking to the About tab for the full
+// build detail. It reads buildinfo directly rather than taking a parameter:
+// the version is the same on every page, so threading it through Layout's
+// callers would add an argument that never varies.
+func footer() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -29,41 +35,91 @@ func Layout(title string, username string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<footer class=\"footer\"><a href=\"/settings?tab=about\" title=\"Build details\">netis ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(buildinfo.Get().Label())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 9, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 11, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — netis</title><script>\n\t\t\t\t// No-flash theme bootstrap: set data-theme before first paint.\n\t\t\t\t// Default dark unless a stored choice or an explicit OS light preference says otherwise.\n\t\t\t\t(function () {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t// Default to dark unless the user has explicitly chosen a theme.\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', 'dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav class=\"top\"><a href=\"/\" class=\"brand\"><span class=\"dot\"></span> netis</a><div class=\"links\"><a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/subnets\">Subnets</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a></div><div class=\"right\"><span class=\"who\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "</a></footer>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var3 string
-		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(username)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 37, Col: 33}
+		return nil
+	})
+}
+
+func Layout(title string, username string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var3 == nil {
+			templ_7745c5c3_Var3 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle theme\"><span class=\"tglabel\">Theme</span></button><form method=\"post\" action=\"/logout\" class=\"logout\"><button type=\"submit\">Logout</button></form></div></nav><main>")
+		var templ_7745c5c3_Var4 string
+		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 21, Col: 17}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ_7745c5c3_Var1.Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " — netis</title><script>\n\t\t\t\t// No-flash theme bootstrap: set data-theme before first paint.\n\t\t\t\t// Default dark unless a stored choice or an explicit OS light preference says otherwise.\n\t\t\t\t(function () {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t// Default to dark unless the user has explicitly chosen a theme.\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', 'dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav class=\"top\"><a href=\"/\" class=\"brand\"><span class=\"dot\"></span> netis</a><div class=\"links\"><a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/subnets\">Subnets</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a></div><div class=\"right\"><span class=\"who\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><div id=\"modal\"></div><div id=\"toasts\" class=\"toasts\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script><script src=\"/static/toasts.js\"></script></body></html>")
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(username)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 49, Col: 33}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle theme\"><span class=\"tglabel\">Theme</span></button><form method=\"post\" action=\"/logout\" class=\"logout\"><button type=\"submit\">Logout</button></form></div></nav><main>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ_7745c5c3_Var3.Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</main>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = footer().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div id=\"modal\"></div><div id=\"toasts\" class=\"toasts\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script><script src=\"/static/toasts.js\"></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

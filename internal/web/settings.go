@@ -7,9 +7,11 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"netis/internal/buildinfo"
 	"netis/internal/netdetect"
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -67,7 +69,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "subnets", "integrations", "users", "general":
+	case "subnets", "integrations", "users", "general", "about":
 	default:
 		tab = "subnets"
 	}
@@ -102,6 +104,12 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	views.SettingsPage(u.Username, views.SettingsData{
 		Subnets: subnets, Users: users, Values: values,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
+		About: views.AboutData{
+			Info:    buildinfo.Get(),
+			Uptime:  buildinfo.Uptime().String(),
+			Backend: string(s.store.Dialect()),
+			Now:     time.Now().UTC().Format(time.RFC3339),
+		},
 	}).Render(r.Context(), w)
 }
 

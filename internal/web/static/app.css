@@ -291,3 +291,9 @@ label:has(> input[type="checkbox"]) { flex-direction:row; align-items:center; ga
 .lease-cell button.chip.static { background:var(--accent-soft); border-color:color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .lease-cell button.chip:hover { border-color:var(--accent); }
 @media (max-width:900px) { .dev-cols { grid-template-columns:1fr; } }
+
+/* ---- footer ---- */
+/* Matches main's width and padding so the version sits on the content edge. */
+.footer { margin:8px auto 18px; padding:0 20px; max-width:1080px; text-align:right; }
+.footer a { color:var(--muted); font-size:12px; text-decoration:none; }
+.footer a:hover { color:var(--accent); }

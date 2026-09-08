@@ -47,7 +47,9 @@ for the background scan loop (every 120s by default).
 - **Events** — a filterable log of device-new/online/offline/ip-changed/
   scan-error events.
 - **Settings** — subnet CRUD, scan interval, offline threshold, Proxmox
-  and WireGuard integration credentials, and user management.
+  and WireGuard integration credentials, user management, and an **About**
+  tab with the running version, build number, commit, database backend and
+  dependency versions. Every page's footer shows the version and links there.
 
 ## Docker
 

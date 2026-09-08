@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"netis/internal/buildinfo"
 	"netis/internal/config"
 	"netis/internal/events"
 	"netis/internal/pihole"
@@ -22,10 +23,6 @@ import (
 	"netis/internal/web"
 	"netis/internal/wireguard"
 )
-
-// version is stamped at build time via -ldflags "-X main.version=...".
-// "dev" means an unstamped local build.
-var version = "dev"
 
 type integrationRunner map[string]func(context.Context) error
 
@@ -169,7 +166,7 @@ func main() {
 	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	slog.Info("netis listening", "addr", cfg.Addr, "version", version)
+	slog.Info("netis listening", "addr", cfg.Addr, "version", buildinfo.Get().Label())
 
 	select {
 	case err := <-errCh:
