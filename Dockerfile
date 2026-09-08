@@ -32,6 +32,7 @@ ARG VERSION=dev
 LABEL org.opencontainers.image.title="netis" \
       org.opencontainers.image.description="Network inventory and scanning" \
       org.opencontainers.image.source="https://github.com/13/netis" \
+      org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}"
 COPY --from=build /netis /netis
 ENV NETIS_DB=/data/netis.db

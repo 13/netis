@@ -197,3 +197,7 @@ infrastructure, or be read by something else.
 - Proxmox guest IPs depend on the QEMU guest agent being installed and
   running in the VM; without it, only the guest's configured MAC/bridge
   is known, not its IP.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
