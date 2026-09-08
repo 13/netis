@@ -114,12 +114,21 @@ func runIntegrationLoop(ctx context.Context, runNow integrationRunner, name stri
 func main() {
 	// A subcommand runs a one-shot job and exits; with no subcommand netis
 	// starts the server.
-	if len(os.Args) > 1 && os.Args[1] == "migrate-db" {
-		if err := runMigrateDB(context.Background(), os.Args[2:]); err != nil {
-			slog.Error("migrate-db", "err", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "migrate-db":
+			if err := runMigrateDB(context.Background(), os.Args[2:]); err != nil {
+				slog.Error("migrate-db", "err", err)
+				os.Exit(1)
+			}
+			return
+		case "healthcheck":
+			if err := runHealthcheck(context.Background()); err != nil {
+				slog.Error("healthcheck", "err", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 
 	cfg := config.Load()

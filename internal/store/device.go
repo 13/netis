@@ -294,15 +294,19 @@ func (s *Store) IfaceOnline(ctx context.Context, ifaceID int64) (bool, *string, 
 	return s.ifaceOnline(ctx, ifaceID)
 }
 
-// ifaceOnline and deviceTagNames get real implementations in Task 4;
-// these stubs keep Task 3 self-contained.
 func (s *Store) ifaceOnline(ctx context.Context, ifaceID int64) (bool, *string, error) {
 	var online bool
 	var lastSeen *string
 	err := s.queryRow(ctx, `SELECT online,last_seen FROM iface_status WHERE iface_id=?`, ifaceID).
 		Scan(&online, &lastSeen)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil, nil // never scanned: legitimately not online yet
+	}
 	if err != nil {
-		return false, nil, nil // no status row yet
+		// Anything else is a database problem, not an answer. Reporting it as
+		// "offline" would make an unreachable database look identical to a
+		// fleet that has genuinely gone down.
+		return false, nil, err
 	}
 	return online, lastSeen, nil
 }
