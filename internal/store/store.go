@@ -33,6 +33,34 @@ func IsPostgresDSN(dsn string) bool {
 	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
+// Options tunes the connection pool. They apply to Postgres only: SQLite is
+// deliberately held to a single connection, which is what avoids SQLITE_BUSY.
+type Options struct {
+	MaxOpenConns int
+	MaxIdleConns int
+}
+
+// Default pool sizes. Ten connections is generous for a single netis serving a
+// home network and small enough not to be rude to a shared Postgres.
+const (
+	defaultMaxOpenConns = 10
+	defaultMaxIdleConns = 5
+	connMaxLifetime     = time.Hour
+)
+
+func (o Options) withDefaults() Options {
+	if o.MaxOpenConns <= 0 {
+		o.MaxOpenConns = defaultMaxOpenConns
+	}
+	if o.MaxIdleConns <= 0 {
+		o.MaxIdleConns = defaultMaxIdleConns
+	}
+	if o.MaxIdleConns > o.MaxOpenConns {
+		o.MaxIdleConns = o.MaxOpenConns
+	}
+	return o
+}
+
 // Open connects to the database named by dsn, runs any pending migrations for
 // that backend, and returns a ready store. A Postgres URL selects the Postgres
 // backend; any other value is a SQLite file path (or ":memory:").
@@ -40,9 +68,13 @@ func IsPostgresDSN(dsn string) bool {
 // The backend is fixed for the life of the process: there is no runtime switch,
 // and data does not move between backends on its own. Use `netis migrate-db` to
 // copy an existing SQLite database into Postgres.
-func Open(dsn string) (*Store, error) {
+func Open(dsn string, opts ...Options) (*Store, error) {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	if IsPostgresDSN(dsn) {
-		return openPostgres(dsn)
+		return openPostgres(dsn, o.withDefaults())
 	}
 	return openSQLite(dsn)
 }
@@ -77,16 +109,16 @@ func openSQLite(path string) (*Store, error) {
 	return s, nil
 }
 
-func openPostgres(dsn string) (*Store, error) {
+func openPostgres(dsn string, o Options) (*Store, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
 	}
 	// A real server handles concurrent writers, so the SQLite single-connection
 	// limit must not apply here — it would serialise every request.
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(time.Hour)
+	db.SetMaxOpenConns(o.MaxOpenConns)
+	db.SetMaxIdleConns(o.MaxIdleConns)
+	db.SetConnMaxLifetime(connMaxLifetime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

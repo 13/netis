@@ -647,3 +647,18 @@ func TestConformanceListDevicesAggregation(t *testing.T) {
 		}
 	})
 }
+
+func TestOptionsWithDefaults(t *testing.T) {
+	if got := (Options{}).withDefaults(); got.MaxOpenConns != defaultMaxOpenConns ||
+		got.MaxIdleConns != defaultMaxIdleConns {
+		t.Errorf("zero Options = %+v, want the defaults", got)
+	}
+	if got := (Options{MaxOpenConns: 3, MaxIdleConns: 2}).withDefaults(); got.MaxOpenConns != 3 ||
+		got.MaxIdleConns != 2 {
+		t.Errorf("explicit Options = %+v", got)
+	}
+	// More idle than open is not a pool anyone meant to ask for.
+	if got := (Options{MaxOpenConns: 2, MaxIdleConns: 50}).withDefaults(); got.MaxIdleConns != 2 {
+		t.Errorf("idle clamped to open: %+v", got)
+	}
+}

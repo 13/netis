@@ -132,7 +132,10 @@ func main() {
 	}
 
 	cfg := config.Load()
-	st, err := store.Open(cfg.DSN)
+	st, err := store.Open(cfg.DSN, store.Options{
+		MaxOpenConns: cfg.MaxOpenConns,
+		MaxIdleConns: cfg.MaxIdleConns,
+	})
 	if err != nil {
 		slog.Error("open db", "err", err)
 		os.Exit(1)
