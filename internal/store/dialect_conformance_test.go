@@ -500,3 +500,32 @@ func TestConformanceUsersSettingsAndGrid(t *testing.T) {
 		}
 	})
 }
+
+// A failing database must not be reported as "this device is offline". Before
+// this, ifaceOnline turned every error into (false, nil, nil), so an
+// unreachable database rendered the whole fleet offline with nothing logged.
+func TestIfaceOnlineDistinguishesNoRowsFromFailure(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		devID, err := s.CreateDevice(ctx, Device{Name: "d", Kind: "other", Source: "manual"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ifID, err := s.AddIface(ctx, devID, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Never scanned: legitimately offline, and not an error.
+		online, _, err := s.IfaceOnline(ctx, ifID)
+		if err != nil || online {
+			t.Fatalf("unscanned iface: online=%v err=%v", online, err)
+		}
+
+		// Database gone: an error, not a confident "offline".
+		s.Close()
+		if _, _, err := s.IfaceOnline(ctx, ifID); err == nil {
+			t.Error("a closed database must produce an error, not a false offline")
+		}
+	})
+}

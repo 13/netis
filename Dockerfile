@@ -37,4 +37,9 @@ COPY --from=build /netis /netis
 ENV NETIS_DB=/data/netis.db
 VOLUME /data
 EXPOSE 8080
+# The image has no shell or curl, so the binary probes itself; /healthz fails
+# when the database is unreachable, which is the failure the process staying up
+# would otherwise hide.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/netis", "healthcheck"]
 ENTRYPOINT ["/netis"]

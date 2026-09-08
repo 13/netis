@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"embed"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"netis/internal/events"
 	"netis/internal/netdetect"
@@ -38,9 +40,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		trigger: trigger, runner: runner, limiter: newRateLimiter(),
 		detect: netdetect.DetectSubnets,
 	}
-	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
+	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("POST /login", s.handleLogin)
@@ -93,6 +93,21 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
 	return securityHeaders(cop.Handler(s.requireAuth(s.mux)))
+}
+
+// handleHealthz reports whether netis can actually serve: the process being up
+// is not enough, since the database may be a server on the far side of a
+// network. It is deliberately unauthenticated — orchestrators probe it without
+// credentials — so it reveals only reachable/not, never why.
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := s.store.DB.PingContext(ctx); err != nil {
+		slog.Error("healthz: database unreachable", "err", err)
+		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Write([]byte("ok"))
 }
 
 // securityHeaders sets baseline browser hardening headers on every response.

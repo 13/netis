@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"netis/internal/events"
@@ -17,6 +18,16 @@ type Engine struct {
 	ARP          func() (map[string]string, error)
 	Resolve      func(context.Context, string) string
 	OfflineAfter int
+}
+
+// logStoreErr reports a store write that failed mid-sweep. A sweep does not
+// abort on one bad write — the remaining hosts are still worth recording — but
+// the failure must not vanish either: silently dropped writes make a database
+// outage look like a fleet that has gone quiet.
+func logStoreErr(op string, ifaceID int64, err error) {
+	if err != nil {
+		slog.Error("scan store write failed", "op", op, "iface_id", ifaceID, "err", err)
+	}
 }
 
 func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
@@ -75,10 +86,13 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		if aliveIPs[k.IP] || seen[k.IfaceID] {
 			continue
 		}
-		went, _ := e.Store.MarkMissed(ctx, k.IfaceID, e.OfflineAfter)
-		e.Store.RecordAvailability(ctx, k.IfaceID, false, bucket)
+		went, err := e.Store.MarkMissed(ctx, k.IfaceID, e.OfflineAfter)
+		logStoreErr("MarkMissed", k.IfaceID, err)
+		logStoreErr("RecordAvailability", k.IfaceID,
+			e.Store.RecordAvailability(ctx, k.IfaceID, false, bucket))
 		if went {
-			d, _ := e.Store.GetDevice(ctx, k.DeviceID)
+			d, err := e.Store.GetDevice(ctx, k.DeviceID)
+			logStoreErr("GetDevice", k.IfaceID, err)
 			e.Events.Emit(ctx, "offline", &k.DeviceID, fmt.Sprintf("%s (%s) went offline", d.Name, k.IP))
 		}
 	}
@@ -88,10 +102,13 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 }
 
 func (e *Engine) markSeen(ctx context.Context, ifaceID, deviceID int64, rtt float64, now time.Time, bucket string) {
-	wasOffline, _ := e.Store.MarkSeen(ctx, ifaceID, rtt, now)
-	e.Store.RecordAvailability(ctx, ifaceID, true, bucket)
+	wasOffline, err := e.Store.MarkSeen(ctx, ifaceID, rtt, now)
+	logStoreErr("MarkSeen", ifaceID, err)
+	logStoreErr("RecordAvailability", ifaceID,
+		e.Store.RecordAvailability(ctx, ifaceID, true, bucket))
 	if wasOffline {
-		d, _ := e.Store.GetDevice(ctx, deviceID)
+		d, err := e.Store.GetDevice(ctx, deviceID)
+		logStoreErr("GetDevice", ifaceID, err)
 		e.Events.Emit(ctx, "online", &deviceID, fmt.Sprintf("%s is online", d.Name))
 	}
 }
@@ -124,9 +141,13 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	if err != nil {
 		return 0, false
 	}
-	e.Store.AssignIP(ctx, ifID, sn.ID, r.IP, "dhcp")
-	e.Store.MarkSeen(ctx, ifID, r.RTTms, now)
-	e.Store.RecordAvailability(ctx, ifID, true, bucket)
+	if _, err := e.Store.AssignIP(ctx, ifID, sn.ID, r.IP, "dhcp"); err != nil {
+		logStoreErr("AssignIP", ifID, err)
+	}
+	_, err = e.Store.MarkSeen(ctx, ifID, r.RTTms, now)
+	logStoreErr("MarkSeen", ifID, err)
+	logStoreErr("RecordAvailability", ifID,
+		e.Store.RecordAvailability(ctx, ifID, true, bucket))
 	e.Events.Emit(ctx, "device_new", &devID, fmt.Sprintf("new device %s at %s", name, r.IP))
 	return ifID, true
 }
