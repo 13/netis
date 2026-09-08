@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
 )
 
@@ -104,19 +106,32 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 	return nil
 }
 
+// defaultTagColor is what an auto-created tag gets until someone picks one.
+const defaultTagColor = "#888888"
+
 // findOrCreateTag returns the id of the tag with the given name, creating it
 // with a neutral color if it does not exist yet.
+//
+// It looks the name up directly rather than scanning the whole tag table, which
+// is what SetDeviceTags used to do once per name. The insert tolerates a
+// concurrent creator via ON CONFLICT and re-reads, so two requests attaching
+// the same new tag cannot make one of them fail.
 func (s *Store) findOrCreateTag(ctx context.Context, name string) (int64, error) {
-	tags, err := s.ListTags(ctx)
-	if err != nil {
+	var id int64
+	err := s.queryRow(ctx, `SELECT id FROM tag WHERE name=?`, name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	for _, t := range tags {
-		if t.Name == name {
-			return t.ID, nil
-		}
+	if _, err := s.exec(ctx,
+		`INSERT INTO tag (name,color) VALUES (?,?) ON CONFLICT(name) DO NOTHING`,
+		name, defaultTagColor); err != nil {
+		return 0, err
 	}
-	return s.CreateTag(ctx, name, "#888888")
+	err = s.queryRow(ctx, `SELECT id FROM tag WHERE name=?`, name).Scan(&id)
+	return id, err
 }
 
 func (s *Store) SetCustomField(ctx context.Context, deviceID int64, key, value string) error {

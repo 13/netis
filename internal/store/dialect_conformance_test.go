@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,7 @@ func eachDialect(t *testing.T, fn func(t *testing.T, s *Store)) {
 
 // openPGSchema creates a scratch schema on the server named by dsn and returns
 // a store whose search_path points at it.
-func openPGSchema(t *testing.T, dsn string) *Store {
+func openPGSchema(t testing.TB, dsn string) *Store {
 	t.Helper()
 	schema := fmt.Sprintf("netis_test_%d", time.Now().UnixNano())
 
@@ -526,6 +527,123 @@ func TestIfaceOnlineDistinguishesNoRowsFromFailure(t *testing.T) {
 		s.Close()
 		if _, _, err := s.IfaceOnline(ctx, ifID); err == nil {
 			t.Error("a closed database must produce an error, not a false offline")
+		}
+	})
+}
+
+// ListDevices assembles its rows from bulk queries rather than per-device ones,
+// so the aggregation it does in Go — MAC and IP order, "online if any interface
+// is", latest last-seen, sorted tag names — is worth pinning down.
+func TestConformanceListDevicesAggregation(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		snID, err := s.CreateSubnet(ctx, Subnet{CIDR: "10.2.0.0/24", Kind: "lan",
+			ScanEnabled: true, ScanIntervalSec: 60})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// "alpha" sorts before "beta"; devices come back ordered by name.
+		beta, err := s.CreateDevice(ctx, Device{Name: "beta", Kind: "other", Source: "manual"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		alpha, err := s.CreateDevice(ctx, Device{Name: "alpha", Kind: "other", Source: "manual"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A device with no interfaces at all must still appear.
+		if _, err := s.CreateDevice(ctx, Device{Name: "gamma", Kind: "other", Source: "manual"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// alpha has two interfaces: the first offline, the second online, so
+		// the device is online and takes the later last-seen.
+		mac1, mac2 := "aa:00:00:00:00:01", "aa:00:00:00:00:02"
+		if1, err := s.AddIface(ctx, alpha, &mac1, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if2, err := s.AddIface(ctx, alpha, &mac2, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ip := range []string{"10.2.0.11", "10.2.0.12"} {
+			if _, err := s.AssignIP(ctx, if1, snID, ip, "dhcp"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := s.AssignIP(ctx, if2, snID, "10.2.0.13", "static"); err != nil {
+			t.Fatal(err)
+		}
+		early := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		late := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+		if _, err := s.MarkSeen(ctx, if1, 1, early); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 3; i++ { // take if1 offline again
+			if _, err := s.MarkMissed(ctx, if1, 1); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := s.MarkSeen(ctx, if2, 1, late); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetDeviceTags(ctx, alpha, []string{"zeta", "alpha-tag"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// beta has one interface, never scanned: offline, no last-seen.
+		mac3 := "bb:00:00:00:00:01"
+		if _, err := s.AddIface(ctx, beta, &mac3, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		rows, err := s.ListDevices(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 3 {
+			t.Fatalf("got %d devices, want 3", len(rows))
+		}
+		if rows[0].Name != "alpha" || rows[1].Name != "beta" || rows[2].Name != "gamma" {
+			t.Fatalf("order = %q,%q,%q; want alpha,beta,gamma",
+				rows[0].Name, rows[1].Name, rows[2].Name)
+		}
+
+		a := rows[0]
+		if !a.Online {
+			t.Error("alpha should be online: one of its interfaces is")
+		}
+		if a.LastSeen == nil || *a.LastSeen != late.Format(time.RFC3339) {
+			t.Errorf("alpha LastSeen = %v, want the later of the two", a.LastSeen)
+		}
+		if !slices.Equal(a.MACs, []string{mac1, mac2}) {
+			t.Errorf("alpha MACs = %v, want them in interface order", a.MACs)
+		}
+		wantIPs := []IPInfo{
+			{IP: "10.2.0.11", Kind: "dhcp"},
+			{IP: "10.2.0.12", Kind: "dhcp"},
+			{IP: "10.2.0.13", Kind: "static"},
+		}
+		if !slices.Equal(a.IPs, wantIPs) {
+			t.Errorf("alpha IPs = %+v, want %+v", a.IPs, wantIPs)
+		}
+		if !slices.Equal(a.TagNames, []string{"alpha-tag", "zeta"}) {
+			t.Errorf("alpha TagNames = %v, want them sorted by name", a.TagNames)
+		}
+
+		b := rows[1]
+		if b.Online || b.LastSeen != nil {
+			t.Errorf("beta was never scanned: online=%v lastSeen=%v", b.Online, b.LastSeen)
+		}
+		if !slices.Equal(b.MACs, []string{mac3}) {
+			t.Errorf("beta MACs = %v", b.MACs)
+		}
+
+		g := rows[2]
+		if len(g.MACs) != 0 || len(g.IPs) != 0 || g.Online {
+			t.Errorf("gamma has no interfaces: %+v", g)
 		}
 	})
 }

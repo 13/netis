@@ -208,6 +208,15 @@ func (s *Store) ListIPs(ctx context.Context, ifaceID int64) ([]IPRow, error) {
 	return out, rows.Err()
 }
 
+// ListDevices returns every device with its interfaces, IPs, online state and
+// tag names.
+//
+// It runs a fixed five queries regardless of how many devices exist. The
+// obvious shape — walk the devices and ask for each one's interfaces, IPs,
+// status and tags — costs four queries per device, which is barely noticeable
+// against a local SQLite file and very noticeable against a database one
+// network hop away. This backs the dashboard, the device list and the subnet
+// grid, so it is worth the assembly code below.
 func (s *Store) ListDevices(ctx context.Context) ([]DeviceRow, error) {
 	devRows, err := s.query(ctx, `SELECT `+deviceCols+` FROM device ORDER BY name`)
 	if err != nil {
@@ -215,35 +224,75 @@ func (s *Store) ListDevices(ctx context.Context) ([]DeviceRow, error) {
 	}
 	defer devRows.Close()
 	var out []DeviceRow
+	byID := make(map[int64]int) // device id -> index in out
 	for devRows.Next() {
 		d, err := scanDevice(devRows)
 		if err != nil {
 			return nil, err
 		}
+		byID[d.ID] = len(out)
 		out = append(out, DeviceRow{Device: d})
 	}
 	if err := devRows.Err(); err != nil {
 		return nil, err
 	}
-	for i := range out {
-		ifaces, err := s.ListIfaces(ctx, out[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, f := range ifaces {
-			if f.MAC != nil {
-				out[i].MACs = append(out[i].MACs, *f.MAC)
+	if len(out) == 0 {
+		return nil, nil
+	}
+
+	// MACs, in interface order per device.
+	if err := s.eachRow(ctx,
+		`SELECT device_id, mac FROM iface WHERE mac IS NOT NULL ORDER BY device_id, id`,
+		func(rows *sql.Rows) error {
+			var devID int64
+			var mac string
+			if err := rows.Scan(&devID, &mac); err != nil {
+				return err
 			}
-			ips, err := s.ListIPs(ctx, f.ID)
-			if err != nil {
-				return nil, err
+			if i, ok := byID[devID]; ok {
+				out[i].MACs = append(out[i].MACs, mac)
 			}
-			for _, p := range ips {
-				out[i].IPs = append(out[i].IPs, IPInfo{IP: p.IP, Kind: p.Kind})
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	// IPs, ordered by interface then assignment so the list matches what a
+	// per-device walk produced.
+	if err := s.eachRow(ctx,
+		`SELECT f.device_id, a.ip, a.kind FROM ip_assignment a
+			JOIN iface f ON f.id=a.iface_id
+			ORDER BY f.device_id, f.id, a.id`,
+		func(rows *sql.Rows) error {
+			var devID int64
+			var ip IPInfo
+			if err := rows.Scan(&devID, &ip.IP, &ip.Kind); err != nil {
+				return err
 			}
-			online, lastSeen, err := s.ifaceOnline(ctx, f.ID)
-			if err != nil {
-				return nil, err
+			if i, ok := byID[devID]; ok {
+				out[i].IPs = append(out[i].IPs, ip)
+			}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	// A device is online if any of its interfaces is, and its last-seen is the
+	// latest across them. The timestamps are RFC3339, so comparing them as
+	// strings orders them chronologically.
+	if err := s.eachRow(ctx,
+		`SELECT f.device_id, st.online, st.last_seen FROM iface_status st
+			JOIN iface f ON f.id=st.iface_id`,
+		func(rows *sql.Rows) error {
+			var devID int64
+			var online bool
+			var lastSeen *string
+			if err := rows.Scan(&devID, &online, &lastSeen); err != nil {
+				return err
+			}
+			i, ok := byID[devID]
+			if !ok {
+				return nil
 			}
 			if online {
 				out[i].Online = true
@@ -251,12 +300,27 @@ func (s *Store) ListDevices(ctx context.Context) ([]DeviceRow, error) {
 			if lastSeen != nil && (out[i].LastSeen == nil || *lastSeen > *out[i].LastSeen) {
 				out[i].LastSeen = lastSeen
 			}
-		}
-		tags, err := s.deviceTagNames(ctx, out[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		out[i].TagNames = tags
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := s.eachRow(ctx,
+		`SELECT dt.device_id, t.name FROM device_tag dt
+			JOIN tag t ON t.id=dt.tag_id
+			ORDER BY dt.device_id, t.name`,
+		func(rows *sql.Rows) error {
+			var devID int64
+			var name string
+			if err := rows.Scan(&devID, &name); err != nil {
+				return err
+			}
+			if i, ok := byID[devID]; ok {
+				out[i].TagNames = append(out[i].TagNames, name)
+			}
+			return nil
+		}); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

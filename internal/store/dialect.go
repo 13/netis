@@ -85,3 +85,20 @@ func (s *Store) insertReturningID(ctx context.Context, q string, args ...any) (i
 	}
 	return res.LastInsertId()
 }
+
+// eachRow runs a query and calls fn once per row, handling the close and the
+// deferred row error that a bare Query loop is easy to get wrong. It exists for
+// the bulk lookups that replaced per-row queries in ListDevices.
+func (s *Store) eachRow(ctx context.Context, q string, fn func(*sql.Rows) error, args ...any) error {
+	rows, err := s.query(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := fn(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
