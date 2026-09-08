@@ -32,3 +32,24 @@ func TestLoadPostgresDSN(t *testing.T) {
 		t.Errorf("DSN = %q", c.DSN)
 	}
 }
+
+func TestLoadPoolSizes(t *testing.T) {
+	// Unset means "let the store choose", not zero connections.
+	c := Load()
+	if c.MaxOpenConns != 0 || c.MaxIdleConns != 0 {
+		t.Errorf("unset pool sizes = %d/%d, want 0/0", c.MaxOpenConns, c.MaxIdleConns)
+	}
+	t.Setenv("NETIS_DB_MAX_OPEN_CONNS", "25")
+	t.Setenv("NETIS_DB_MAX_IDLE_CONNS", "5")
+	c = Load()
+	if c.MaxOpenConns != 25 || c.MaxIdleConns != 5 {
+		t.Errorf("pool sizes = %d/%d, want 25/5", c.MaxOpenConns, c.MaxIdleConns)
+	}
+	// Garbage and non-positive values fall back rather than crippling the pool.
+	for _, bad := range []string{"lots", "0", "-3"} {
+		t.Setenv("NETIS_DB_MAX_OPEN_CONNS", bad)
+		if c := Load(); c.MaxOpenConns != 0 {
+			t.Errorf("NETIS_DB_MAX_OPEN_CONNS=%q gave %d, want 0", bad, c.MaxOpenConns)
+		}
+	}
+}

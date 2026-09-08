@@ -7,6 +7,16 @@ import (
 	"time"
 )
 
+// MarkSeen records a successful ping and reports whether this is a transition
+// from offline, which is what decides if an "online" event is emitted.
+//
+// The read and the upsert are two statements rather than one. There is no
+// portable single statement that upserts and returns the pre-update value —
+// Postgres can do it with an xmax trick, SQLite cannot — and the race the two
+// statements would otherwise open is closed by the caller: Scheduler.run is
+// invoked synchronously from one goroutine, so sweeps never overlap and no two
+// callers touch the same interface at once. The extra round trip is also noise
+// next to the ICMP sweep that produced this result.
 func (s *Store) MarkSeen(ctx context.Context, ifaceID int64, rttMS float64, at time.Time) (bool, error) {
 	ts := at.UTC().Format(time.RFC3339)
 	var online bool
