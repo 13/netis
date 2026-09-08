@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -73,5 +74,40 @@ func TestAboutTabRequiresAuth(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/settings?tab=about", nil))
 	if rec.Code != 303 && rec.Code != 302 {
 		t.Fatalf("anonymous request got %d, want a redirect to login", rec.Code)
+	}
+}
+
+func TestGeneralTabSavesRetention(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+
+	rec := authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after":               {"3"},
+		"event_retention_days":        {"7"},
+		"availability_retention_days": {"0"},
+	})
+	if rec.Code != 303 {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if v, _ := st.GetSetting(t.Context(), "event_retention_days"); v != "7" {
+		t.Errorf("event_retention_days = %q, want 7", v)
+	}
+	// Zero is a valid choice and must be stored, not skipped as blank.
+	if v, _ := st.GetSetting(t.Context(), "availability_retention_days"); v != "0" {
+		t.Errorf("availability_retention_days = %q, want 0", v)
+	}
+
+	// A negative window is rejected rather than silently deleting everything.
+	rec = authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after": {"3"}, "event_retention_days": {"-1"},
+	})
+	if rec.Code != 400 {
+		t.Errorf("negative retention: code=%d, want 400", rec.Code)
+	}
+
+	// The saved values come back into the form.
+	rec = authedGet(t, srv, st, "/settings?tab=general")
+	if !strings.Contains(rec.Body.String(), `name="event_retention_days" min="0" value="7"`) {
+		t.Error("General tab does not show the saved event retention")
 	}
 }
