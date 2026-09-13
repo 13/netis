@@ -37,7 +37,10 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          # arm64 as well as amd64: a Raspberry Pi or other arm64 SBC is a
+          # normal place to run a home-LAN inventory, and the Dockerfile
+          # cross-compiles rather than emulating, so this stays cheap.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -48,3 +51,58 @@ jobs:
             DATE=${{ steps.now.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The README sells netis as a single static binary; until this job existed a
+  # release shipped only a container image, so running it without Docker meant
+  # building it yourself. Linux amd64 and arm64 cover the machines a home LAN
+  # inventory actually runs on.
+  binaries:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go tool templ generate
+
+      - id: now
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: build
+        env:
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          BUILD: ${{ github.run_number }}
+          DATE: ${{ steps.now.outputs.date }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags="-s -w \
+                -X netis/internal/buildinfo.Version=${version} \
+                -X netis/internal/buildinfo.Commit=${COMMIT} \
+                -X netis/internal/buildinfo.Build=${BUILD} \
+                -X netis/internal/buildinfo.Date=${DATE}" \
+              -o "dist/netis" ./cmd/netis
+            tar -czf "dist/netis_${version}_linux_${arch}.tar.gz" -C dist netis -C .. LICENSE README.md
+            rm dist/netis
+          done
+          cd dist && sha256sum ./*.tar.gz > SHA256SUMS
+
+      - name: attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # The tag may have been pushed without a release object; create one if
+          # so, then upload. --clobber keeps a re-run of this workflow working.
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --verify-tag --generate-notes --title "$TAG"
+          gh release upload "$TAG" dist/* --clobber
