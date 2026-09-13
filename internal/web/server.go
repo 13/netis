@@ -5,6 +5,7 @@ import (
 	"embed"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"time"
 
@@ -25,6 +26,16 @@ type IntegrationRunner interface {
 	Run(ctx context.Context, name string) error
 }
 
+// Options carries deployment settings that are not stored in the database
+// because they describe the environment netis runs in, not the network it
+// tracks.
+type Options struct {
+	// TrustedProxies lists the networks whose X-Forwarded-For and
+	// X-Forwarded-Proto headers netis believes. Empty means the headers are
+	// ignored and every request is attributed to its direct peer.
+	TrustedProxies []netip.Prefix
+}
+
 type Server struct {
 	mux     *http.ServeMux
 	store   *store.Store
@@ -33,13 +44,20 @@ type Server struct {
 	runner  IntegrationRunner
 	limiter *rateLimiter
 	detect  func() ([]netdetect.Detected, error)
+
+	trustedProxies []netip.Prefix
 }
 
-func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner) *Server {
+func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
 	s := &Server{
 		mux: http.NewServeMux(), store: st, broker: broker,
 		trigger: trigger, runner: runner, limiter: newRateLimiter(),
-		detect: netdetect.DetectSubnets,
+		detect:         netdetect.DetectSubnets,
+		trustedProxies: o.TrustedProxies,
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))

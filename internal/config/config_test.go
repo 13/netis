@@ -53,3 +53,50 @@ func TestLoadPoolSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTrustedProxies(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"  ", nil},
+		{"10.0.0.0/8", []string{"10.0.0.0/8"}},
+		{"127.0.0.1", []string{"127.0.0.1/32"}},
+		{"::1", []string{"::1/128"}},
+		{"10.0.0.0/8, 192.168.1.5 ,fd00::/8", []string{"10.0.0.0/8", "192.168.1.5/32", "fd00::/8"}},
+	}
+	for _, c := range cases {
+		got, err := ParseTrustedProxies(c.in)
+		if err != nil {
+			t.Errorf("ParseTrustedProxies(%q): %v", c.in, err)
+			continue
+		}
+		if len(got) != len(c.want) {
+			t.Errorf("ParseTrustedProxies(%q) = %v, want %v", c.in, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i].String() != c.want[i] {
+				t.Errorf("ParseTrustedProxies(%q)[%d] = %s, want %s", c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// A typo in the proxy list must stop the process rather than silently leaving
+// every forwarded header untrusted (or, worse, trusted).
+func TestParseTrustedProxiesRejectsGarbage(t *testing.T) {
+	for _, in := range []string{"nonsense", "10.0.0.0/33", "10.0.0.0/8,oops", "example.com"} {
+		if _, err := ParseTrustedProxies(in); err == nil {
+			t.Errorf("ParseTrustedProxies(%q): want error", in)
+		}
+	}
+}
+
+func TestLoadReadsTrustedProxies(t *testing.T) {
+	t.Setenv("NETIS_TRUSTED_PROXIES", "10.0.0.0/8")
+	if c := Load(); c.TrustedProxies != "10.0.0.0/8" {
+		t.Errorf("TrustedProxies = %q", c.TrustedProxies)
+	}
+}

@@ -110,6 +110,7 @@ Environment variables:
 | `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
 | `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
 | `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
+| `NETIS_TRUSTED_PROXIES` | unset | Comma-separated CIDRs or addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers netis believes. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 
 Settings configured in the web UI (Settings page), stored in the
 database's key/value settings table:
@@ -151,6 +152,29 @@ subnet you've configured in netis.
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.
+
+## Behind a reverse proxy
+
+netis ignores `X-Forwarded-For` and `X-Forwarded-Proto` unless you name the
+proxy that sends them:
+
+```sh
+NETIS_TRUSTED_PROXIES=10.0.0.0/8,192.168.1.5 ./netis
+```
+
+Set this when netis sits behind nginx, Caddy, Traefik or similar. Without it
+every request is attributed to the proxy's own address, so the login rate
+limiter (5 failed attempts per minute) counts all users as one client and five
+wrong passwords from anywhere lock everyone out for a minute. With it, the
+limiter keys on the real client address — the rightmost forwarded entry that
+isn't itself a listed proxy, which is the furthest-left address the proxy chain
+can actually vouch for.
+
+`X-Forwarded-Proto: https` from a listed proxy also lets the session cookie
+carry the `Secure` flag when TLS terminates at the proxy.
+
+A malformed entry is a startup error rather than a warning: a list that quietly
+parsed to nothing would leave the limiter mis-keyed with no sign of it.
 
 ## Database backends
 

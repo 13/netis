@@ -138,6 +138,13 @@ func main() {
 	}
 
 	cfg := config.Load()
+	// Parsed before the database is touched: a typo here is a misconfiguration
+	// worth failing on, not something to log and run past.
+	trustedProxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		slog.Error("NETIS_TRUSTED_PROXIES", "err", err)
+		os.Exit(1)
+	}
 	st, err := store.Open(cfg.DSN, store.Options{
 		MaxOpenConns: cfg.MaxOpenConns,
 		MaxIdleConns: cfg.MaxIdleConns,
@@ -170,8 +177,10 @@ func main() {
 	startRetention(ctx, st, retentionInterval)
 
 	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           web.NewServer(st, broker, sched, runNow).Handler(),
+		Addr: cfg.Addr,
+		Handler: web.NewServer(st, broker, sched, runNow, web.Options{
+			TrustedProxies: trustedProxies,
+		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		// Request contexts derive from ctx so open SSE streams end on
