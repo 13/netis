@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"netis/internal/events"
@@ -11,13 +12,37 @@ import (
 )
 
 type Engine struct {
-	Store        *store.Store
-	Events       *events.Service
-	Broker       *events.Broker
-	Sweeper      Sweeper
-	ARP          func() (map[string]string, error)
-	Resolve      func(context.Context, string) string
-	OfflineAfter int
+	Store   *store.Store
+	Events  *events.Service
+	Broker  *events.Broker
+	Sweeper Sweeper
+	ARP     func() (map[string]string, error)
+	Resolve func(context.Context, string) string
+}
+
+// defaultOfflineAfter is the consecutive-miss threshold used when the
+// offline_after setting is unset or unusable.
+const defaultOfflineAfter = 3
+
+// offlineAfter reads the consecutive-miss threshold from settings, on every
+// sweep rather than once at process start. The threshold is editable in
+// Settings > General, and caching it meant a saved change did nothing until
+// netis restarted while the form showed the new value as if it were live.
+//
+// A missing, unparseable or out-of-range value falls back to the default: the
+// form already bounds it to 1-10, and a bad row must not turn every sweep into
+// an offline flap (0) or stop reporting offline at all (huge).
+func (e *Engine) offlineAfter(ctx context.Context) int {
+	v, err := e.Store.GetSetting(ctx, "offline_after")
+	if err != nil {
+		slog.Error("reading offline_after setting failed", "err", err)
+		return defaultOfflineAfter
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > 10 {
+		return defaultOfflineAfter
+	}
+	return n
 }
 
 // logStoreErr reports a store write that failed mid-sweep. A sweep does not
@@ -40,6 +65,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	if err != nil {
 		arp = map[string]string{}
 	}
+	offlineAfter := e.offlineAfter(ctx)
 	now := time.Now().UTC()
 	bucket := now.Truncate(time.Hour).Format(time.RFC3339)
 
@@ -86,7 +112,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		if aliveIPs[k.IP] || seen[k.IfaceID] {
 			continue
 		}
-		went, err := e.Store.MarkMissed(ctx, k.IfaceID, e.OfflineAfter)
+		went, err := e.Store.MarkMissed(ctx, k.IfaceID, offlineAfter)
 		logStoreErr("MarkMissed", k.IfaceID, err)
 		logStoreErr("RecordAvailability", k.IfaceID,
 			e.Store.RecordAvailability(ctx, k.IfaceID, false, bucket))

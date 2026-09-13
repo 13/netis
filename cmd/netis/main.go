@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -155,18 +154,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	offlineAfter := 3
-	if v, _ := st.GetSetting(ctx, "offline_after"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			offlineAfter = n
-		}
-	}
+	// The offline threshold is not read here: the engine reads it from settings
+	// on every sweep, so an admin's change takes effect without a restart.
 	engine := &scan.Engine{
 		Store: st, Events: evs, Broker: broker,
-		Sweeper:      scan.NewICMPSweeper(64),
-		ARP:          scan.ReadARPTable,
-		Resolve:      scan.ResolveName,
-		OfflineAfter: offlineAfter,
+		Sweeper: scan.NewICMPSweeper(64),
+		ARP:     scan.ReadARPTable,
+		Resolve: scan.ResolveName,
 	}
 	sched := scan.NewScheduler(engine, st)
 	go sched.Start(ctx)
