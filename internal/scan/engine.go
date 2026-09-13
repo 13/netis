@@ -125,11 +125,6 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	if name == "" {
 		name = "unknown-" + r.IP
 	}
-	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: Vendor(mac)}
-	devID, err := e.Store.CreateDevice(ctx, d)
-	if err != nil {
-		return 0, false
-	}
 	var macP, hostP *string
 	if mac != "" {
 		macP = &mac
@@ -137,12 +132,14 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	if resolved != "" {
 		hostP = &resolved
 	}
-	ifID, err := e.Store.AddIface(ctx, devID, macP, hostP)
+	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: Vendor(mac)}
+	// Device, interface and IP are created together: a device that got as far
+	// as being inserted without an interface is invisible to MAC matching and
+	// would linger in the list forever.
+	devID, ifID, err := e.Store.CreateDiscoveredDevice(ctx, d, macP, hostP, sn.ID, r.IP, "dhcp")
 	if err != nil {
+		slog.Error("creating discovered device failed", "ip", r.IP, "mac", mac, "err", err)
 		return 0, false
-	}
-	if _, err := e.Store.AssignIP(ctx, ifID, sn.ID, r.IP, "dhcp"); err != nil {
-		logStoreErr("AssignIP", ifID, err)
 	}
 	_, err = e.Store.MarkSeen(ctx, ifID, r.RTTms, now)
 	logStoreErr("MarkSeen", ifID, err)

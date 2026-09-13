@@ -450,3 +450,48 @@ func (s *Store) deviceTagNames(ctx context.Context, deviceID int64) ([]string, e
 	}
 	return out, rows.Err()
 }
+
+// CreateDiscoveredDevice creates a device, its interface and that interface's
+// first IP assignment as one unit, returning both new ids.
+//
+// The scan engine used to do this as three separate writes. A failure after the
+// device insert left a device row with no interface: it appeared in the device
+// list with no IP or MAC, and because interfaces are matched by MAC, nothing
+// would ever attach to it or recreate it. A partial write like that went from
+// nearly impossible against a local file to merely unlikely against a database
+// on the network.
+//
+// Marking the interface seen is deliberately left outside: it is an
+// observation, and losing one is harmless, whereas a half-created device is
+// not.
+func (s *Store) CreateDiscoveredDevice(ctx context.Context, d Device, mac, hostname *string,
+	subnetID int64, ip, kind string) (deviceID, ifaceID int64, err error) {
+	// Scan-discovered devices start unreviewed, matching CreateDevice.
+	reviewed := d.Source != "scan"
+	err = s.withTx(ctx, func(c conn) error {
+		devID, err := s.insertReturningIDOn(ctx, c,
+			`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+			d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID,
+			d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
+		if err != nil {
+			return err
+		}
+		ifID, err := s.insertReturningIDOn(ctx, c,
+			`INSERT INTO iface (device_id,mac,hostname) VALUES (?,?,?)`, devID, mac, hostname)
+		if err != nil {
+			return err
+		}
+		if _, err := s.insertReturningIDOn(ctx, c,
+			`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
+			ifID, subnetID, ip, kind); err != nil {
+			return err
+		}
+		deviceID, ifaceID = devID, ifID
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return deviceID, ifaceID, nil
+}

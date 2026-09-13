@@ -662,3 +662,109 @@ func TestOptionsWithDefaults(t *testing.T) {
 		t.Errorf("idle clamped to open: %+v", got)
 	}
 }
+
+// CreateDiscoveredDevice exists so that a device, its interface and its first
+// IP either all appear or none do. A device without an interface is invisible
+// to MAC matching and would never be repaired.
+func TestConformanceCreateDiscoveredDeviceIsAtomic(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		snID, err := s.CreateSubnet(ctx, Subnet{CIDR: "10.5.0.0/24", Kind: "lan",
+			ScanEnabled: true, ScanIntervalSec: 60})
+		if err != nil {
+			t.Fatal(err)
+		}
+		mac, host := "ee:00:00:00:00:01", "box"
+
+		devID, ifID, err := s.CreateDiscoveredDevice(ctx,
+			Device{Name: "box", Kind: "other", Source: "scan"},
+			&mac, &host, snID, "10.5.0.7", "dhcp")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if devID == 0 || ifID == 0 {
+			t.Fatalf("ids = %d,%d", devID, ifID)
+		}
+		d, err := s.GetDevice(ctx, devID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Reviewed {
+			t.Error("a scan-discovered device must start unreviewed")
+		}
+		if _, ok, err := s.FindIfaceByMAC(ctx, mac); err != nil || !ok {
+			t.Errorf("interface not reachable by MAC: ok=%v err=%v", ok, err)
+		}
+		ips, err := s.ListIPs(ctx, ifID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ips) != 1 || ips[0].IP != "10.5.0.7" {
+			t.Errorf("ListIPs = %+v", ips)
+		}
+
+		// A duplicate MAC violates the unique index on the second insert, so
+		// the device inserted first must be rolled back with it — that is the
+		// phantom this function exists to prevent.
+		before, err := s.ListDevices(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := s.CreateDiscoveredDevice(ctx,
+			Device{Name: "dupe", Kind: "other", Source: "scan"},
+			&mac, nil, snID, "10.5.0.8", "dhcp"); err == nil {
+			t.Fatal("a duplicate MAC must fail")
+		}
+		after, err := s.ListDevices(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(after) != len(before) {
+			t.Errorf("device count went %d -> %d; the failed insert left a phantom",
+				len(before), len(after))
+		}
+	})
+}
+
+// SetDeviceTags detaches and attaches in one transaction, so a device is never
+// left with its old tags removed and its new ones missing.
+func TestConformanceSetDeviceTagsIsAtomic(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		devID, err := s.CreateDevice(ctx, Device{Name: "d", Kind: "other", Source: "manual"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetDeviceTags(ctx, devID, []string{"old-a", "old-b"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetDeviceTags(ctx, devID, []string{"old-a", "new-c"}); err != nil {
+			t.Fatal(err)
+		}
+		tags, err := s.DeviceTags(ctx, devID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, t := range tags {
+			names = append(names, t.Name)
+		}
+		if !slices.Equal(names, []string{"new-c", "old-a"}) {
+			t.Errorf("DeviceTags = %v, want [new-c old-a]", names)
+		}
+		// Clearing removes everything without disturbing the tags themselves.
+		if err := s.SetDeviceTags(ctx, devID, nil); err != nil {
+			t.Fatal(err)
+		}
+		if tags, err := s.DeviceTags(ctx, devID); err != nil || len(tags) != 0 {
+			t.Errorf("after clearing: %+v %v", tags, err)
+		}
+		all, err := s.ListTags(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != 3 {
+			t.Errorf("ListTags = %+v, want the three tags to survive detaching", all)
+		}
+	})
+}
