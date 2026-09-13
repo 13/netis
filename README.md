@@ -74,10 +74,16 @@ Released images are published to GHCR on every `v*` tag, for `linux/amd64` and
 docker pull ghcr.io/13/netis:latest
 ```
 
-Or build locally:
+Publishing needs this repository's Actions token to be allowed to write
+packages (Settings → Actions → General → Workflow permissions → "Read and
+write permissions"). Without it the release workflow builds both images and
+then fails the push with `denied: permission_denied: write_package`.
+
+Or build locally — BuildKit, because the Dockerfile cross-compiles from
+`$BUILDPLATFORM` to `$TARGETARCH` rather than emulating the target:
 
 ```sh
-docker build -t netis .
+docker buildx build -t netis --load .
 docker run -d --name netis \
   --network host \
   -v netis-data:/data \
