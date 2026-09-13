@@ -2,7 +2,9 @@ package wol
 
 import (
 	"bytes"
+	"net"
 	"testing"
+	"time"
 )
 
 func TestBuildMagicPacket(t *testing.T) {
@@ -24,5 +26,50 @@ func TestBuildMagicPacket(t *testing.T) {
 	}
 	if _, err := BuildMagicPacket("garbage"); err == nil {
 		t.Fatal("want error")
+	}
+}
+
+// SendTo is the part of Send that can be observed: it must put the exact
+// 102-byte magic packet on the wire.
+func TestSendToDeliversTheMagicPacket(t *testing.T) {
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	const mac = "01:02:03:04:05:06"
+	if err := SendTo(mac, conn.LocalAddr().String()); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 256)
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	n, _, err := conn.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := BuildMagicPacket(mac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := buf[:n]; !bytes.Equal(got, want) {
+		t.Errorf("received %d bytes, want the %d-byte magic packet", len(got), len(want))
+	}
+}
+
+// A bad MAC fails before anything is sent, so a typo cannot put a malformed
+// packet on the network.
+func TestSendToRejectsBadMACBeforeDialing(t *testing.T) {
+	if err := SendTo("not-a-mac", "127.0.0.1:1"); err == nil {
+		t.Fatal("a malformed MAC must be an error")
+	}
+}
+
+func TestBroadcastAddrIsTheDiscardPort(t *testing.T) {
+	if BroadcastAddr != "255.255.255.255:9" {
+		t.Errorf("BroadcastAddr = %q", BroadcastAddr)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"netis/internal/events"
@@ -92,7 +93,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
-	return securityHeaders(cop.Handler(s.requireAuth(s.mux)))
+	return securityHeaders(checkOrigin(cop.Handler(s.requireAuth(s.mux))))
 }
 
 // handleHealthz reports whether netis can actually serve: the process being up
@@ -108,6 +109,40 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write([]byte("ok"))
+}
+
+// checkOrigin rejects a state-changing request whose Origin names a different
+// host than the one it was sent to.
+//
+// The session cookie is SameSite=Lax, which already stops a cross-site form
+// POST from carrying it, so this is defence in depth rather than the only
+// guard. What Lax does not cover is a sibling origin — anything on the same
+// registrable domain counts as same-site to a browser, so a compromised
+// service on another subdomain can still post here with the cookie attached.
+// Comparing hosts closes that, and costs one header read.
+//
+// A request with no Origin at all is allowed through: non-browser clients
+// (curl, scripts) omit it, and browsers always send it on cross-origin
+// state-changing requests, which is the case being defended against.
+func checkOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin != "" && origin != "null" {
+			u, err := url.Parse(origin)
+			if err != nil || u.Host != r.Host {
+				slog.Warn("rejected cross-origin request",
+					"origin", origin, "host", r.Host, "path", r.URL.Path)
+				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // securityHeaders sets baseline browser hardening headers on every response.

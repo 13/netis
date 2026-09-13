@@ -3,10 +3,12 @@ package wireguard
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type Runner interface {
@@ -18,7 +20,15 @@ type SSHRunner struct {
 	config *ssh.ClientConfig
 }
 
-func NewSSHRunner(addr, user, keyPath string) (*SSHRunner, error) {
+// NewSSHRunner builds a runner that connects to addr as user with the private
+// key at keyPath.
+//
+// knownHostsPath, when set, is an OpenSSH known_hosts file used to verify the
+// server. Without it the server is not verified at all: anything answering on
+// addr is handed the connection, and the WireGuard host's `wg show dump` output
+// is read from whatever replies. That is worth a warning rather than a silent
+// default, so an unverified runner says so once at construction.
+func NewSSHRunner(addr, user, keyPath, knownHostsPath string) (*SSHRunner, error) {
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("read ssh key: %w", err)
@@ -27,15 +37,35 @@ func NewSSHRunner(addr, user, keyPath string) (*SSHRunner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse ssh key: %w", err)
 	}
+
+	hostKey, err := hostKeyCallback(addr, knownHostsPath)
+	if err != nil {
+		return nil, err
+	}
 	return &SSHRunner{
 		addr: addr,
 		config: &ssh.ClientConfig{
 			User:            user,
 			Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(), // home-lab: pin later if needed
+			HostKeyCallback: hostKey,
 			Timeout:         10 * time.Second,
 		},
 	}, nil
+}
+
+// hostKeyCallback returns the verifier for the configured known_hosts file, or
+// an unverified callback with a warning when none is set.
+func hostKeyCallback(addr, knownHostsPath string) (ssh.HostKeyCallback, error) {
+	if knownHostsPath == "" {
+		slog.Warn("wireguard ssh host key is not verified; set wg_ssh_known_hosts to pin it",
+			"addr", addr)
+		return ssh.InsecureIgnoreHostKey(), nil
+	}
+	cb, err := knownhosts.New(knownHostsPath)
+	if err != nil {
+		return nil, fmt.Errorf("read known_hosts %s: %w", knownHostsPath, err)
+	}
+	return cb, nil
 }
 
 type sshResult struct {

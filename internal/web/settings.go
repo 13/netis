@@ -24,7 +24,7 @@ import (
 // existing stored secret.
 var settingsKeys = []string{
 	"proxmox_url", "proxmox_token_id", "proxmox_secret", "proxmox_insecure",
-	"wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path", "wg_iface",
+	"wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path", "wg_ssh_known_hosts", "wg_iface",
 	"pihole_url", "pihole_password", "pihole_insecure",
 }
 

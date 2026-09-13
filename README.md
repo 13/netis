@@ -126,6 +126,7 @@ database's key/value settings table:
 | `wg_ssh_addr` | SSH address of the host running WireGuard (`host:port`). |
 | `wg_ssh_user` | SSH username for the WireGuard host. |
 | `wg_ssh_key_path` | Path to the SSH private key used to connect. |
+| `wg_ssh_known_hosts` | Path to an OpenSSH `known_hosts` file used to verify the WireGuard host. Unset means the host is **not** verified. |
 | `wg_iface` | WireGuard interface name to poll (default `wg0`). |
 | `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
 | `pihole_password` | Pi-hole app password (never shown back in the UI). |
@@ -184,6 +185,22 @@ SQLite remains the right default for a single netis instance: it is a file,
 needs no server, and the binary stays static. Postgres is worth it when the
 database has to live outside the container, be backed up by existing
 infrastructure, or be read by something else.
+
+## Backups
+
+SQLite: copying `netis.db` with `cp` while netis is running is not safe — under
+WAL the committed state is split between the database and its `-wal` sidecar.
+Use the built-in snapshot, which works against a live database:
+
+```sh
+netis backup --to /backups/netis-$(date +%F).db
+```
+
+Postgres: use `pg_dump`, which already handles this properly.
+
+```sh
+pg_dump "$NETIS_DB" > /backups/netis-$(date +%F).sql
+```
 
 ## Limitations
 
