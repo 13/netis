@@ -1,6 +1,12 @@
 package config
 
-import "testing"
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
+	"strings"
+	"testing"
+)
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("NETIS_ADDR", "")
@@ -98,5 +104,41 @@ func TestLoadReadsTrustedProxies(t *testing.T) {
 	t.Setenv("NETIS_TRUSTED_PROXIES", "10.0.0.0/8")
 	if c := Load(); c.TrustedProxies != "10.0.0.0/8" {
 		t.Errorf("TrustedProxies = %q", c.TrustedProxies)
+	}
+}
+
+func TestParseSecretKey(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	b64 := base64.StdEncoding.EncodeToString(key)
+	hexKey := hex.EncodeToString(key)
+
+	for _, in := range []string{b64, hexKey, "  " + b64 + "  ", strings.TrimRight(b64, "=")} {
+		got, err := ParseSecretKey(in)
+		if err != nil {
+			t.Fatalf("ParseSecretKey(%q): %v", in, err)
+		}
+		if !bytes.Equal(got, key) {
+			t.Errorf("ParseSecretKey(%q) = %x", in, got)
+		}
+	}
+
+	if got, err := ParseSecretKey(""); err != nil || got != nil {
+		t.Errorf("empty key: got=%v err=%v", got, err)
+	}
+
+	// Wrong lengths and undecodable values must fail rather than being padded
+	// into a key nobody can reproduce.
+	for _, in := range []string{
+		"short",
+		base64.StdEncoding.EncodeToString(make([]byte, 16)),
+		base64.StdEncoding.EncodeToString(make([]byte, 64)),
+		"!!!not base64 or hex!!!",
+	} {
+		if _, err := ParseSecretKey(in); err == nil {
+			t.Errorf("ParseSecretKey(%q): want error", in)
+		}
 	}
 }

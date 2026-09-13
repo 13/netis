@@ -113,6 +113,7 @@ Environment variables:
 | `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
 | `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
 | `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
+| `NETIS_SECRET_KEY` | unset | 32-byte key (base64 or hex) that encrypts stored integration credentials. See [Encrypting stored credentials](#encrypting-stored-credentials). |
 | `NETIS_TRUSTED_PROXIES` | unset | Comma-separated CIDRs or addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers netis believes. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 
 Settings configured in the web UI (Settings page), stored in the
@@ -125,7 +126,7 @@ database's key/value settings table:
 | `availability_retention_days` | Days of availability history to keep (default 365). One row per interface per hour, so this is the fastest-growing table. |
 | `proxmox_url` | Base URL of the Proxmox API, e.g. `https://pve.local:8006`. |
 | `proxmox_token_id` | Proxmox API token ID, e.g. `user@pam!netis`. |
-| `proxmox_secret` | Proxmox API token secret. |
+| `proxmox_secret` | Proxmox API token secret. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `proxmox_insecure` | `1` to skip TLS verification (self-signed certs). |
 | `wg_ssh_addr` | SSH address of the host running WireGuard (`host:port`). |
 | `wg_ssh_user` | SSH username for the WireGuard host. |
@@ -133,7 +134,7 @@ database's key/value settings table:
 | `wg_ssh_known_hosts` | Path to an OpenSSH `known_hosts` file used to verify the WireGuard host. Unset means the host is **not** verified. |
 | `wg_iface` | WireGuard interface name to poll (default `wg0`). |
 | `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
-| `pihole_password` | Pi-hole app password (never shown back in the UI). |
+| `pihole_password` | Pi-hole app password (never shown back in the UI). Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
 
 ### Pi-hole (v6)
@@ -155,6 +156,28 @@ subnet you've configured in netis.
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.
+
+## Encrypting stored credentials
+
+The Proxmox API token and the Pi-hole password live in the database's `setting`
+table. Set `NETIS_SECRET_KEY` and they are encrypted there with AES-256-GCM
+instead:
+
+```sh
+NETIS_SECRET_KEY="$(openssl rand -base64 32)" ./netis
+```
+
+Only those two rows are encrypted — the rest of the table is configuration, and
+stays readable in a SQL client. Values already stored in plaintext are
+re-encrypted on the next start, so adding the key to an existing deployment
+does not mean re-entering anything.
+
+The key never lives in the database, so keep it with (but not inside) your
+backups: a dump restored without it leaves netis unable to read those two
+settings, and it says so rather than treating the credential as unset. Changing
+the key has the same effect — clear the affected settings and enter them again.
+`netis migrate-db` copies the rows as they are, so the same key works on the
+Postgres side.
 
 ## Behind a reverse proxy
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -162,7 +164,23 @@ func (s *Store) DeleteSessionsForUser(ctx context.Context, userID int64, keep st
 	return err
 }
 
+// GetSetting reads a setting, decrypting it when it was stored encrypted. An
+// unset key reads as the empty string; a value that cannot be decrypted is an
+// error rather than an empty string, so a wrong or missing key looks like the
+// misconfiguration it is instead of an integration that forgot its credentials.
 func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
+	v, err := s.rawSetting(ctx, key)
+	if err != nil || !strings.HasPrefix(v, encPrefix) {
+		return v, err
+	}
+	if s.crypter == nil {
+		return "", fmt.Errorf("setting %q is encrypted but no secret key is configured (NETIS_SECRET_KEY)", key)
+	}
+	return s.crypter.open(key, v)
+}
+
+// rawSetting reads a setting exactly as stored, encryption and all.
+func (s *Store) rawSetting(ctx context.Context, key string) (string, error) {
 	var v string
 	err := s.queryRow(ctx, `SELECT value FROM setting WHERE key=?`, key).Scan(&v)
 	if err != nil {
@@ -174,7 +192,16 @@ func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
 	return v, nil
 }
 
+// SetSetting writes a setting, encrypting it first when the key names a
+// credential and a secret key is configured.
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	if s.crypter != nil && value != "" && isSecretSetting(key) {
+		sealed, err := s.crypter.seal(key, value)
+		if err != nil {
+			return err
+		}
+		value = sealed
+	}
 	_, err := s.exec(ctx, `INSERT INTO setting (key,value) VALUES (?,?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
