@@ -35,7 +35,7 @@ func (s *Server) availableDetected(ctx context.Context) []netdetect.Detected {
 
 func (s *Server) handleWelcome(w http.ResponseWriter, r *http.Request) {
 	u, _ := userFrom(r)
-	views.WelcomeSubnets(u.Username, s.availableDetected(r.Context())).Render(r.Context(), w)
+	s.render(w, r, views.WelcomeSubnets(u.Username, s.availableDetected(r.Context())))
 }
 
 func (s *Server) createDetectedSubnet(ctx context.Context, cidr, iface string) {
@@ -70,7 +70,7 @@ func (s *Server) handleWelcomeSubnets(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWelcomeIntegrationsPage(w http.ResponseWriter, r *http.Request) {
 	u, _ := userFrom(r)
-	views.WelcomeIntegrations(u.Username, map[string]string{}).Render(r.Context(), w)
+	s.render(w, r, views.WelcomeIntegrations(u.Username, map[string]string{}))
 }
 
 func (s *Server) handleWelcomeIntegrations(w http.ResponseWriter, r *http.Request) {

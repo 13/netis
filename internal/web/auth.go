@@ -257,7 +257,7 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	views.LoginPage("").Render(r.Context(), w)
+	s.render(w, r, views.LoginPage(""))
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +307,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.limiter.fail(ip)
 	w.WriteHeader(http.StatusUnauthorized)
-	views.LoginPage("wrong username or password").Render(r.Context(), w)
+	s.render(w, r, views.LoginPage("wrong username or password"))
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +332,7 @@ func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "already set up", http.StatusForbidden)
 		return
 	}
-	views.SetupPage("").Render(r.Context(), w)
+	s.render(w, r, views.SetupPage(""))
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -343,7 +343,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	username, password := r.FormValue("username"), r.FormValue("password")
 	if username == "" || len(password) < minPasswordLen {
 		w.WriteHeader(http.StatusBadRequest)
-		views.SetupPage("username required, password min "+strconv.Itoa(minPasswordLen)+" chars").Render(r.Context(), w)
+		s.render(w, r, views.SetupPage("username required, password min "+strconv.Itoa(minPasswordLen)+" chars"))
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

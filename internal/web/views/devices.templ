@@ -275,9 +275,17 @@ templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped 
 	</table>
 }
 
-templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string) {
+// DeviceList renders the devices page. total is how many devices matched before
+// the handler capped the rows it sends, so the page can say when it is showing
+// a prefix rather than silently presenting a truncated list as the whole fleet.
+templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string, total int) {
 	@Layout("Devices", username) {
 		<h1>Devices</h1>
+		if total > len(rows) {
+			<p class="muted">
+				Showing { fmt.Sprint(len(rows)) } of { fmt.Sprint(total) } matching devices. Narrow the filter to see the rest.
+			</p>
+		}
 		<div class="toolbar">
 			<input
 				class="grow" type="search" name="q" value={ q } placeholder="filter devices, IP, MAC, tag…"

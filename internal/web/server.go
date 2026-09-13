@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"netis/internal/events"
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -199,6 +201,16 @@ func securityHeaders(next http.Handler) http.Handler {
 				"frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// render writes a rendered component to the response, logging a failure the
+// status line has already made unreportable. Render errors are almost always a
+// client that hung up mid-page; discarding them entirely meant a genuine
+// template failure left no trace at all.
+func (s *Server) render(w http.ResponseWriter, r *http.Request, c templ.Component) {
+	if err := c.Render(r.Context(), w); err != nil {
+		slog.Warn("rendering response failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	}
 }
 
 // fail reports an unexpected server-side error: the real one goes to the log

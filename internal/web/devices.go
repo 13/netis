@@ -16,6 +16,12 @@ import (
 	"netis/internal/wol"
 )
 
+// maxDeviceRows caps how many devices the list page renders at once. Well above
+// any home LAN, low enough that a runaway scan cannot produce a page no browser
+// will finish laying out. A var so tests can exercise the cap without creating
+// two thousand devices.
+var maxDeviceRows = 2000
+
 var validKinds = map[string]bool{"computer": true, "switch": true, "phone": true,
 	"server": true, "printer": true, "iot": true, "vm": true, "lxc": true,
 	"wg-peer": true, "router": true, "modem": true, "other": true}
@@ -83,8 +89,18 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	sortKey, dir := parseDeviceSort(r)
 	sortDeviceRows(rows, sortKey, dir)
 
+	// Bound what goes into the page. The query behind this is a fixed five
+	// statements whatever the fleet size, but the HTML is one row plus one grid
+	// tile per device, and a page with tens of thousands of them is unusable
+	// before it is slow. The filter is applied first, so narrowing it reaches
+	// anything the cap cuts off.
+	total := len(rows)
+	if len(rows) > maxDeviceRows {
+		rows = rows[:maxDeviceRows]
+	}
+
 	u, _ := userFrom(r)
-	views.DeviceList(u.Username, rows, r.URL.Query().Get("q"), sortKey, dir).Render(r.Context(), w)
+	s.render(w, r, views.DeviceList(u.Username, rows, r.URL.Query().Get("q"), sortKey, dir, total))
 }
 
 // lowestIP returns the device's numerically smallest IP, or the zero Addr
@@ -160,7 +176,7 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 		subnetID, _ = strconv.ParseInt(v, 10, 64)
 	}
 	preIP := r.URL.Query().Get("ip")
-	views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID, preIP).Render(r.Context(), w)
+	s.render(w, r, views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID, preIP))
 }
 
 func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +209,7 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	views.DeviceDrawer(d, tags, subnets, all, 0).Render(r.Context(), w)
+	s.render(w, r, views.DeviceDrawer(d, tags, subnets, all, 0))
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
@@ -409,10 +425,10 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, _ := userFrom(r)
-	views.DevicePage(u.Username, views.DeviceDetail{
+	s.render(w, r, views.DevicePage(u.Username, views.DeviceDetail{
 		Device: d, Ifaces: ifaceDetails, Tags: tags,
 		Fields: fields, Links: links, Children: children, Parent: parent, Events: evs,
-	}).Render(r.Context(), w)
+	}))
 }
 
 func (s *Server) handleLinkAdd(w http.ResponseWriter, r *http.Request) {
@@ -554,5 +570,5 @@ func (s *Server) handleDeviceIPKind(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	views.LeaseToggle(devID, subnetID, ip, kind).Render(r.Context(), w)
+	s.render(w, r, views.LeaseToggle(devID, subnetID, ip, kind))
 }
