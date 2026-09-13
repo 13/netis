@@ -158,6 +158,17 @@ func (s *Server) clientIP(r *http.Request) string {
 	return peerStr
 }
 
+// maxUserAgentLen caps the stored user agent. Nothing legitimate is near this
+// long, and the header is whatever the client chose to send.
+const maxUserAgentLen = 200
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
 func newToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -273,7 +284,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		expires := time.Now().UTC().Add(30 * 24 * time.Hour)
-		if serr := s.store.CreateSession(r.Context(), token, u.ID, expires.Format(time.RFC3339)); serr != nil {
+		// Where the session came from, so its owner can tell their own sessions
+		// apart in Settings > Users and revoke one they don't recognise. The
+		// user agent is capped: it is attacker-supplied and goes in a page.
+		meta := store.SessionMeta{
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+			IP:        s.clientIP(r),
+			UserAgent: truncate(r.UserAgent(), maxUserAgentLen),
+		}
+		if serr := s.store.CreateSession(r.Context(), token, u.ID, expires.Format(time.RFC3339), meta); serr != nil {
 			slog.Error("create session", "err", serr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -295,11 +314,17 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("netis_session"); err == nil {
 		s.store.DeleteSession(r.Context(), c.Value)
 	}
+	clearSessionCookie(w, s.secureRequest(r))
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// clearSessionCookie expires the session cookie. Shared with session revocation
+// so the two paths cannot drift apart on the cookie's attributes.
+func clearSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name: "netis_session", Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secureRequest(r),
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure,
 	})
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {

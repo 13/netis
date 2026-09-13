@@ -3,6 +3,8 @@ package views
 import (
 	"fmt"
 	"time"
+
+	"netis/internal/store"
 )
 
 // relTime renders an RFC3339 timestamp as a short relative string. On a parse
@@ -32,4 +34,34 @@ func BarPct(n, total int) string {
 		return "0%"
 	}
 	return fmt.Sprintf("%d%%", n*100/total)
+}
+
+// orDash renders an optional string, falling back to an em dash so an empty
+// table cell reads as "not recorded" rather than looking broken.
+func orDash(v *string) string {
+	if v == nil || *v == "" {
+		return "—"
+	}
+	return *v
+}
+
+// sessionStarted describes when a session began. Sessions predating the
+// created_at column have no answer, and saying so beats inventing one.
+func sessionStarted(sess store.Session) string {
+	if sess.CreatedAt == nil || *sess.CreatedAt == "" {
+		return "unknown"
+	}
+	return relTime(*sess.CreatedAt)
+}
+
+// shortAgent trims a user-agent string to something a table cell can hold.
+func shortAgent(ua *string) string {
+	if ua == nil || *ua == "" {
+		return "—"
+	}
+	const max = 40
+	if len(*ua) <= max {
+		return *ua
+	}
+	return (*ua)[:max] + "…"
 }
