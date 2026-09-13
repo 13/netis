@@ -122,6 +122,9 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	// Changing your own password needs no role: every account must be able to
 	// rotate its own credential. Resetting someone else's is admin-only.
 	s.mux.HandleFunc("POST /settings/password", s.handlePasswordChange)
+	// Session management is likewise per-account, not admin business.
+	s.mux.HandleFunc("POST /settings/sessions/{id}/delete", s.handleSessionRevoke)
+	s.mux.HandleFunc("POST /settings/sessions/revoke-others", s.handleSessionRevokeOthers)
 	s.mux.HandleFunc("POST /settings/users/{id}/password", s.requireAdmin(s.handleUserPasswordReset))
 	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
 	return s

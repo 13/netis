@@ -89,6 +89,20 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	u, _ := userFrom(r)
+	var sessions []store.Session
+	currentSessionID := ""
+	if tab == "users" {
+		sessions, err = s.store.ListSessionsForUser(r.Context(), u.ID)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if c, cerr := r.Cookie("netis_session"); cerr == nil {
+			currentSessionID = store.SessionID(c.Value)
+		}
+	}
+
 	var statuses map[string]store.IntegrationStatus
 	if tab == "integrations" {
 		list, err := s.store.ListIntegrationStatus(r.Context())
@@ -102,9 +116,9 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	u, _ := userFrom(r)
 	views.SettingsPage(u.Username, views.SettingsData{
 		Subnets: subnets, Users: users, Values: values,
+		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
 		About: views.AboutData{
 			Info:    buildinfo.Get(),

@@ -16,6 +16,10 @@ var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 type SettingsData struct {
 	Subnets   []store.Subnet
 	Users     []store.User
+	// Sessions are the signed-in user's own sessions, newest first, and
+	// CurrentSessionID names the one that asked for this page.
+	Sessions         []store.Session
+	CurrentSessionID string
 	Values    map[string]string
 	ActiveTab string
 	Detected  []netdetect.Detected
@@ -233,6 +237,33 @@ templ usersTab(d SettingsData) {
 				</tr>
 			}
 		</table>
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>My sessions</h3></div>
+		<table>
+			<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
+			for _, sess := range d.Sessions {
+				<tr>
+					<td>
+						{ sessionStarted(sess) }
+						if sess.ID == d.CurrentSessionID {
+							<span class="badge">this browser</span>
+						}
+					</td>
+					<td>{ orDash(sess.IP) }</td>
+					<td>{ shortAgent(sess.UserAgent) }</td>
+					<td>{ relTime(sess.ExpiresAt) }</td>
+					<td>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline">
+							<button type="submit" class="ghost">revoke</button>
+						</form>
+					</td>
+				</tr>
+			}
+		</table>
+		<form method="post" action="/settings/sessions/revoke-others" class="inline">
+			<button type="submit" class="ghost">Sign out other sessions</button>
+		</form>
 	</div>
 	<div class="setting-card">
 		<div class="sc-head"><h3>Change my password</h3></div>

@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -127,10 +129,114 @@ func (s *Store) DeleteUserGuarded(ctx context.Context, id int64) (deleted bool, 
 	return n == 1, nil
 }
 
-func (s *Store) CreateSession(ctx context.Context, token string, userID int64, expiresAt string) error {
-	_, err := s.exec(ctx, `INSERT INTO session (token,user_id,expires_at) VALUES (?,?,?)`,
-		token, userID, expiresAt)
+// SessionMeta records where a session came from, so its owner can recognise it
+// in a list of their sessions and revoke the one they don't know. Every field is
+// optional; sessions created before this was recorded simply have none of it.
+type SessionMeta struct {
+	CreatedAt string
+	IP        string
+	UserAgent string
+}
+
+// Session is one row of a user's session list. The token is deliberately not
+// part of it: a page that rendered live session tokens would be handing out the
+// credential it is supposed to be managing. ID is a short digest of the token,
+// enough to name one session in a revoke request.
+type Session struct {
+	ID        string
+	CreatedAt *string
+	ExpiresAt string
+	IP        *string
+	UserAgent *string
+}
+
+// SessionID is the public identifier for a session token: the first bytes of
+// its SHA-256, hex encoded. It is derived rather than stored so old sessions
+// have one too, and it cannot be used to reconstruct the token.
+func SessionID(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:8])
+}
+
+func (s *Store) CreateSession(ctx context.Context, token string, userID int64, expiresAt string, meta ...SessionMeta) error {
+	var m SessionMeta
+	if len(meta) > 0 {
+		m = meta[0]
+	}
+	_, err := s.exec(ctx, `INSERT INTO session (token,user_id,expires_at,created_at,ip,user_agent)
+		VALUES (?,?,?,?,?,?)`,
+		token, userID, expiresAt, nullable(m.CreatedAt), nullable(m.IP), nullable(m.UserAgent))
 	return err
+}
+
+// nullable turns an empty string into a SQL NULL, so "not recorded" and
+// "recorded as empty" stay distinguishable in the session table.
+func nullable(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// ListSessionsForUser returns a user's unexpired sessions, newest first. Rows
+// with no created_at (written before it was recorded) sort last.
+func (s *Store) ListSessionsForUser(ctx context.Context, userID int64) ([]Session, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	rows, err := s.query(ctx, `SELECT token,created_at,expires_at,ip,user_agent FROM session
+		WHERE user_id=? AND expires_at>? ORDER BY created_at DESC NULLS LAST, expires_at DESC`,
+		userID, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Session
+	for rows.Next() {
+		var token string
+		var sess Session
+		if err := rows.Scan(&token, &sess.CreatedAt, &sess.ExpiresAt, &sess.IP, &sess.UserAgent); err != nil {
+			return nil, err
+		}
+		sess.ID = SessionID(token)
+		out = append(out, sess)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSessionByID revokes one of a user's sessions by its public id,
+// reporting whether it found one. Scoped to the user so an id guessed or
+// borrowed from elsewhere cannot revoke somebody else's session.
+// The id is a digest, so the match has to be made in Go. The tokens are read
+// out and the cursor closed before the delete runs: SQLite is held to a single
+// connection, so a write issued with rows still open waits on a connection the
+// caller is holding itself.
+func (s *Store) DeleteSessionByID(ctx context.Context, userID int64, id string) (bool, error) {
+	tokens, err := s.userSessionTokens(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, token := range tokens {
+		if SessionID(token) == id {
+			return true, s.DeleteSession(ctx, token)
+		}
+	}
+	return false, nil
+}
+
+func (s *Store) userSessionTokens(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := s.query(ctx, `SELECT token FROM session WHERE user_id=?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var token string
+		if err := rows.Scan(&token); err != nil {
+			return nil, err
+		}
+		out = append(out, token)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) GetSession(ctx context.Context, token string) (User, bool, error) {

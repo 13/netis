@@ -49,8 +49,9 @@ for the background scan loop (every 120s by default).
 - **Settings** — subnet CRUD, scan interval, offline threshold, Proxmox
   and WireGuard integration credentials, user management (add, delete,
   change your own password, reset someone else's — passwords are at least 8
-  characters, and changing one signs that account's other sessions out), and
-  an **About**
+  characters, and changing one signs that account's other sessions out), your
+  own session list with per-session revoke and a sign-out-everywhere-else
+  button, and an **About**
   tab with the running version, build number, commit, database backend and
   dependency versions. Every page's footer shows the version and links there.
 
