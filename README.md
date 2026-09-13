@@ -54,9 +54,20 @@ for the background scan loop (every 120s by default).
   tab with the running version, build number, commit, database backend and
   dependency versions. Every page's footer shows the version and links there.
 
+## Install
+
+Every `v*` tag publishes static Linux binaries (amd64 and arm64) to the GitHub
+release, alongside a `SHA256SUMS` file:
+
+```sh
+tar -xzf netis_<version>_linux_amd64.tar.gz
+./netis
+```
+
 ## Docker
 
-Released images are published to GHCR on every `v*` tag:
+Released images are published to GHCR on every `v*` tag, for `linux/amd64` and
+`linux/arm64`:
 
 ```sh
 docker pull ghcr.io/13/netis:latest

@@ -60,11 +60,12 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       # Build only — catches a broken Dockerfile before a release tag is cut.
-      # The same build args the release passes, so that path is exercised too.
+      # The same build args and platforms the release passes, so that path is
+      # exercised too; the Dockerfile cross-compiles, so arm64 costs little.
       - uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: false
           build-args: |
             VERSION=dev

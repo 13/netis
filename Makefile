@@ -35,5 +35,7 @@ vuln:
 run: build
 	./netis
 
+# buildx, not the legacy builder: the Dockerfile cross-compiles via
+# $BUILDPLATFORM/$TARGETARCH, which only BuildKit sets.
 docker:
-	docker build -t netis .
+	docker buildx build -t netis --load .
