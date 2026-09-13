@@ -187,6 +187,11 @@ infrastructure, or be read by something else.
 
 ## Limitations
 
+- A subnet may hold at most 65,536 addresses (an IPv4 `/16`, an IPv6 `/112`).
+  Every address becomes a grid cell and a sweep target, so a wider prefix is
+  refused when the subnet is saved rather than discovered when the page is
+  opened.
+
 - MAC address discovery only works for subnets on the same local L2
   segment as the netis host (it reads the kernel ARP table after pinging).
   Remote/routed subnets get ping-only scanning: online/offline status and

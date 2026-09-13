@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/netip"
@@ -100,6 +101,13 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 	}
 	cells, err := s.gridCells(r.Context(), sn)
 	if err != nil {
+		// A subnet saved before the size limit existed, or edited around it,
+		// is a configuration problem and not a server fault. The message is
+		// written to be shown to a user.
+		if errors.Is(err, scan.ErrSubnetTooLarge) {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -122,6 +130,13 @@ func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {
 	}
 	cells, err := s.gridCells(r.Context(), sn)
 	if err != nil {
+		// A subnet saved before the size limit existed, or edited around it,
+		// is a configuration problem and not a server fault. The message is
+		// written to be shown to a user.
+		if errors.Is(err, scan.ErrSubnetTooLarge) {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 		http.Error(w, err.Error(), 500)
 		return
 	}
