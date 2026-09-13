@@ -138,3 +138,7 @@ func (i Info) Label() string {
 
 // Uptime is how long this process has been running, truncated to the second.
 func Uptime() time.Duration { return time.Since(startTime).Truncate(time.Second) }
+
+// StartTime is when this process started, for callers that need the absolute
+// instant rather than a duration (a metrics gauge, say).
+func StartTime() time.Time { return startTime }

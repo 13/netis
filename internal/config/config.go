@@ -23,6 +23,10 @@ type Config struct {
 	// TrustedProxies is the raw NETIS_TRUSTED_PROXIES value: a comma-separated
 	// list of CIDRs or bare addresses. Parse it with ParseTrustedProxies.
 	TrustedProxies string
+	// MetricsToken is the NETIS_METRICS_TOKEN value: a bearer token a Prometheus
+	// scraper presents to read /metrics without a session. Empty means /metrics
+	// is reachable only with a logged-in session.
+	MetricsToken string
 	// SecretKey is the raw NETIS_SECRET_KEY value, a 32-byte key in base64 or
 	// hex that encrypts the credential settings at rest. Parse it with
 	// ParseSecretKey.
@@ -41,6 +45,7 @@ func Load() Config {
 	c.MaxIdleConns = envInt("NETIS_DB_MAX_IDLE_CONNS")
 	c.TrustedProxies = os.Getenv("NETIS_TRUSTED_PROXIES")
 	c.SecretKey = os.Getenv("NETIS_SECRET_KEY")
+	c.MetricsToken = os.Getenv("NETIS_METRICS_TOKEN")
 	return c
 }
 

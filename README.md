@@ -124,6 +124,7 @@ Environment variables:
 | `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
 | `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
 | `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
+| `NETIS_METRICS_TOKEN` | unset | Bearer token a Prometheus scraper presents to read `/metrics`. Unset means `/metrics` needs a logged-in session. See [JSON API and metrics](#json-api-and-metrics). |
 | `NETIS_SECRET_KEY` | unset | 32-byte key (base64 or hex) that encrypts stored integration credentials. See [Encrypting stored credentials](#encrypting-stored-credentials). |
 | `NETIS_TRUSTED_PROXIES` | unset | Comma-separated CIDRs or addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers netis believes. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 
@@ -167,6 +168,43 @@ subnet you've configured in netis.
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.
+
+## JSON API and metrics
+
+A read-only JSON API, authenticated with the same session cookie the pages use:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/devices` | every device with its IPs, MACs, tags and online state |
+| `GET /api/devices/{id}` | one device |
+| `GET /api/subnets` | configured subnets |
+| `GET /api/events?limit=N` | recent events, newest first (default 100, max 1000) |
+| `GET /api/status` | version, uptime, backend, device/subnet counts, integration results |
+
+Nothing here writes: state changes go through the UI's form posts, where the
+role checks and cross-origin protection live.
+
+`GET /metrics` serves the Prometheus text format — device and subnet counts,
+how many devices are online, and when each integration last ran and whether it
+worked. It needs a session too, unless you set a scrape token:
+
+```sh
+NETIS_METRICS_TOKEN="$(openssl rand -hex 16)" ./netis
+```
+
+```yaml
+scrape_configs:
+  - job_name: netis
+    static_configs: [{targets: ['netis.lan:8080']}]
+    authorization:
+      credentials: <the token>
+```
+
+The token is accepted on `/metrics` only — it is a scrape credential, not a
+login — and only in the `Authorization` header, so it stays out of access logs.
+Without it the endpoint is not left open: the metrics name every subnet and
+count every device, which is not something to publish to whoever can reach the
+port.
 
 ## Encrypting stored credentials
 
