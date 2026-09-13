@@ -37,10 +37,7 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          # arm64 as well as amd64: a Raspberry Pi or other arm64 SBC is a
-          # normal place to run a home-LAN inventory, and the Dockerfile
-          # cross-compiles rather than emulating, so this stays cheap.
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -54,8 +51,8 @@ jobs:
 
   # The README sells netis as a single static binary; until this job existed a
   # release shipped only a container image, so running it without Docker meant
-  # building it yourself. Linux amd64 and arm64 cover the machines a home LAN
-  # inventory actually runs on.
+  # building it yourself. The images are amd64 only, so the arm64 tarball is how
+  # an arm64 machine runs a released build.
   binaries:
     runs-on: ubuntu-latest
     permissions:

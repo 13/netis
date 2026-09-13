@@ -58,7 +58,8 @@ for the background scan loop (every 120s by default).
 ## Install
 
 Every `v*` tag publishes static Linux binaries (amd64 and arm64) to the GitHub
-release, alongside a `SHA256SUMS` file:
+release, alongside a `SHA256SUMS` file. The container images are amd64 only, so
+on an arm64 machine use the binary:
 
 ```sh
 tar -xzf netis_<version>_linux_amd64.tar.gz
@@ -67,8 +68,7 @@ tar -xzf netis_<version>_linux_amd64.tar.gz
 
 ## Docker
 
-Released images are published to GHCR on every `v*` tag, for `linux/amd64` and
-`linux/arm64`:
+Released images are published to GHCR on every `v*` tag, for `linux/amd64`:
 
 ```sh
 docker pull ghcr.io/13/netis:latest
@@ -76,14 +76,13 @@ docker pull ghcr.io/13/netis:latest
 
 Publishing needs this repository's Actions token to be allowed to write
 packages (Settings → Actions → General → Workflow permissions → "Read and
-write permissions"). Without it the release workflow builds both images and
-then fails the push with `denied: permission_denied: write_package`.
+write permissions"). Without it the release workflow builds the image and then
+fails the push with `denied: permission_denied: write_package`.
 
-Or build locally — BuildKit, because the Dockerfile cross-compiles from
-`$BUILDPLATFORM` to `$TARGETARCH` rather than emulating the target:
+Or build locally:
 
 ```sh
-docker buildx build -t netis --load .
+docker build -t netis .
 docker run -d --name netis \
   --network host \
   -v netis-data:/data \
