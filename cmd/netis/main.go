@@ -35,40 +35,63 @@ func (r integrationRunner) Run(ctx context.Context, name string) error {
 
 var errNotConfigured = errors.New("not configured")
 
+// readSettings reads several settings at once, failing on the first error
+// rather than treating it as an empty value. A credential that cannot be
+// decrypted — the wrong NETIS_SECRET_KEY, say — would otherwise read as blank
+// and the integration would report an authentication failure against the
+// remote host instead of the local misconfiguration it actually is.
+func readSettings(ctx context.Context, st *store.Store, keys ...string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		v, err := st.GetSetting(ctx, k)
+		if err != nil {
+			return nil, fmt.Errorf("reading setting %s: %w", k, err)
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
 // newIntegrationRunner builds a run-now registry whose closures read the current
 // settings on each call, so "Run now" reflects settings saved after startup.
 func newIntegrationRunner(st *store.Store, evs *events.Service) integrationRunner {
 	return integrationRunner{
 		"proxmox": func(ctx context.Context) error {
-			url, _ := st.GetSetting(ctx, "proxmox_url")
-			if url == "" {
+			s, err := readSettings(ctx, st, "proxmox_url", "proxmox_token_id", "proxmox_secret", "proxmox_insecure")
+			if err != nil {
+				return err
+			}
+			if s["proxmox_url"] == "" {
 				return errNotConfigured
 			}
-			tokenID, _ := st.GetSetting(ctx, "proxmox_token_id")
-			secret, _ := st.GetSetting(ctx, "proxmox_secret")
-			insecure, _ := st.GetSetting(ctx, "proxmox_insecure")
-			_, err := proxmox.NewSync(st, proxmox.NewClient(url, tokenID, secret, insecure == "1"), evs).RunOnce(ctx)
+			client := proxmox.NewClient(s["proxmox_url"], s["proxmox_token_id"],
+				s["proxmox_secret"], s["proxmox_insecure"] == "1")
+			_, err = proxmox.NewSync(st, client, evs).RunOnce(ctx)
 			return err
 		},
 		"pihole": func(ctx context.Context) error {
-			url, _ := st.GetSetting(ctx, "pihole_url")
-			if url == "" {
+			s, err := readSettings(ctx, st, "pihole_url", "pihole_password", "pihole_insecure")
+			if err != nil {
+				return err
+			}
+			if s["pihole_url"] == "" {
 				return errNotConfigured
 			}
-			pass, _ := st.GetSetting(ctx, "pihole_password")
-			insecure, _ := st.GetSetting(ctx, "pihole_insecure")
-			_, err := pihole.NewSync(st, pihole.NewClient(url, pass, insecure == "1"), evs).RunOnce(ctx)
+			client := pihole.NewClient(s["pihole_url"], s["pihole_password"], s["pihole_insecure"] == "1")
+			_, err = pihole.NewSync(st, client, evs).RunOnce(ctx)
 			return err
 		},
 		"wireguard": func(ctx context.Context) error {
-			addr, _ := st.GetSetting(ctx, "wg_ssh_addr")
+			s, err := readSettings(ctx, st, "wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path",
+				"wg_ssh_known_hosts", "wg_iface")
+			if err != nil {
+				return err
+			}
+			addr, user, key := s["wg_ssh_addr"], s["wg_ssh_user"], s["wg_ssh_key_path"]
+			knownHosts, iface := s["wg_ssh_known_hosts"], s["wg_iface"]
 			if addr == "" {
 				return errNotConfigured
 			}
-			user, _ := st.GetSetting(ctx, "wg_ssh_user")
-			key, _ := st.GetSetting(ctx, "wg_ssh_key_path")
-			knownHosts, _ := st.GetSetting(ctx, "wg_ssh_known_hosts")
-			iface, _ := st.GetSetting(ctx, "wg_iface")
 			if iface == "" {
 				iface = "wg0"
 			}
@@ -145,9 +168,15 @@ func main() {
 		slog.Error("NETIS_TRUSTED_PROXIES", "err", err)
 		os.Exit(1)
 	}
+	secretKey, err := config.ParseSecretKey(cfg.SecretKey)
+	if err != nil {
+		slog.Error("NETIS_SECRET_KEY", "err", err)
+		os.Exit(1)
+	}
 	st, err := store.Open(cfg.DSN, store.Options{
 		MaxOpenConns: cfg.MaxOpenConns,
 		MaxIdleConns: cfg.MaxIdleConns,
+		SecretKey:    secretKey,
 	})
 	if err != nil {
 		slog.Error("open db", "err", err)
@@ -160,6 +189,15 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Credentials entered before a key was configured are still plaintext on
+	// disk; bring them under the key that now exists.
+	if n, err := st.EncryptExistingSecrets(ctx); err != nil {
+		slog.Error("encrypting stored secrets", "err", err)
+		os.Exit(1)
+	} else if n > 0 {
+		slog.Info("encrypted stored secrets", "count", n)
+	}
 
 	// The offline threshold is not read here: the engine reads it from settings
 	// on every sweep, so an admin's change takes effect without a restart.

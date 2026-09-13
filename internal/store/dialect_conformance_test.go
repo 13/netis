@@ -21,9 +21,16 @@ import (
 // isolated without needing a database per test.
 func eachDialect(t *testing.T, fn func(t *testing.T, s *Store)) {
 	t.Helper()
+	eachDialectWithKey(t, nil, fn)
+}
+
+// eachDialectWithKey is eachDialect with a secret key configured, for the
+// behaviour that only exists when the credential settings are encrypted.
+func eachDialectWithKey(t *testing.T, secretKey []byte, fn func(t *testing.T, s *Store)) {
+	t.Helper()
 
 	t.Run("sqlite", func(t *testing.T) {
-		s, err := Open(":memory:")
+		s, err := Open(":memory:", Options{SecretKey: secretKey})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,6 +45,13 @@ func eachDialect(t *testing.T, fn func(t *testing.T, s *Store)) {
 	}
 	t.Run("postgres", func(t *testing.T) {
 		s := openPGSchema(t, dsn)
+		if len(secretKey) > 0 {
+			c, err := newCrypter(secretKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.crypter = c
+		}
 		fn(t, s)
 	})
 }

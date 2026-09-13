@@ -21,6 +21,9 @@ type Store struct {
 	// dialect decides placeholder rewriting, how new-row ids are read back,
 	// and which migration directory applies. Set once by Open.
 	dialect Dialect
+	// crypter encrypts the setting rows named by SecretSettings. Nil when no
+	// key is configured, in which case those rows stay plaintext.
+	crypter *crypter
 }
 
 // Dialect reports which backend this store is talking to.
@@ -38,6 +41,10 @@ func IsPostgresDSN(dsn string) bool {
 type Options struct {
 	MaxOpenConns int
 	MaxIdleConns int
+	// SecretKey is an AES key (16, 24 or 32 bytes) used to encrypt the
+	// credential settings at rest. Empty leaves them in plaintext, which is
+	// what every database written before this existed holds.
+	SecretKey []byte
 }
 
 // Default pool sizes. Ten connections is generous for a single netis serving a
@@ -73,10 +80,25 @@ func Open(dsn string, opts ...Options) (*Store, error) {
 	if len(opts) > 0 {
 		o = opts[0]
 	}
+	var s *Store
+	var err error
 	if IsPostgresDSN(dsn) {
-		return openPostgres(dsn, o.withDefaults())
+		s, err = openPostgres(dsn, o.withDefaults())
+	} else {
+		s, err = openSQLite(dsn)
 	}
-	return openSQLite(dsn)
+	if err != nil {
+		return nil, err
+	}
+	if len(o.SecretKey) > 0 {
+		c, cerr := newCrypter(o.SecretKey)
+		if cerr != nil {
+			s.Close()
+			return nil, cerr
+		}
+		s.crypter = c
+	}
+	return s, nil
 }
 
 func openSQLite(path string) (*Store, error) {

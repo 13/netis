@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/netip"
 	"os"
@@ -21,6 +23,10 @@ type Config struct {
 	// TrustedProxies is the raw NETIS_TRUSTED_PROXIES value: a comma-separated
 	// list of CIDRs or bare addresses. Parse it with ParseTrustedProxies.
 	TrustedProxies string
+	// SecretKey is the raw NETIS_SECRET_KEY value, a 32-byte key in base64 or
+	// hex that encrypts the credential settings at rest. Parse it with
+	// ParseSecretKey.
+	SecretKey string
 }
 
 func Load() Config {
@@ -34,7 +40,42 @@ func Load() Config {
 	c.MaxOpenConns = envInt("NETIS_DB_MAX_OPEN_CONNS")
 	c.MaxIdleConns = envInt("NETIS_DB_MAX_IDLE_CONNS")
 	c.TrustedProxies = os.Getenv("NETIS_TRUSTED_PROXIES")
+	c.SecretKey = os.Getenv("NETIS_SECRET_KEY")
 	return c
+}
+
+// secretKeyLen is the key size ParseSecretKey accepts: AES-256. Shorter AES
+// keys are legal ciphers but there is no reason to offer a weaker one here.
+const secretKeyLen = 32
+
+// ParseSecretKey decodes the integration-secret encryption key from base64 or
+// hex. An empty string returns no key, which leaves the credential settings
+// stored in plaintext as they were before encryption existed.
+//
+// A key that decodes to the wrong length is an error: silently padding or
+// truncating it would produce a key nobody can reproduce, and every stored
+// secret would become undecryptable the moment the value was corrected.
+func ParseSecretKey(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	var key []byte
+	if b, err := hex.DecodeString(s); err == nil {
+		key = b
+	} else if b, err := base64.StdEncoding.DecodeString(s); err == nil {
+		key = b
+	} else if b, err := base64.RawStdEncoding.DecodeString(s); err == nil {
+		key = b
+	} else {
+		return nil, fmt.Errorf("NETIS_SECRET_KEY must be %d bytes in base64 or hex "+
+			"(generate one with: openssl rand -base64 %d)", secretKeyLen, secretKeyLen)
+	}
+	if len(key) != secretKeyLen {
+		return nil, fmt.Errorf("NETIS_SECRET_KEY decodes to %d bytes, want %d "+
+			"(generate one with: openssl rand -base64 %d)", len(key), secretKeyLen, secretKeyLen)
+	}
+	return key, nil
 }
 
 // ParseTrustedProxies parses a comma-separated list of CIDRs and bare
