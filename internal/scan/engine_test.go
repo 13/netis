@@ -37,8 +37,7 @@ func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
 		ARP: func() (map[string]string, error) {
 			return map[string]string{"10.0.0.9": "bc:24:11:00:00:01"}, nil
 		},
-		Resolve:      func(ctx context.Context, ip string) string { return "" },
-		OfflineAfter: 3,
+		Resolve: func(ctx context.Context, ip string) string { return "" },
 	}
 	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 	return e, st, fs, snID
@@ -244,5 +243,41 @@ func TestSchedulerRecordsScanStatus(t *testing.T) {
 	}
 	if !strings.Contains(list[0].Detail, sn.CIDR) {
 		t.Fatalf("detail should mention the subnet: %q", list[0].Detail)
+	}
+}
+
+// TestOfflineAfterFollowsSetting checks that a threshold saved in Settings
+// takes effect on the next sweep of a running engine. It used to be read once
+// at startup, so an admin who lowered it saw the new value in the form while
+// the scanner kept using the old one until the process restarted.
+func TestOfflineAfterFollowsSetting(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	e.RunSubnet(context.Background(), sn) // creates + online
+
+	if err := st.SetSetting(t.Context(), "offline_after", "1"); err != nil {
+		t.Fatal(err)
+	}
+	fs.results = nil // device disappears
+	e.RunSubnet(context.Background(), sn)
+
+	rows, _ := st.ListDevices(t.Context())
+	if rows[0].Online {
+		t.Fatal("one miss with offline_after=1 must mark the device offline")
+	}
+}
+
+// TestOfflineAfterIgnoresUnusableSetting keeps a garbage or out-of-range
+// setting from turning every sweep into an offline flap: the default stands.
+func TestOfflineAfterIgnoresUnusableSetting(t *testing.T) {
+	e, st, _, _ := testEngine(t)
+	for _, v := range []string{"", "abc", "0", "-1", "11"} {
+		if err := st.SetSetting(t.Context(), "offline_after", v); err != nil {
+			t.Fatal(err)
+		}
+		if got := e.offlineAfter(t.Context()); got != defaultOfflineAfter {
+			t.Errorf("offline_after=%q: got %d want %d", v, got, defaultOfflineAfter)
+		}
 	}
 }
