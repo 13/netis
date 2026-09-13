@@ -102,3 +102,49 @@ func (s *Store) eachRow(ctx context.Context, q string, fn func(*sql.Rows) error,
 	}
 	return rows.Err()
 }
+
+// conn is the subset of database/sql shared by *sql.DB and *sql.Tx, so the
+// store's helpers can run either directly or inside a transaction.
+type conn interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func (s *Store) execOn(ctx context.Context, c conn, q string, args ...any) (sql.Result, error) {
+	return c.ExecContext(ctx, s.dialect.rebind(q), args...)
+}
+
+// insertReturningIDOn is insertReturningID against an explicit connection; see
+// that function for the constraint on which INSERTs may use it.
+func (s *Store) insertReturningIDOn(ctx context.Context, c conn, q string, args ...any) (int64, error) {
+	if s.dialect == Postgres {
+		var id int64
+		err := c.QueryRowContext(ctx, s.dialect.rebind(q+` RETURNING id`), args...).Scan(&id)
+		return id, err
+	}
+	res, err := c.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// withTx runs fn inside a transaction, committing when it returns nil and
+// rolling back on any error or panic.
+//
+// fn must do all of its work through the conn it is given. On SQLite the pool
+// is capped at a single connection, so anything inside fn that reaches for
+// s.DB — including another Store method — waits for a connection the
+// transaction is already holding, and deadlocks.
+func (s *Store) withTx(ctx context.Context, fn func(c conn) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

@@ -81,56 +81,65 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 		have[t.Name] = t.ID
 	}
 
-	// Detach tags no longer wanted.
-	for name, id := range have {
-		if !want[name] {
-			if err := s.UntagDevice(ctx, deviceID, id); err != nil {
+	// The detaches and attaches go in one transaction: a failure partway
+	// through would otherwise leave the device with some of its old tags
+	// removed and none of its new ones added, which is a state the user never
+	// asked for and cannot tell apart from a successful edit.
+	return s.withTx(ctx, func(c conn) error {
+		for name, id := range have {
+			if want[name] {
+				continue
+			}
+			if _, err := s.execOn(ctx, c,
+				`DELETE FROM device_tag WHERE device_id=? AND tag_id=?`, deviceID, id); err != nil {
 				return err
 			}
 		}
-	}
-
-	// Attach wanted tags not already present (find-or-create).
-	for name := range want {
-		if _, ok := have[name]; ok {
-			continue
+		for name := range want {
+			if _, ok := have[name]; ok {
+				continue
+			}
+			id, err := s.findOrCreateTagOn(ctx, c, name)
+			if err != nil {
+				return err
+			}
+			if _, err := s.execOn(ctx, c,
+				`INSERT INTO device_tag (device_id,tag_id) VALUES (?,?) ON CONFLICT DO NOTHING`,
+				deviceID, id); err != nil {
+				return err
+			}
 		}
-		id, err := s.findOrCreateTag(ctx, name)
-		if err != nil {
-			return err
-		}
-		if err := s.TagDevice(ctx, deviceID, id); err != nil {
-			return err
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // defaultTagColor is what an auto-created tag gets until someone picks one.
 const defaultTagColor = "#888888"
 
-// findOrCreateTag returns the id of the tag with the given name, creating it
+// findOrCreateTagOn returns the id of the tag with the given name, creating it
 // with a neutral color if it does not exist yet.
 //
 // It looks the name up directly rather than scanning the whole tag table, which
 // is what SetDeviceTags used to do once per name. The insert tolerates a
 // concurrent creator via ON CONFLICT and re-reads, so two requests attaching
 // the same new tag cannot make one of them fail.
-func (s *Store) findOrCreateTag(ctx context.Context, name string) (int64, error) {
+// findOrCreateTagOn takes an explicit connection so it can run inside the
+// caller's transaction; SetDeviceTags is its only caller and always has one.
+func (s *Store) findOrCreateTagOn(ctx context.Context, c conn, name string) (int64, error) {
 	var id int64
-	err := s.queryRow(ctx, `SELECT id FROM tag WHERE name=?`, name).Scan(&id)
+	err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE name=?`), name).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	if _, err := s.exec(ctx,
+	if _, err := s.execOn(ctx, c,
 		`INSERT INTO tag (name,color) VALUES (?,?) ON CONFLICT(name) DO NOTHING`,
 		name, defaultTagColor); err != nil {
 		return 0, err
 	}
-	err = s.queryRow(ctx, `SELECT id FROM tag WHERE name=?`, name).Scan(&id)
+	err = c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE name=?`), name).Scan(&id)
 	return id, err
 }
 
