@@ -22,14 +22,24 @@ func BuildMagicPacket(mac string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// BroadcastAddr is where a magic packet goes by default: the limited broadcast
+// address on port 9, the discard port.
+const BroadcastAddr = "255.255.255.255:9"
+
 // Send builds a magic packet for mac and broadcasts it via UDP to the
 // local subnet broadcast address on port 9 (the discard port).
-func Send(mac string) error {
+func Send(mac string) error { return SendTo(mac, BroadcastAddr) }
+
+// SendTo builds a magic packet for mac and sends it to a specific UDP address.
+// Send is the normal entry point; this exists so the packet can be sent
+// somewhere observable, and for the occasional host reachable only by a
+// directed broadcast.
+func SendTo(mac, addr string) error {
 	pkt, err := BuildMagicPacket(mac)
 	if err != nil {
 		return err
 	}
-	conn, err := net.Dial("udp", "255.255.255.255:9")
+	conn, err := net.Dial("udp", addr)
 	if err != nil {
 		return err
 	}

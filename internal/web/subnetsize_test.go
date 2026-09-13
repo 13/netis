@@ -1,7 +1,6 @@
 package web
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
@@ -85,14 +84,15 @@ func TestHandlerErrorsDoNotLeakDriverText(t *testing.T) {
 
 	// The session has to exist before the database goes away, since the auth
 	// middleware reads it on every request.
-	req := httptest.NewRequest("GET", "/", nil)
-	addSessionCookie(t, st, req)
+	seed := httptest.NewRequest("GET", "/", nil)
+	addSessionCookie(t, st, seed)
+	cookie := seed.Header.Get("Cookie")
 
 	st.Close() // every query from here on fails with a driver error
 
 	for _, path := range []string{"/", "/devices", "/events", "/settings"} {
 		req := httptest.NewRequest("GET", path, nil)
-		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "ssetok"})
+		req.Header.Set("Cookie", cookie)
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 		body := rec.Body.String()

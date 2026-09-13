@@ -54,6 +54,7 @@ templ wireguardFields(values map[string]string) {
 	<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
 	<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
 	<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
+	<label>Known hosts path <input type="text" name="wg_ssh_known_hosts" value={ values["wg_ssh_known_hosts"] } placeholder="/root/.ssh/known_hosts"/></label>
 	<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
 }
 

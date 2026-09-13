@@ -68,11 +68,12 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) integrationRunne
 			}
 			user, _ := st.GetSetting(ctx, "wg_ssh_user")
 			key, _ := st.GetSetting(ctx, "wg_ssh_key_path")
+			knownHosts, _ := st.GetSetting(ctx, "wg_ssh_known_hosts")
 			iface, _ := st.GetSetting(ctx, "wg_iface")
 			if iface == "" {
 				iface = "wg0"
 			}
-			sshRunner, err := wireguard.NewSSHRunner(addr, user, key)
+			sshRunner, err := wireguard.NewSSHRunner(addr, user, key, knownHosts)
 			if err != nil {
 				return err
 			}
@@ -119,6 +120,12 @@ func main() {
 		case "migrate-db":
 			if err := runMigrateDB(context.Background(), os.Args[2:]); err != nil {
 				slog.Error("migrate-db", "err", err)
+				os.Exit(1)
+			}
+			return
+		case "backup":
+			if err := runBackup(context.Background(), os.Args[2:]); err != nil {
+				slog.Error("backup", "err", err)
 				os.Exit(1)
 			}
 			return

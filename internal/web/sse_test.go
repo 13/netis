@@ -4,12 +4,18 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"netis/internal/store"
 )
+
+// sessionSeq makes each session token unique, so a test may authenticate more
+// than one request.
+var sessionSeq atomic.Int64
 
 // addSessionCookie gives req a valid admin session, the way authedGet does for
 // the one-shot request helpers.
@@ -20,11 +26,12 @@ func addSessionCookie(t *testing.T, st *store.Store, req *http.Request) {
 		addAdmin(t, st)
 		u, _, _ = st.GetUserByName(t.Context(), "ben")
 	}
-	if err := st.CreateSession(t.Context(), "ssetok", u.ID,
+	token := "testsess-" + strconv.FormatInt(sessionSeq.Add(1), 10)
+	if err := st.CreateSession(t.Context(), token, u.ID,
 		time.Now().Add(time.Hour).UTC().Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
-	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "ssetok"})
+	req.AddCookie(&http.Cookie{Name: "netis_session", Value: token})
 }
 
 func TestSSEHeadersDisableProxyBuffering(t *testing.T) {
