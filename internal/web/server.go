@@ -34,6 +34,10 @@ type Options struct {
 	// X-Forwarded-Proto headers netis believes. Empty means the headers are
 	// ignored and every request is attributed to its direct peer.
 	TrustedProxies []netip.Prefix
+	// MetricsToken is the bearer token a scraper may present to read /metrics
+	// without a session. Empty means /metrics needs a logged-in session, which
+	// no scraper has.
+	MetricsToken string
 }
 
 type Server struct {
@@ -46,6 +50,7 @@ type Server struct {
 	detect  func() ([]netdetect.Detected, error)
 
 	trustedProxies []netip.Prefix
+	metricsToken   string
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
@@ -58,6 +63,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		trigger: trigger, runner: runner, limiter: newRateLimiter(),
 		detect:         netdetect.DetectSubnets,
 		trustedProxies: o.TrustedProxies,
+		metricsToken:   o.MetricsToken,
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
@@ -97,6 +103,14 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /devices/{id}/portscan", s.requireAdmin(s.handlePortScan))
 	s.mux.HandleFunc("POST /devices/{id}/ip/kind", s.requireAdmin(s.handleDeviceIPKind))
 	s.mux.HandleFunc("GET /events", s.handleEventsPage)
+	// Read-only JSON for scripts, and Prometheus metrics. Both authenticate with
+	// the session cookie; /metrics also takes a scrape token.
+	s.mux.HandleFunc("GET /api/devices", s.handleAPIDevices)
+	s.mux.HandleFunc("GET /api/devices/{id}", s.handleAPIDevice)
+	s.mux.HandleFunc("GET /api/subnets", s.handleAPISubnets)
+	s.mux.HandleFunc("GET /api/events", s.handleAPIEvents)
+	s.mux.HandleFunc("GET /api/status", s.handleAPIStatus)
+	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	s.mux.HandleFunc("POST /settings/subnets", s.requireAdmin(s.handleSubnetCreate))
 	s.mux.HandleFunc("POST /settings/subnets/{id}", s.requireAdmin(s.handleSubnetUpdate))

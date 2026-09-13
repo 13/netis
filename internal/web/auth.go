@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"log/slog"
 	"net"
@@ -183,9 +184,20 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// A scrape token stands in for a session, on /metrics only: it is the
+		// one endpoint a machine with no browser has to reach.
+		if r.URL.Path == "/metrics" && s.metricsToken != "" {
+			if got := tokenFromRequest(r); got != "" &&
+				subtle.ConstantTimeCompare([]byte(got), []byte(s.metricsToken)) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
 		if c, err := r.Cookie("netis_session"); err == nil {
 			if u, ok, _ := s.store.GetSession(r.Context(), c.Value); ok {
-				if !onboardingAllowed(r.URL.Path) {
+				// The onboarding wizard is a browser flow; bouncing a script or
+				// a scraper into it would answer a data request with a page.
+				if !onboardingAllowed(r.URL.Path) && !forMachines(r.URL.Path) {
 					if v, _ := s.store.GetSetting(r.Context(), "onboarded"); v != "1" {
 						http.Redirect(w, r, "/welcome", http.StatusSeeOther)
 						return
@@ -195,12 +207,23 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				return
 			}
 		}
+		// A redirect to a login page is no use to a caller that wanted JSON.
+		if forMachines(r.URL.Path) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if n, _ := s.store.CountUsers(r.Context()); n == 0 {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	})
+}
+
+// forMachines reports whether a path serves scripts and scrapers rather than
+// browsers, and so should answer with a status code instead of a redirect.
+func forMachines(path string) bool {
+	return path == "/metrics" || strings.HasPrefix(path, "/api/")
 }
 
 // onboardingAllowed reports whether a path is reachable before onboarding is

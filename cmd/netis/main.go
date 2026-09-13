@@ -218,6 +218,7 @@ func main() {
 		Addr: cfg.Addr,
 		Handler: web.NewServer(st, broker, sched, runNow, web.Options{
 			TrustedProxies: trustedProxies,
+			MetricsToken:   cfg.MetricsToken,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
