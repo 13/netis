@@ -119,7 +119,7 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 	sortKey, dir := parseDeviceSort(r)
 	sortDeviceRows(devices, sortKey, dir)
 	u, _ := userFrom(r)
-	views.GridPage(u.Username, sn, cells, devices, sortKey, dir).Render(r.Context(), w)
+	s.render(w, r, views.GridPage(u.Username, sn, cells, devices, sortKey, dir))
 }
 
 func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	views.GridFrag(sn, cells).Render(r.Context(), w)
+	s.render(w, r, views.GridFrag(sn, cells))
 }
 
 func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
@@ -150,13 +150,13 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sn.Kind == "wireguard" {
-		views.ScanToast(sn.CIDR+" is WireGuard — not scannable").Render(r.Context(), w)
+		s.render(w, r, views.ScanToast(sn.CIDR+" is WireGuard — not scannable"))
 		return
 	}
 	if s.trigger != nil {
 		s.trigger.Trigger(sn.ID)
 	}
-	views.ScanToast("Scanning "+sn.CIDR+"…").Render(r.Context(), w)
+	s.render(w, r, views.ScanToast("Scanning "+sn.CIDR+"…"))
 }
 
 func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +171,7 @@ func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	views.CellDetail(sn, ip, occ[ip]).Render(r.Context(), w)
+	s.render(w, r, views.CellDetail(sn, ip, occ[ip]))
 }
 
 func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +191,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
-	views.ScanToast(ip+" → "+kind).Render(r.Context(), w)
+	s.render(w, r, views.ScanToast(ip+" → "+kind))
 }
 
 func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
@@ -207,5 +207,5 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	views.ScanToast("Scanning all subnets…").Render(r.Context(), w)
+	s.render(w, r, views.ScanToast("Scanning all subnets…"))
 }

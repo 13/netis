@@ -25,7 +25,7 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.runner == nil {
-		views.ScanToast("integration run not available").Render(r.Context(), w)
+		s.render(w, r, views.ScanToast("integration run not available"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
@@ -58,5 +58,5 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 			msg += " · " + st.Detail
 		}
 	}
-	views.ScanToast(msg).Render(r.Context(), w)
+	s.render(w, r, views.ScanToast(msg))
 }

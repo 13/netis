@@ -666,3 +666,39 @@ func TestDeviceListOrphanChildIsRoot(t *testing.T) {
 		t.Fatalf("orphan (parent absent) should still render as a root")
 	}
 }
+
+// The device list is assembled in Go from every device, so the page has to be
+// bounded — and it has to say when it is showing a prefix, or a truncated list
+// reads as the whole fleet.
+func TestDeviceListIsBoundedAndSaysSo(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	for _, name := range []string{"one", "two", "three"} {
+		if _, err := st.CreateDevice(t.Context(), store.Device{
+			Name: name, Kind: "other", Source: "manual",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	defer func(prev int) { maxDeviceRows = prev }(maxDeviceRows)
+	maxDeviceRows = 2
+
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, "Showing 2 of 3 matching devices") {
+		t.Errorf("no truncation notice in page:\n%s", body)
+	}
+
+	// Under the cap there is nothing to say.
+	maxDeviceRows = 10
+	body = authedGet(t, srv, st, "/devices").Body.String()
+	if strings.Contains(body, "matching devices") {
+		t.Error("notice shown when nothing was truncated")
+	}
+	// The filter runs before the cap, so narrowing reaches what it cut off.
+	maxDeviceRows = 2
+	body = authedGet(t, srv, st, "/devices?q=three").Body.String()
+	if !strings.Contains(body, "three") || strings.Contains(body, "matching devices") {
+		t.Error("a filter that matches one device should show it with no notice")
+	}
+}

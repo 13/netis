@@ -97,7 +97,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	views.Dashboard(data).Render(r.Context(), w)
+	s.render(w, r, views.Dashboard(data))
 }
 
 func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) 
 		s.fail(w, r, err)
 		return
 	}
-	views.DashboardBody(data).Render(r.Context(), w)
+	s.render(w, r, views.DashboardBody(data))
 }
 
 func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
@@ -116,5 +116,5 @@ func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, _ := userFrom(r)
-	views.SubnetsPage(u.Username, rows).Render(r.Context(), w)
+	s.render(w, r, views.SubnetsPage(u.Username, rows))
 }

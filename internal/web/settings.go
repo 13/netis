@@ -116,7 +116,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	views.SettingsPage(u.Username, views.SettingsData{
+	s.render(w, r, views.SettingsPage(u.Username, views.SettingsData{
 		Subnets: subnets, Users: users, Values: values,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
@@ -126,7 +126,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 			Backend: string(s.store.Dialect()),
 			Now:     time.Now().UTC().Format(time.RFC3339),
 		},
-	}).Render(r.Context(), w)
+	}))
 }
 
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {

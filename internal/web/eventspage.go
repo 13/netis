@@ -23,5 +23,5 @@ func (s *Server) handleEventsPage(w http.ResponseWriter, r *http.Request) {
 		evs = filtered
 	}
 	u, _ := userFrom(r)
-	views.EventsPage(u.Username, evs, typeFilter).Render(r.Context(), w)
+	s.render(w, r, views.EventsPage(u.Username, evs, typeFilter))
 }
