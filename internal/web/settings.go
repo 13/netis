@@ -236,8 +236,8 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 	role := r.FormValue("role")
-	if username == "" || len(password) < 6 {
-		http.Error(w, "username required, password min 6 chars", 400)
+	if username == "" || len(password) < minPasswordLen {
+		http.Error(w, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars", 400)
 		return
 	}
 	if role != "admin" && role != "viewer" {

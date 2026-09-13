@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -292,9 +293,9 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username, password := r.FormValue("username"), r.FormValue("password")
-	if username == "" || len(password) < 8 {
+	if username == "" || len(password) < minPasswordLen {
 		w.WriteHeader(http.StatusBadRequest)
-		views.SetupPage("username required, password min 8 chars").Render(r.Context(), w)
+		views.SetupPage("username required, password min "+strconv.Itoa(minPasswordLen)+" chars").Render(r.Context(), w)
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

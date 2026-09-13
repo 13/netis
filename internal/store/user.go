@@ -48,6 +48,35 @@ func (s *Store) CreateFirstAdmin(ctx context.Context, username, passwordHash str
 	return n == 1, nil
 }
 
+// GetUser looks a user up by id, reporting whether one exists.
+func (s *Store) GetUser(ctx context.Context, id int64) (User, bool, error) {
+	var u User
+	err := s.queryRow(ctx, `SELECT id,username,password_hash,role FROM "user" WHERE id=?`, id).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return u, false, nil
+		}
+		return u, false, err
+	}
+	return u, true, nil
+}
+
+// SetPasswordHash replaces a user's password hash, reporting whether a row was
+// updated so a reset aimed at a user who has since been deleted is not
+// reported back as a success.
+func (s *Store) SetPasswordHash(ctx context.Context, id int64, passwordHash string) (bool, error) {
+	res, err := s.exec(ctx, `UPDATE "user" SET password_hash=? WHERE id=?`, passwordHash, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	var n int
 	err := s.queryRow(ctx, `SELECT count(*) FROM "user"`).Scan(&n)
@@ -119,6 +148,17 @@ func (s *Store) GetSession(ctx context.Context, token string) (User, bool, error
 
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
 	_, err := s.exec(ctx, `DELETE FROM session WHERE token=?`, token)
+	return err
+}
+
+// DeleteSessionsForUser revokes every session belonging to a user except the
+// one named by keep, which may be empty to revoke all of them.
+//
+// A password change that left the old sessions alive would not actually lock
+// anyone out, so this runs with every change; keep is the session of the person
+// making it, so they are not logged out of their own browser.
+func (s *Store) DeleteSessionsForUser(ctx context.Context, userID int64, keep string) error {
+	_, err := s.exec(ctx, `DELETE FROM session WHERE user_id=? AND token<>?`, userID, keep)
 	return err
 }
 

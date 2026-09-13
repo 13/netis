@@ -222,6 +222,10 @@ templ usersTab(d SettingsData) {
 					<td>{ u.Username }</td>
 					<td><span class="badge">{ u.Role }</span></td>
 					<td>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
+							<input type="password" name="new_password" placeholder="new password" minlength="8" required/>
+							<button type="submit" class="ghost">reset password</button>
+						</form>
 						<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline">
 							<button type="submit" class="ghost">delete</button>
 						</form>
@@ -231,11 +235,23 @@ templ usersTab(d SettingsData) {
 		</table>
 	</div>
 	<div class="setting-card">
+		<div class="sc-head"><h3>Change my password</h3></div>
+		<form method="post" action="/settings/password">
+			<div class="field-grid">
+				<label>Current password <input type="password" name="current_password" required/></label>
+				<label>New password <input type="password" name="new_password" minlength="8" required/></label>
+				<label>Confirm new password <input type="password" name="confirm_password" minlength="8" required/></label>
+			</div>
+			<p class="muted" style="margin:6px 0 4px">Your other sessions are signed out when the password changes.</p>
+			<button type="submit" class="primary">Change password</button>
+		</form>
+	</div>
+	<div class="setting-card">
 		<div class="sc-head"><h3>Add user</h3></div>
 		<form method="post" action="/settings/users">
 			<div class="field-grid">
 				<label>Username <input type="text" name="username" required/></label>
-				<label>Password <input type="password" name="password" minlength="6" required/></label>
+				<label>Password <input type="password" name="password" minlength="8" required/></label>
 				<label>Role
 					<select name="role">
 						<option value="viewer">viewer</option>
