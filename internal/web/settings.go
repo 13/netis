@@ -13,6 +13,7 @@ import (
 
 	"netis/internal/buildinfo"
 	"netis/internal/netdetect"
+	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
 )
@@ -161,6 +162,13 @@ func parseSubnetForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		http.Error(w, "invalid CIDR", 400)
+		return store.Subnet{}, false
+	}
+	// Every address in a subnet becomes a grid cell and a sweep target, so an
+	// over-wide prefix is refused here rather than discovered when the page is
+	// opened. The message names the limit and the prefix that would fit.
+	if err := scan.CheckSubnetSize(cidr); err != nil {
+		http.Error(w, err.Error(), 400)
 		return store.Subnet{}, false
 	}
 	kind := r.FormValue("kind")

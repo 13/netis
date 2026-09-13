@@ -2,6 +2,8 @@ package scan
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/netip"
 	"os"
 	"sync"
@@ -20,15 +22,66 @@ type Sweeper interface {
 	Sweep(ctx context.Context, cidr string) ([]Result, error)
 }
 
+// MaxSubnetAddresses caps how large a subnet netis will enumerate: 65536, an
+// IPv4 /16 or an IPv6 /112.
+//
+// Every address in a subnet becomes a string here and a cell in the grid, so
+// the cost is linear and the ceiling has to be real: a /8 is 16.7 million
+// addresses and over a gigabyte before the page is rendered, and an IPv6
+// prefix shorter than about /104 would never finish enumerating at all.
+const MaxSubnetAddresses = 65536
+
+// ErrSubnetTooLarge is returned for a prefix wider than MaxSubnetAddresses.
+var ErrSubnetTooLarge = errors.New("subnet too large")
+
+// SubnetTooLargeError describes a prefix netis refuses to enumerate.
+type SubnetTooLargeError struct {
+	CIDR string
+	Bits int // the narrowest prefix length that would be accepted
+}
+
+func (e *SubnetTooLargeError) Error() string {
+	return fmt.Sprintf("subnet %s is larger than the %d-address limit; use /%d or narrower",
+		e.CIDR, MaxSubnetAddresses, e.Bits)
+}
+
+func (e *SubnetTooLargeError) Is(target error) bool { return target == ErrSubnetTooLarge }
+
+// CheckSubnetSize reports whether cidr is small enough to enumerate. It is the
+// cheap check: it compares prefix lengths and never walks the range, so it is
+// safe to call on input that has not been validated yet.
+func CheckSubnetSize(cidr string) error {
+	prefix, err := netip.ParsePrefix(cidr)
+	if err != nil {
+		return err
+	}
+	// MaxSubnetAddresses is 2^16, so any prefix leaving more than 16 host bits
+	// is over the limit.
+	total := prefix.Addr().BitLen()
+	if total-prefix.Bits() > 16 {
+		return &SubnetTooLargeError{CIDR: cidr, Bits: total - 16}
+	}
+	return nil
+}
+
 // AllIPs returns every address in cidr from the network address to the
-// broadcast address inclusive.
+// broadcast address inclusive, refusing prefixes wider than
+// MaxSubnetAddresses.
+//
+// The size check is repeated here rather than left to the caller on purpose:
+// this is the function that does the allocating, subnets are stored in the
+// database and may predate the limit, and an unbounded IPv6 prefix would hang
+// the process rather than fail.
 func AllIPs(cidr string) ([]string, error) {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckSubnetSize(cidr); err != nil {
+		return nil, err
+	}
 	prefix = prefix.Masked()
-	var out []string
+	out := make([]string, 0, 256)
 	for addr := prefix.Addr(); prefix.Contains(addr); addr = addr.Next() {
 		out = append(out, addr.String())
 	}
