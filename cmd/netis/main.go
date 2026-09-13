@@ -204,4 +204,8 @@ func main() {
 		slog.Error("shutdown", "err", err)
 		srv.Close()
 	}
+	// Scans run in their own goroutines, and the deferred st.Close() is next:
+	// wait for the sweeps the cancelled context is unwinding so none of them
+	// writes into a closed database.
+	sched.Wait()
 }
