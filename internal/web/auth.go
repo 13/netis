@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -79,16 +80,80 @@ func (rl *rateLimiter) fail(ip string) {
 
 // secureRequest reports whether the request arrived over TLS, directly or via
 // a reverse proxy, so session cookies can carry the Secure flag when it works.
-func secureRequest(r *http.Request) bool {
-	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+//
+// X-Forwarded-Proto counts only when the peer is a trusted proxy. Believing it
+// from anyone let a plain-HTTP client mark its own session cookie Secure, after
+// which the browser would refuse to send the cookie back and the user could
+// never stay logged in.
+func (s *Server) secureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	peer, _ := peerAddr(r)
+	return s.trustsProxy(peer) && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
-func clientIP(r *http.Request) string {
+// peerAddr returns the address of the host the connection actually came from,
+// plus its string form. The string is returned separately because RemoteAddr
+// is not guaranteed to be an IP (a unix socket, say), and the caller still
+// needs something to key a rate-limit bucket on.
+func peerAddr(r *http.Request) (netip.Addr, string) {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	return host
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return netip.Addr{}, host
+	}
+	addr = addr.Unmap().WithZone("")
+	return addr, addr.String()
+}
+
+// trustsProxy reports whether addr is one of the configured reverse proxies.
+func (s *Server) trustsProxy(addr netip.Addr) bool {
+	if !addr.IsValid() {
+		return false
+	}
+	for _, p := range s.trustedProxies {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIP returns the address a request should be attributed to: the peer
+// itself, or — when the peer is a configured reverse proxy — the rightmost
+// X-Forwarded-For entry that is not itself a trusted proxy.
+//
+// Walking from the right is what makes the header safe to use: a client can
+// prepend anything it likes to X-Forwarded-For, but each hop appends the
+// address it actually saw, so the last untrusted entry is the furthest-left
+// address netis can vouch for. With no trusted proxies configured the header
+// is ignored entirely.
+//
+// This matters for the login rate limiter. Keyed on the peer address, every
+// login behind a reverse proxy shares one bucket, so five wrong passwords from
+// anywhere lock out every user for a minute.
+func (s *Server) clientIP(r *http.Request) string {
+	peer, peerStr := peerAddr(r)
+	if !s.trustsProxy(peer) {
+		return peerStr
+	}
+	fields := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(fields) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(fields[i]))
+		if err != nil {
+			continue
+		}
+		addr = addr.Unmap().WithZone("")
+		if s.trustsProxy(addr) {
+			continue
+		}
+		return addr.String()
+	}
+	return peerStr
 }
 
 func newToken() (string, error) {
@@ -161,7 +226,7 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if !s.limiter.allow(ip) {
 		http.Error(w, "too many attempts, wait a minute", http.StatusTooManyRequests)
 		return
@@ -192,7 +257,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name: "netis_session", Value: token, Path: "/",
 			HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires,
-			Secure: secureRequest(r),
+			Secure: s.secureRequest(r),
 		})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -208,7 +273,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: "netis_session", Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secureRequest(r),
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secureRequest(r),
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

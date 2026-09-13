@@ -50,8 +50,12 @@ func TestCrossSitePOSTBlocked(t *testing.T) {
 }
 
 func TestSessionCookieSecureBehindTLSProxy(t *testing.T) {
-	srv, st := testServer(t)
-	addAdmin(t, st)
+	// httptest gives every request a 192.0.2.1 peer, so trusting that network
+	// is what makes this a request arriving through a configured proxy.
+	// X-Forwarded-Proto from an unconfigured peer is ignored on purpose — see
+	// TestSecureRequestOnlyTrustsForwardedProtoFromProxy.
+	srv := newTrustingServer(t, "192.0.2.0/24")
+	addAdmin(t, srv.store)
 	form := url.Values{"username": {"ben"}, "password": {"secret"}}
 
 	login := func(forwardedProto string) *http.Cookie {

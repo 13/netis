@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"netis/internal/config"
 	"netis/internal/events"
 	"netis/internal/store"
 )
@@ -163,5 +164,101 @@ func TestLoginRateLimit(t *testing.T) {
 	}
 	if last != 429 {
 		t.Fatalf("6th attempt code=%d, want 429", last)
+	}
+}
+
+// newTrustingServer builds a server that trusts one proxy network.
+func newTrustingServer(t *testing.T, cidrs string) *Server {
+	t.Helper()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	prefixes, err := config.ParseTrustedProxies(cidrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewServer(st, events.NewBroker(), nil, nil, Options{TrustedProxies: prefixes})
+}
+
+func TestClientIPIgnoresForwardedHeaderFromUntrustedPeer(t *testing.T) {
+	srv, _ := testServer(t)
+	req := httptest.NewRequest("POST", "/login", nil)
+	req.RemoteAddr = "203.0.113.7:4444"
+	req.Header.Set("X-Forwarded-For", "10.9.9.9")
+	if got := srv.clientIP(req); got != "203.0.113.7" {
+		t.Fatalf("clientIP = %q, want the peer address", got)
+	}
+}
+
+func TestClientIPUsesForwardedHeaderFromTrustedProxy(t *testing.T) {
+	srv := newTrustingServer(t, "10.0.0.0/8")
+	cases := []struct {
+		name, xff, want string
+	}{
+		{"single hop", "203.0.113.7", "203.0.113.7"},
+		{"client through two proxies", "203.0.113.7, 10.0.0.2", "203.0.113.7"},
+		{"spoofed prefix is not reached", "1.2.3.4, 203.0.113.7, 10.0.0.2", "203.0.113.7"},
+		{"all trusted falls back to peer", "10.0.0.2, 10.0.0.3", "10.0.0.1"},
+		{"absent falls back to peer", "", "10.0.0.1"},
+		{"garbage falls back to peer", "not-an-ip", "10.0.0.1"},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest("POST", "/login", nil)
+		req.RemoteAddr = "10.0.0.1:5555"
+		if c.xff != "" {
+			req.Header.Set("X-Forwarded-For", c.xff)
+		}
+		if got := srv.clientIP(req); got != c.want {
+			t.Errorf("%s: clientIP = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSecureRequestOnlyTrustsForwardedProtoFromProxy(t *testing.T) {
+	plain, _ := testServer(t)
+	req := httptest.NewRequest("POST", "/login", nil)
+	req.RemoteAddr = "203.0.113.7:4444"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if plain.secureRequest(req) {
+		t.Error("X-Forwarded-Proto from an untrusted peer must not mark the request secure")
+	}
+
+	srv := newTrustingServer(t, "10.0.0.0/8")
+	req2 := httptest.NewRequest("POST", "/login", nil)
+	req2.RemoteAddr = "10.0.0.1:5555"
+	req2.Header.Set("X-Forwarded-Proto", "https")
+	if !srv.secureRequest(req2) {
+		t.Error("X-Forwarded-Proto from a trusted proxy must mark the request secure")
+	}
+}
+
+// Behind a reverse proxy every login arrives from the proxy's address. Without
+// forwarded-header support one attacker exhausts the single bucket and locks
+// every other user out; with it, each real client gets its own.
+func TestLoginRateLimitIsPerForwardedClient(t *testing.T) {
+	srv := newTrustingServer(t, "10.0.0.0/8")
+	addAdmin(t, srv.store)
+	post := func(xff string) int {
+		form := url.Values{"username": {"ben"}, "password": {"wrong"}}
+		req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Forwarded-For", xff)
+		req.RemoteAddr = "10.0.0.1:5555"
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for i := 0; i < 5; i++ {
+		if code := post("203.0.113.7"); code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: code=%d", i, code)
+		}
+	}
+	if code := post("203.0.113.7"); code != http.StatusTooManyRequests {
+		t.Fatalf("6th attempt from the same client: code=%d, want 429", code)
+	}
+	if code := post("203.0.113.8"); code != http.StatusUnauthorized {
+		t.Fatalf("first attempt from another client: code=%d, want 401", code)
 	}
 }
