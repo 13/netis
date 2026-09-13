@@ -55,7 +55,7 @@ func (s *Server) createDetectedSubnet(ctx context.Context, cidr, iface string) {
 
 func (s *Server) handleWelcomeSubnets(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, "malformed form data", 400)
 		return
 	}
 	for _, v := range r.Form["subnet"] {
@@ -75,7 +75,7 @@ func (s *Server) handleWelcomeIntegrationsPage(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleWelcomeIntegrations(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	s.finishOnboarding(w, r)
@@ -87,7 +87,7 @@ func (s *Server) handleWelcomeSkip(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) finishOnboarding(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SetSetting(r.Context(), "onboarded", "1"); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

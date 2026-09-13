@@ -94,7 +94,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data, err := s.assembleDashboard(r)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.Dashboard(data).Render(r.Context(), w)
@@ -103,7 +103,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) {
 	data, err := s.assembleDashboard(r)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.DashboardBody(data).Render(r.Context(), w)
@@ -112,7 +112,7 @@ func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
 	rows, _, err := s.subnetRows(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	u, _ := userFrom(r)

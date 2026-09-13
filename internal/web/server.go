@@ -126,3 +126,15 @@ func securityHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// fail reports an unexpected server-side error: the real one goes to the log
+// with the request that produced it, and the client gets a fixed message.
+//
+// Handlers used to pass err.Error() straight to http.Error. A driver error
+// carries the SQL it was running along with constraint and schema names, and
+// every page is reachable by a viewer-role user, so that put database internals
+// in front of anyone with an account.
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	http.Error(w, "internal server error", http.StatusInternalServerError)
+}

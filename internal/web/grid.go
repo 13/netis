@@ -108,12 +108,12 @@ func (s *Server) handleSubnetPage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	devices, err := s.devicesInSubnet(r.Context(), sn.ID)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	sortKey, dir := parseDeviceSort(r)
@@ -137,7 +137,7 @@ func (s *Server) handleGridFrag(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.GridFrag(sn, cells).Render(r.Context(), w)
@@ -168,7 +168,7 @@ func (s *Server) handleCellDetail(w http.ResponseWriter, r *http.Request) {
 	ip := r.URL.Query().Get("ip")
 	occ, err := s.store.SubnetOccupancy(r.Context(), sn.ID)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.CellDetail(sn, ip, occ[ip]).Render(r.Context(), w)
@@ -187,7 +187,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.SetIPKind(r.Context(), sn.ID, ip, kind); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	s.broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
@@ -197,7 +197,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if s.trigger != nil {

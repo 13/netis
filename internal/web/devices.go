@@ -59,7 +59,7 @@ func parseDeviceSort(r *http.Request) (sortKey, dir string) {
 func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.ListDevices(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	q := strings.ToLower(r.URL.Query().Get("q"))
@@ -147,12 +147,12 @@ func sortDeviceRows(rows []store.DeviceRow, key, dir string) {
 func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	all, err := s.store.ListDevices(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	var subnetID int64
@@ -175,22 +175,22 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	tags, err := s.store.DeviceTags(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	all, err := s.store.ListDevices(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.DeviceDrawer(d, tags, subnets, all, 0).Render(r.Context(), w)
@@ -219,11 +219,11 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	devID, err := s.store.CreateDevice(r.Context(), dev)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), devID, parseTags(r.FormValue("tags"))); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if mac := normMAC(r.FormValue("mac")); mac != "" || r.FormValue("ip") != "" {
@@ -253,7 +253,7 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if kind := r.FormValue("kind"); validKinds[kind] {
@@ -275,11 +275,11 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), d.ID, parseTags(r.FormValue("tags"))); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
@@ -296,11 +296,11 @@ func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if err := s.store.SetDeviceReviewed(r.Context(), id, true); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/devices", http.StatusSeeOther)
@@ -313,7 +313,7 @@ func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.DeleteDevice(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/devices", http.StatusSeeOther)
@@ -334,13 +334,13 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 
 	ifaces, err := s.store.ListIfaces(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	since := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Hour).Format(time.RFC3339)
@@ -348,22 +348,22 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	for _, f := range ifaces {
 		ips, err := s.store.ListIPs(r.Context(), f.ID)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		ports, err := s.store.ListOpenPorts(r.Context(), f.ID)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		pct, err := s.store.AvailabilityPct(r.Context(), f.ID, since)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		online, lastSeen, err := s.store.IfaceOnline(r.Context(), f.ID)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		ls := ""
@@ -377,22 +377,22 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 
 	tags, err := s.store.DeviceTags(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	fields, err := s.store.ListCustomFields(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	links, err := s.store.ListLinks(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	children, err := s.store.ListChildren(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	var parent *store.Device
@@ -404,7 +404,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	}
 	evs, err := s.store.ListDeviceEvents(r.Context(), id, 20)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 
@@ -421,7 +421,7 @@ func (s *Server) handleLinkAdd(w http.ResponseWriter, r *http.Request) {
 	url := strings.TrimSpace(r.FormValue("url"))
 	if label != "" && url != "" {
 		if _, err := s.store.AddLink(r.Context(), id, label, url); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
@@ -434,7 +434,7 @@ func (s *Server) handleLinkDelete(w http.ResponseWriter, r *http.Request) {
 	// target comes from the form's referring device id.
 	devID := r.FormValue("device_id")
 	if err := s.store.DeleteLink(r.Context(), linkID); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/devices/"+devID, http.StatusSeeOther)
@@ -445,7 +445,7 @@ func (s *Server) handleFieldSet(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimSpace(r.FormValue("key"))
 	if key != "" {
 		if err := s.store.SetCustomField(r.Context(), id, key, r.FormValue("value")); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
@@ -456,7 +456,7 @@ func (s *Server) handleFieldDelete(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	key := r.FormValue("key")
 	if err := s.store.DeleteCustomField(r.Context(), id, key); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
@@ -475,18 +475,18 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	ifaces, err := s.store.ListIfaces(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	for _, f := range ifaces {
 		if f.MAC != nil {
 			if err := wol.Send(*f.MAC); err != nil {
-				http.Error(w, err.Error(), 500)
+				s.fail(w, r, err)
 				return
 			}
 			http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
@@ -510,7 +510,7 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	ifaces, err := s.store.ListIfaces(r.Context(), id)
@@ -551,7 +551,7 @@ func (s *Server) handleDeviceIPKind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.SetIPKind(r.Context(), subnetID, ip, kind); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	views.LeaseToggle(devID, subnetID, ip, kind).Render(r.Context(), w)

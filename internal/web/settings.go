@@ -31,12 +31,12 @@ var settingsKeys = []string{
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	subnets, err := s.store.ListSubnets(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	values := make(map[string]string)
@@ -47,14 +47,14 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		values[k] = v
 	}
 	offlineAfter, err := s.store.GetSetting(r.Context(), "offline_after")
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	values["offline_after"] = offlineAfter
@@ -63,7 +63,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"event_retention_days", "availability_retention_days"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		values[k] = v
@@ -93,7 +93,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	if tab == "integrations" {
 		list, err := s.store.ListIntegrationStatus(r.Context())
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		statuses = make(map[string]store.IntegrationStatus, len(list))
@@ -121,7 +121,7 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -138,7 +138,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	sn, ok := parseSubnetForm(w, r)
@@ -147,7 +147,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	sn.ID = id
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -193,7 +193,7 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.DeleteSubnet(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -226,7 +226,7 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=integrations", http.StatusSeeOther)
@@ -246,11 +246,11 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if _, err := s.store.CreateUser(r.Context(), username, string(hash), role); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
@@ -269,7 +269,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	// would be vulnerable to).
 	deleted, err := s.store.DeleteUserGuarded(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if !deleted {
@@ -277,7 +277,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		// (400) for a useful error response.
 		users, err := s.store.ListUsers(r.Context())
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 		exists := false
@@ -304,7 +304,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.SetSetting(r.Context(), "offline_after", strconv.Itoa(n)); err != nil {
-		http.Error(w, err.Error(), 500)
+		s.fail(w, r, err)
 		return
 	}
 	if v := r.FormValue("default_scan_interval_sec"); v != "" {
@@ -314,7 +314,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
@@ -324,7 +324,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_subnet_kind", v); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
@@ -334,7 +334,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
@@ -351,7 +351,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), k, strconv.Itoa(n)); err != nil {
-			http.Error(w, err.Error(), 500)
+			s.fail(w, r, err)
 			return
 		}
 	}
