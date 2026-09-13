@@ -1,11 +1,7 @@
 # syntax note: builder pinned to golang:1.26-alpine to match this module's
 # go.mod toolchain (go1.26.6); the task brief's 1.24-alpine would not build
 # a module that requires go1.26.
-# --platform=$BUILDPLATFORM keeps the toolchain native and cross-compiles to the
-# target instead of emulating it: the binary is static and CGO-free, so building
-# an arm64 image on an amd64 runner needs no QEMU (which made the Go build slow
-# enough to matter).
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -19,12 +15,9 @@ ARG VERSION=dev
 ARG COMMIT=""
 ARG BUILD=""
 ARG DATE=""
-# Set by buildx from the --platform being built.
-ARG TARGETOS
-ARG TARGETARCH
 # templ version comes from go.mod's tool directive — single source of truth
 RUN go tool templ generate && \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w \
+    CGO_ENABLED=0 go build -ldflags="-s -w \
       -X netis/internal/buildinfo.Version=${VERSION} \
       -X netis/internal/buildinfo.Commit=${COMMIT} \
       -X netis/internal/buildinfo.Build=${BUILD} \
