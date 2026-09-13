@@ -1,6 +1,8 @@
 package web
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -71,5 +73,33 @@ func TestSubnetPageRefusesOversizedStoredSubnet(t *testing.T) {
 func TestMaxSubnetAddressesIsAnIPv4Slash16(t *testing.T) {
 	if scan.MaxSubnetAddresses != 65536 {
 		t.Errorf("MaxSubnetAddresses = %d, want 65536", scan.MaxSubnetAddresses)
+	}
+}
+
+// A handler must not hand driver text to the browser: a database error carries
+// the SQL it was running plus constraint and schema names, and every page is
+// reachable by a viewer-role account.
+func TestHandlerErrorsDoNotLeakDriverText(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+
+	// The session has to exist before the database goes away, since the auth
+	// middleware reads it on every request.
+	req := httptest.NewRequest("GET", "/", nil)
+	addSessionCookie(t, st, req)
+
+	st.Close() // every query from here on fails with a driver error
+
+	for _, path := range []string{"/", "/devices", "/events", "/settings"} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "ssetok"})
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		body := rec.Body.String()
+		for _, leak := range []string{"sql:", "SQL", "database is closed", "syntax", "SELECT", "iface_status"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("%s leaked %q in its error body: %q", path, leak, body)
+			}
+		}
 	}
 }

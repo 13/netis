@@ -234,12 +234,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.fail(w, r, err)
 		return
 	}
 	created, err := s.store.CreateFirstAdmin(r.Context(), username, string(hash))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.fail(w, r, err)
 		return
 	}
 	if !created {
