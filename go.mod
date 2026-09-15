@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	github.com/a-h/templ v0.3.1020
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/prometheus-community/pro-bing v0.9.1
 	golang.org/x/crypto v0.57.0
 	modernc.org/sqlite v1.58.0
