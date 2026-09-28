@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	probing "github.com/prometheus-community/pro-bing"
@@ -16,6 +17,9 @@ type Result struct {
 	IP    string
 	Alive bool
 	RTTms float64
+	// Err is set when the probe could not be run at all, so the host's state
+	// is unknown rather than down.
+	Err error
 }
 
 type Sweeper interface {
@@ -106,6 +110,8 @@ func HostIPs(cidr string) ([]string, error) {
 type ICMPSweeper struct {
 	Concurrency int
 	Timeout     time.Duration
+	// probe replaces the ICMP ping in tests; nil means ping.
+	probe func(ctx context.Context, ip string) (Result, error)
 }
 
 func NewICMPSweeper(concurrency int) *ICMPSweeper {
@@ -124,6 +130,11 @@ func (s *ICMPSweeper) Sweep(ctx context.Context, cidr string) ([]Result, error) 
 		concurrency = 1
 	}
 
+	probe := s.probe
+	if probe == nil {
+		probe = s.ping
+	}
+
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for w := 0; w < concurrency; w++ {
@@ -138,7 +149,9 @@ func (s *ICMPSweeper) Sweep(ctx context.Context, cidr string) ([]Result, error) 
 					if !ok {
 						return
 					}
-					results[i] = s.ping(ctx, ips[i])
+					r, err := probe(ctx, ips[i])
+					r.IP, r.Err = ips[i], err
+					results[i] = r
 				}
 			}
 		}()
@@ -154,23 +167,56 @@ feed:
 	}
 	close(jobs)
 	wg.Wait()
-	return results, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return results, err
+	}
+	return results, probeFailure(results)
 }
 
-func (s *ICMPSweeper) ping(ctx context.Context, ip string) Result {
+// probeFailure turns widespread probe errors into a sweep error. When most
+// probes cannot even be sent the cause is systemic — no permission for ICMP
+// sockets, no route to the subnet — and a sweep reporting every host down
+// would take the whole subnet offline without a scan error to explain it.
+// A minority of errors is left to the individual results.
+func probeFailure(results []Result) error {
+	var failed int
+	var first error
+	for _, r := range results {
+		if r.Err != nil {
+			if first == nil {
+				first = r.Err
+			}
+			failed++
+		}
+	}
+	if failed*2 <= len(results) {
+		return nil
+	}
+	return fmt.Errorf("%d of %d probes failed: %w", failed, len(results), first)
+}
+
+// ping probes ip once. An unanswered probe is a down host, not an error; the
+// error is reserved for a probe that could not be run. A host the kernel
+// already knows to be unreachable (a failed neighbour lookup) is down too:
+// on a sparse LAN that is most of the subnet, and it must not read as a
+// broken sweep.
+func (s *ICMPSweeper) ping(ctx context.Context, ip string) (Result, error) {
 	p, err := probing.NewPinger(ip)
 	if err != nil {
-		return Result{IP: ip}
+		return Result{IP: ip}, err
 	}
 	p.Count = 1
 	p.Timeout = s.Timeout
 	p.SetPrivileged(os.Getenv("NETIS_PRIVILEGED_ICMP") == "1")
 	if err := p.RunWithContext(ctx); err != nil {
-		return Result{IP: ip}
+		if ctx.Err() != nil || errors.Is(err, syscall.EHOSTUNREACH) {
+			return Result{IP: ip}, nil
+		}
+		return Result{IP: ip}, err
 	}
 	stats := p.Statistics()
 	if stats.PacketsRecv == 0 {
-		return Result{IP: ip}
+		return Result{IP: ip}, nil
 	}
-	return Result{IP: ip, Alive: true, RTTms: float64(stats.AvgRtt.Microseconds()) / 1000}
+	return Result{IP: ip, Alive: true, RTTms: float64(stats.AvgRtt.Microseconds()) / 1000}, nil
 }
