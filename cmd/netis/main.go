@@ -29,6 +29,9 @@ import (
 // stall that integration's loop or hold its lock forever.
 const integrationRunTimeout = 30 * time.Second
 
+// piholeLogoutTimeout bounds the best-effort logout after each pihole run.
+const piholeLogoutTimeout = 5 * time.Second
+
 // integrationFunc runs one integration from the current settings and returns
 // the item count and detail line for its status row.
 type integrationFunc func(context.Context) (int, string, error)
@@ -143,6 +146,7 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) *integrationRunn
 			}
 			client := proxmox.NewClient(s["proxmox_url"], s["proxmox_token_id"],
 				s["proxmox_secret"], s["proxmox_insecure"] == "1")
+			defer client.Close()
 			stats, err := proxmox.NewSync(st, client, evs).RunOnce(ctx)
 			if err != nil {
 				return 0, "", err
@@ -159,6 +163,15 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) *integrationRunn
 				return 0, "", errNotConfigured
 			}
 			client := pihole.NewClient(s["pihole_url"], s["pihole_password"], s["pihole_insecure"] == "1")
+			// End the Pi-hole session even when the sync failed or ran out of
+			// time, on a fresh short deadline; a failed logout is not the run's error.
+			defer func() {
+				lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), piholeLogoutTimeout)
+				defer cancel()
+				if err := client.Close(lctx); err != nil {
+					slog.Warn("pihole logout failed", "err", err)
+				}
+			}()
 			stats, err := pihole.NewSync(st, client, evs).RunOnce(ctx)
 			if err != nil {
 				return 0, "", err

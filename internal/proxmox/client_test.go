@@ -2,9 +2,12 @@ package proxmox
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const resourcesJSON = `{"data":[
@@ -58,5 +61,37 @@ func TestGuestMACs(t *testing.T) {
 	macs, err = c.GuestMACs(context.Background(), "pve1", 101, "lxc")
 	if err != nil || len(macs) != 1 || macs[0] != "bc:24:11:aa:00:02" {
 		t.Fatalf("lxc macs=%v err=%v", macs, err)
+	}
+}
+
+// Close drops the client's keep-alive connections, so the fresh client each
+// run builds does not leave an idle connection behind every minute.
+func TestCloseClosesConnections(t *testing.T) {
+	var open atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(resourcesJSON))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		switch s {
+		case http.StateNew:
+			open.Add(1)
+		case http.StateClosed, http.StateHijacked:
+			open.Add(-1)
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "root@pam!netis", "s3cret", false)
+	if _, err := c.ListGuests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	deadline := time.Now().Add(2 * time.Second)
+	for open.Load() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections still open after Close", open.Load())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

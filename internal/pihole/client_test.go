@@ -2,10 +2,12 @@ package pihole
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const (
@@ -124,5 +126,71 @@ func TestReauthOn401(t *testing.T) {
 	}
 	if hits != 2 {
 		t.Fatalf("expected re-auth (2 auth calls), got %d", hits)
+	}
+}
+
+// Close ends the Pi-hole session with DELETE /api/auth (so runs don't pile up
+// sessions against webserver.api.max_sessions) and drops the keep-alive
+// connection, so a discarded client leaves nothing open on either side.
+func TestCloseLogsOutAndClosesConnections(t *testing.T) {
+	var logouts atomic.Int32
+	var open atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/auth", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"session":{"sid":"SID123","valid":true}}`))
+	})
+	mux.HandleFunc("DELETE /api/auth", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-FTL-SID") != "SID123" {
+			w.WriteHeader(401)
+			return
+		}
+		logouts.Add(1)
+		w.WriteHeader(410)
+	})
+	mux.HandleFunc("/api/dhcp/leases", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(leasesJSON))
+	})
+	srv := httptest.NewUnstartedServer(mux)
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		switch s {
+		case http.StateNew:
+			open.Add(1)
+		case http.StateClosed, http.StateHijacked:
+			open.Add(-1)
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "pw", false)
+	// Close before any login has nothing to end.
+	if err := c.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := logouts.Load(); n != 0 {
+		t.Fatalf("logouts before login = %d, want 0", n)
+	}
+	if _, err := c.Leases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := logouts.Load(); n != 1 {
+		t.Fatalf("logouts = %d, want 1", n)
+	}
+	// A second Close must not log out again with the ended SID.
+	if err := c.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := logouts.Load(); n != 1 {
+		t.Fatalf("logouts after second Close = %d, want 1", n)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for open.Load() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections still open after Close", open.Load())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

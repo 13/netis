@@ -37,6 +37,12 @@ func NewClient(baseURL, tokenID, secret string, insecure bool) *Client {
 	}
 }
 
+// Close closes the client's idle keep-alive connections. Callers that build a
+// client per run call it when done so connections don't accumulate.
+func (c *Client) Close() {
+	c.client.CloseIdleConnections()
+}
+
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", c.base+path, nil)
 	if err != nil {
