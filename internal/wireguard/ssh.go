@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"time"
 
@@ -68,16 +69,56 @@ func hostKeyCallback(addr, knownHostsPath string) (ssh.HostKeyCallback, error) {
 	return cb, nil
 }
 
+// handshakeTimeout bounds the SSH handshake and authentication when the
+// caller's context sets no earlier deadline. The client config's Timeout only
+// covers the TCP connect, so without this a host that accepts the connection
+// and then says nothing would hold Run forever.
+const handshakeTimeout = 30 * time.Second
+
 type sshResult struct {
 	out []byte
 	err error
 }
 
+// Run connects, runs cmd and returns its standard output. Every stage honours
+// ctx: the connect, the handshake, and the command itself, which is abandoned
+// by closing the connection when ctx ends.
 func (r *SSHRunner) Run(ctx context.Context, cmd string) ([]byte, error) {
-	client, err := ssh.Dial("tcp", r.addr, r.config)
+	d := net.Dialer{Timeout: r.config.Timeout}
+	conn, err := d.DialContext(ctx, "tcp", r.addr)
 	if err != nil {
 		return nil, err
 	}
+	// Closing the connection is what unblocks a handshake or a command stuck
+	// waiting on the far end, so that is what cancellation does.
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+
+	deadline := time.Now().Add(handshakeTimeout)
+	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+		deadline = dl
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, r.addr, r.config)
+	if err != nil {
+		conn.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, err
+	}
+	// Past the handshake the command runs under ctx alone: its deadline if it
+	// has one (the zero time when it has none clears the handshake deadline),
+	// cancellation through the AfterFunc above either way.
+	dl, _ := ctx.Deadline()
+	if err := conn.SetDeadline(dl); err != nil {
+		c.Close()
+		return nil, err
+	}
+	client := ssh.NewClient(c, chans, reqs)
 	defer client.Close()
 	sess, err := client.NewSession()
 	if err != nil {

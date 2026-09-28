@@ -75,7 +75,7 @@ func (s *Server) handleWelcomeIntegrationsPage(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleWelcomeIntegrations(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {
-		s.fail(w, r, err)
+		s.failSave(w, r, err)
 		return
 	}
 	s.finishOnboarding(w, r)
