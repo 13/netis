@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -12,12 +13,13 @@ import (
 
 type fakeSweeper struct {
 	results []Result
+	err     error
 	calls   int
 }
 
 func (f *fakeSweeper) Sweep(ctx context.Context, cidr string) ([]Result, error) {
 	f.calls++
-	return f.results, nil
+	return f.results, f.err
 }
 
 func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
@@ -279,5 +281,152 @@ func TestOfflineAfterIgnoresUnusableSetting(t *testing.T) {
 		if got := e.offlineAfter(t.Context()); got != defaultOfflineAfter {
 			t.Errorf("offline_after=%q: got %d want %d", v, got, defaultOfflineAfter)
 		}
+	}
+}
+
+// TestKnownIPWithDifferentMACIsNewDevice covers DHCP handing a known device's
+// address to a different machine. The ARP MAC no longer matches, so the IP
+// must not vouch for the old device: the newcomer is discovered and the old
+// device takes a miss instead of being marked online.
+func TestKnownIPWithDifferentMACIsNewDevice(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	old, _, _ := st.FindIfaceByMAC(t.Context(), "bc:24:11:00:00:01")
+
+	e.ARP = func() (map[string]string, error) {
+		return map[string]string{"10.0.0.9": "aa:bb:cc:00:00:02"}, nil
+	}
+	if err := st.SetSetting(t.Context(), "offline_after", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok, _ := st.FindIfaceByMAC(t.Context(), "aa:bb:cc:00:00:02"); !ok {
+		t.Fatal("the new MAC at the reused IP was not discovered")
+	}
+	if online, _, _ := st.IfaceOnline(t.Context(), old.ID); online {
+		t.Fatal("the old device must miss the sweep, not be marked online by its former IP")
+	}
+}
+
+// TestSwappedIPsFollowMACs covers two known devices trading addresses: each
+// must be matched by MAC and moved, not credited to the other.
+func TestSwappedIPsFollowMACs(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	e.ARP = func() (map[string]string, error) {
+		return map[string]string{"10.0.0.9": "aa:00:00:00:00:01", "10.0.0.10": "aa:00:00:00:00:02"}, nil
+	}
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true}, {IP: "10.0.0.10", Alive: true}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	e.ARP = func() (map[string]string, error) {
+		return map[string]string{"10.0.0.9": "aa:00:00:00:00:02", "10.0.0.10": "aa:00:00:00:00:01"}, nil
+	}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, _ := st.ListDevices(t.Context())
+	if len(rows) != 2 {
+		t.Fatalf("swap must not create devices: %+v", rows)
+	}
+	known, _ := st.ListSubnetIfaceIPs(t.Context(), snID)
+	want := map[string]string{"10.0.0.9": "aa:00:00:00:00:02", "10.0.0.10": "aa:00:00:00:00:01"}
+	if len(known) != 2 {
+		t.Fatalf("occupancy=%+v", known)
+	}
+	for _, k := range known {
+		if k.MAC == nil || *k.MAC != want[k.IP] {
+			t.Fatalf("%s held by %v, want %s", k.IP, k.MAC, want[k.IP])
+		}
+	}
+	evs, _ := st.ListEvents(t.Context(), 10)
+	changed := 0
+	for _, ev := range evs {
+		if ev.Type == "ip_changed" {
+			changed++
+		}
+	}
+	if changed != 2 {
+		t.Fatalf("want 2 ip_changed events, got %d: %+v", changed, evs)
+	}
+}
+
+// TestKnownIPWithoutARPStaysMatched keeps routed subnets working: with no ARP
+// entry there is nothing to contradict the IP, so it still identifies the
+// device.
+func TestKnownIPWithoutARPStaysMatched(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	e.ARP = func() (map[string]string, error) { return map[string]string{}, nil }
+	if err := st.SetSetting(t.Context(), "offline_after", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := st.ListDevices(t.Context())
+	if len(rows) != 1 || !rows[0].Online {
+		t.Fatalf("devices=%+v", rows)
+	}
+}
+
+// TestProbeErrorIsNotAMiss keeps a host whose probe could not be sent from
+// being counted as down: its state is unknown, not offline.
+func TestProbeErrorIsNotAMiss(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting(t.Context(), "offline_after", "1"); err != nil {
+		t.Fatal(err)
+	}
+	fs.results = []Result{{IP: "10.0.0.9", Err: errors.New("sendto: no buffer space")}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := st.ListDevices(t.Context())
+	if !rows[0].Online {
+		t.Fatal("a probe error must not count as a miss")
+	}
+}
+
+// TestSweepErrorAppliesNoMisses checks a failed sweep is reported as a scan
+// error and leaves device state alone.
+func TestSweepErrorAppliesNoMisses(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1.0}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting(t.Context(), "offline_after", "1"); err != nil {
+		t.Fatal(err)
+	}
+	fs.results, fs.err = nil, errors.New("254 of 254 probes failed")
+	if err := e.RunSubnet(context.Background(), sn); err == nil {
+		t.Fatal("want sweep error")
+	}
+	rows, _ := st.ListDevices(t.Context())
+	if !rows[0].Online {
+		t.Fatal("a failed sweep must not mark devices missed")
+	}
+	evs, _ := st.ListEvents(t.Context(), 1)
+	if len(evs) != 1 || evs[0].Type != "scan_error" {
+		t.Fatalf("events=%+v", evs)
 	}
 }

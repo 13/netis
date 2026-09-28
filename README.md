@@ -101,6 +101,11 @@ To allow the unprivileged Go binary to send raw ICMP echo requests instead
 of the UDP-ICMP fallback, add `--cap-add=NET_RAW` and set
 `NETIS_PRIVILEGED_ICMP=1`.
 
+If most probes in a sweep cannot be sent at all (for example the process
+lacks permission to open ICMP sockets), the sweep is reported as a scan
+error on the dashboard and in Events, and device states are left as they
+were rather than counted as misses.
+
 ## Proxmox LXC install
 
 1. Build the static binary as above (or download a prebuilt one) and copy

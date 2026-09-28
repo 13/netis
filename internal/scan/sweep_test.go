@@ -2,6 +2,8 @@ package scan
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,6 +68,40 @@ func TestSweepBoundedWorkers(t *testing.T) {
 	for i, want := range hostIPs {
 		if results[i].IP != want {
 			t.Fatalf("result[%d].IP = %q, want %q", i, results[i].IP, want)
+		}
+	}
+}
+
+// TestSweepFailsWhenProbesCannotRun covers ICMP being unavailable (no raw
+// socket permission, say): every probe errors, and reporting that as a clean
+// sweep with every host down would walk the whole fleet offline.
+func TestSweepFailsWhenProbesCannotRun(t *testing.T) {
+	s := NewICMPSweeper(2)
+	s.probe = func(ctx context.Context, ip string) (Result, error) {
+		return Result{IP: ip}, errors.New("socket: permission denied")
+	}
+	if _, err := s.Sweep(t.Context(), "192.168.1.0/29"); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("want the probe error, got %v", err)
+	}
+}
+
+// TestSweepMarksIndividualProbeErrors keeps a few failed probes from failing
+// the sweep, but flags them so the engine does not count them as misses.
+func TestSweepMarksIndividualProbeErrors(t *testing.T) {
+	s := NewICMPSweeper(2)
+	s.probe = func(ctx context.Context, ip string) (Result, error) {
+		if ip == "192.168.1.3" {
+			return Result{IP: ip}, errors.New("boom")
+		}
+		return Result{IP: ip, Alive: true}, nil
+	}
+	results, err := s.Sweep(t.Context(), "192.168.1.0/29")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if (r.IP == "192.168.1.3") != (r.Err != nil) {
+			t.Fatalf("result %+v", r)
 		}
 	}
 }

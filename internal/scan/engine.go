@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"netis/internal/events"
@@ -79,18 +80,27 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	}
 
 	aliveIPs := make(map[string]bool)
-	seen := make(map[int64]bool) // ifaceID -> seen this sweep, on any IP
+	seen := make(map[int64]bool)        // ifaceID -> seen this sweep, on any IP
+	unknownIPs := make(map[string]bool) // probe could not run: neither seen nor missed
 	for _, r := range results {
+		if r.Err != nil {
+			unknownIPs[r.IP] = true
+			continue
+		}
 		if !r.Alive {
 			continue
 		}
 		aliveIPs[r.IP] = true
-		if k, ok := knownByIP[r.IP]; ok {
+		mac := arp[r.IP]
+		// A known IP identifies its device unless ARP says a different machine
+		// answered: DHCP reuses addresses, and crediting the old device would
+		// keep it online while the newcomer (or a swapped peer) went unseen.
+		// Without an ARP entry, as on a routed subnet, the IP is all there is.
+		if k, ok := knownByIP[r.IP]; ok && !macConflict(k.MAC, mac) {
 			e.markSeen(ctx, k.IfaceID, k.DeviceID, r.RTTms, now, bucket)
 			seen[k.IfaceID] = true
 			continue
 		}
-		mac := arp[r.IP]
 		if mac != "" {
 			if iface, ok, _ := e.Store.FindIfaceByMAC(ctx, mac); ok {
 				// known device moved to a new IP
@@ -109,7 +119,9 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	}
 
 	for _, k := range known {
-		if aliveIPs[k.IP] || seen[k.IfaceID] {
+		// An alive IP only covers the ifaces there that ARP did not rule out;
+		// one displaced by a different MAC misses this sweep like any other.
+		if seen[k.IfaceID] || unknownIPs[k.IP] || (aliveIPs[k.IP] && !macConflict(k.MAC, arp[k.IP])) {
 			continue
 		}
 		went, err := e.Store.MarkMissed(ctx, k.IfaceID, offlineAfter)
@@ -125,6 +137,13 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 
 	e.Broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
 	return nil
+}
+
+// macConflict reports whether ARP names a different MAC than the one an iface
+// is known by. Either side missing is not a conflict: there is nothing to
+// compare.
+func macConflict(known *string, arpMAC string) bool {
+	return known != nil && *known != "" && arpMAC != "" && !strings.EqualFold(*known, arpMAC)
 }
 
 func (e *Engine) markSeen(ctx context.Context, ifaceID, deviceID int64, rtt float64, now time.Time, bucket string) {
