@@ -247,7 +247,7 @@ var dummyHash = sync.OnceValue(func() []byte {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/login" || r.URL.Path == "/setup" ||
-			strings.HasPrefix(r.URL.Path, "/static/") {
+			strings.HasPrefix(r.URL.Path, "/static/") || oidcPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -347,7 +347,7 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, views.LoginPage(""))
+	s.render(w, r, views.LoginPage("", s.loginOptions(r)))
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -389,32 +389,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err == nil && ok {
 		note.UserID, note.Username = &u.ID, u.Username
 	}
+	// With SSO as the primary way in, a right password still only admits a
+	// local admin; everyone else is answered as if it were wrong.
+	refused := err == nil && ok && match && !s.passwordLoginAllowed(r.Context(), u)
+	if refused {
+		match = false
+	}
 	if err == nil && ok && match {
 		failed = false
-		token, terr := newToken()
-		if terr != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		expires := time.Now().UTC().Add(30 * 24 * time.Hour)
-		// Where the session came from, so its owner can tell their own sessions
-		// apart in Settings > Users and revoke one they don't recognise. The
-		// user agent is capped: it is attacker-supplied and goes in a page.
-		meta := store.SessionMeta{
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
-			IP:        s.clientIP(r),
-			UserAgent: truncate(r.UserAgent(), maxUserAgentLen),
-		}
-		if serr := s.store.CreateSession(r.Context(), token, u.ID, expires.Format(time.RFC3339), meta); serr != nil {
+		if serr := s.startSession(w, r, u.ID); serr != nil {
 			slog.Error("create session", "err", serr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{
-			Name: "netis_session", Value: token, Path: "/",
-			HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires,
-			Secure: s.secureRequest(r),
-		})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -423,11 +410,42 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		note.Detail = "lookup failed"
 	case !ok:
 		note.Detail = "unknown user"
+	case refused:
+		note.Detail = "password login disabled"
 	default:
 		note.Detail = "wrong password"
 	}
 	w.WriteHeader(http.StatusUnauthorized)
-	s.render(w, r, views.LoginPage("wrong username or password"))
+	s.render(w, r, views.LoginPage("wrong username or password", s.loginOptions(r)))
+}
+
+// startSession signs userID in on this browser: a new session row holding the
+// token's digest, and the cookie holding the token. Password and SSO logins
+// both come through here, so the two cannot drift apart on expiry, metadata or
+// cookie attributes.
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64) error {
+	token, err := newToken()
+	if err != nil {
+		return err
+	}
+	expires := time.Now().UTC().Add(30 * 24 * time.Hour)
+	// Where the session came from, so its owner can tell their own sessions
+	// apart in Settings > Users and revoke one they don't recognise. The
+	// user agent is capped: it is attacker-supplied and goes in a page.
+	meta := store.SessionMeta{
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		IP:        s.clientIP(r),
+		UserAgent: truncate(r.UserAgent(), maxUserAgentLen),
+	}
+	if err := s.store.CreateSession(r.Context(), token, userID, expires.Format(time.RFC3339), meta); err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: "netis_session", Value: token, Path: "/",
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires,
+		Secure: s.secureRequest(r),
+	})
+	return nil
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

@@ -55,6 +55,7 @@ var auditActions = map[string]string{
 	"POST /settings/general":                 "settings.save",
 	"POST /settings/tokens":                  "token.create",
 	"POST /settings/tokens/{id}/delete":      "token.revoke",
+	"POST /settings/sso/link":                "sso.link_start",
 	"POST /devices/import":                   "device.import",
 	"POST /api/devices":                      "api.device.create",
 	"PATCH /api/devices/{id}":                "api.device.update",

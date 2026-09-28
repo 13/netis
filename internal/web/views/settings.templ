@@ -40,6 +40,15 @@ type SettingsData struct {
 	// shown this once.
 	Tokens   []store.APIToken
 	NewToken string
+	// SSO is the signed-in user's single sign-on state, on the users tab.
+	SSO SSOAccount
+}
+
+// SSOAccount says whether SSO is configured and whether the signed-in user's
+// account is linked to an identity at the provider.
+type SSOAccount struct {
+	Enabled bool
+	Linked  bool
 }
 
 // AboutData is what the About tab reports: the build the binary came from plus
@@ -387,6 +396,19 @@ templ myAccount(d SettingsData) {
 			<button type="submit" class="ghost">Sign out other sessions</button>
 		</form>
 	</div>
+	if d.SSO.Enabled {
+		<div class="setting-card">
+			<div class="sc-head"><h3>Single sign-on</h3></div>
+			if d.SSO.Linked {
+				<p class="muted" style="margin:0 0 6px">This account is linked to an SSO account. Linking again replaces the link.</p>
+			} else {
+				<p class="muted" style="margin:0 0 6px">Link this account to your SSO account to sign in with it.</p>
+			}
+			<form method="post" action="/settings/sso/link" class="inline">
+				<button type="submit" class="ghost">Link SSO account</button>
+			</form>
+		</div>
+	}
 	<div class="setting-card">
 		<div class="sc-head"><h3>Change my password</h3></div>
 		<form method="post" action="/settings/password">

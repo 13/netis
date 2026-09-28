@@ -245,6 +245,7 @@ Environment variables:
 | `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
 | `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
 | `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
+| `NETIS_OIDC_ISSUER`, `NETIS_OIDC_*` | unset | Single sign-on through an OpenID Connect provider. See [Single sign-on (OIDC)](#single-sign-on-oidc). |
 | `NETIS_METRICS_TOKEN` | unset | Bearer token a Prometheus scraper presents to read `/metrics`. Unset means `/metrics` needs a logged-in session. See [JSON API and metrics](#json-api-and-metrics). |
 | `NETIS_SECRET_KEY` | unset | 32-byte key (base64 or hex) that encrypts stored integration credentials. See [Encrypting stored credentials](#encrypting-stored-credentials). |
 | `NETIS_TRUSTED_PROXIES` | unset | Comma-separated CIDRs or addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers netis believes. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
@@ -494,6 +495,98 @@ Session tokens need no key: the database only ever holds their SHA-256
 digest, so a copy of it cannot be used to sign in as anyone. Sessions from
 before netis stored them that way are dropped on upgrade, and everyone signs in
 once more.
+
+## Single sign-on (OIDC)
+
+netis can take logins from an OpenID Connect provider — Authelia, Authentik,
+Keycloak, Pocket ID and the like — next to (or instead of) its own passwords.
+It uses the authorization code flow with PKCE and checks the ID token's
+signature, issuer, audience, expiry and nonce.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `NETIS_OIDC_ISSUER` | unset | Issuer URL, exactly as the provider's discovery document spells it (trailing slash included). Unset turns SSO off. |
+| `NETIS_OIDC_CLIENT_ID` | — | Client ID registered at the provider. Required. |
+| `NETIS_OIDC_CLIENT_SECRET` | empty | Client secret. Leave empty for a public client. |
+| `NETIS_OIDC_REDIRECT_URL` | derived | Callback URL, registered at the provider. |
+| `NETIS_BASE_URL` | unset | netis's public URL; when the redirect URL is unset it is this plus `/auth/oidc/callback`. One of the two is required. |
+| `NETIS_OIDC_ADMIN_GROUP` | unset | Members of this group are admins, everyone else a viewer — set on every login, so leaving the group demotes at the next sign-in. Unset means SSO leaves roles alone: new users start as viewers and an admin promotes them in Settings. |
+| `NETIS_OIDC_GROUPS_CLAIM` | `groups` | ID-token claim holding the user's groups. |
+| `NETIS_OIDC_AUTO_CREATE` | `true` | Create a netis user the first time an unknown SSO identity signs in. `false` refuses them; existing accounts must be linked first (below). |
+| `NETIS_OIDC_DISABLE_PASSWORD` | `false` | Hide the password form. Password login then works only for local admins (see break-glass). |
+
+An issuer without a client ID or a redirect URL stops netis at startup. The
+provider does not have to be up when netis starts: discovery happens on the
+first SSO login and is retried until it works.
+
+The login page gets a **Sign in with SSO** button. An SSO user is matched by
+the provider's issuer and subject (`sub`) — never by username. The first
+login of an unknown identity creates a user named after its
+`preferred_username` (or email). If a local account already has that name the
+login is refused rather than attached to it: many providers let users choose
+their own username, and matching on it would let someone call themselves
+`admin` and take over that account. To use SSO with an existing account, sign
+in with its password and press **Link SSO account** in Settings → Users.
+
+SSO-created users have no usable password; an admin can give them one with the
+usual reset. SSO is only offered once the first admin exists: that account is
+created at setup with a password and is the way back in if the provider is
+down.
+
+**Break-glass.** With `NETIS_OIDC_DISABLE_PASSWORD=true` the login page shows
+only the SSO button and a small "Sign in with a local account" link
+(`/login?local=1`). Password login is refused for everyone except admins that
+are not linked to SSO — keep one such account (the setup admin) with a strong
+password, for when the provider is unreachable.
+
+Failed callbacks count against the same per-address limit as wrong passwords.
+
+### Authelia
+
+```yaml
+# configuration.yml
+identity_providers:
+  oidc:
+    clients:
+      - client_id: netis
+        client_name: netis
+        client_secret: '$pbkdf2-sha512$...'   # authelia crypto hash generate pbkdf2
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        redirect_uris:
+          - https://netis.example.com/auth/oidc/callback
+        scopes: [openid, profile, email, groups]
+        token_endpoint_auth_method: client_secret_basic
+```
+
+```sh
+NETIS_OIDC_ISSUER=https://auth.example.com
+NETIS_OIDC_CLIENT_ID=netis
+NETIS_OIDC_CLIENT_SECRET=the-plaintext-secret
+NETIS_BASE_URL=https://netis.example.com
+NETIS_OIDC_ADMIN_GROUP=admins
+```
+
+### Authentik
+
+Create an **OAuth2/OpenID Provider** (client type *Confidential*, redirect URI
+`https://netis.example.com/auth/oidc/callback`, strict) and an application
+using it with slug `netis`. Authentik's default `profile` scope already carries
+a `groups` claim.
+
+```sh
+NETIS_OIDC_ISSUER=https://authentik.example.com/application/o/netis/
+NETIS_OIDC_CLIENT_ID=<client id from the provider>
+NETIS_OIDC_CLIENT_SECRET=<client secret from the provider>
+NETIS_BASE_URL=https://netis.example.com
+NETIS_OIDC_ADMIN_GROUP=netis-admins
+```
+
+Keycloak (`https://kc.example.com/realms/<realm>`, add a *Group Membership*
+mapper named `groups` with "Full group path" off) and Pocket ID (issuer is its
+base URL; public clients work with the secret left empty) are configured the
+same way.
 
 ## Behind a reverse proxy
 
