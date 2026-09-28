@@ -322,7 +322,7 @@ func TestDeleteDeviceRequiresAdmin(t *testing.T) {
 func TestDeviceNewDialogFragment(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
-	body := authedGet(t, srv, st, "/devices/new").Body.String()
+	body := htmxRequest(t, srv, st, "GET", "/devices/new", nil).Body.String()
 	for _, want := range []string{`class="dialog"`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("new dialog fragment missing %q", want)
@@ -552,7 +552,7 @@ func TestEditServesDrawer(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
-	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)+"/edit").Body.String()
+	body := htmxRequest(t, srv, st, "GET", "/devices/"+strconv.FormatInt(devID, 10)+"/edit", nil).Body.String()
 	if !strings.Contains(body, "drawer") {
 		t.Fatalf("edit form is not a drawer: %q", body)
 	}
@@ -564,8 +564,8 @@ func TestEditServesDrawer(t *testing.T) {
 func TestNewStaysDialog(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
-	body := authedGet(t, srv, st, "/devices/new").Body.String()
-	if !strings.Contains(body, "dialog-scrim") {
+	body := htmxRequest(t, srv, st, "GET", "/devices/new", nil).Body.String()
+	if !strings.Contains(body, "<dialog") {
 		t.Fatalf("new form lost dialog shell: %q", body)
 	}
 	if strings.Contains(body, "drawer") {

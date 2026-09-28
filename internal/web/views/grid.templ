@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"strings"
 
 	"netis/internal/store"
 )
@@ -12,6 +13,32 @@ type GridCell struct {
 	DeviceID int64
 	Title    string
 	Kind     string
+}
+
+// cellStates names each grid state in words, for screen readers and anyone
+// who cannot tell the colours apart.
+var cellStates = map[string]string{
+	"online": "online", "offline": "offline", "reserved": "reserved",
+	"conflict": "IP conflict", "free": "free",
+}
+
+// cellLabel is a cell's accessible name: its address, its state and, when a
+// device holds it, the lease kind and the device, e.g.
+// "10.0.0.1 online, static, gw aa:bb:… last seen …". Network and broadcast
+// cells say which they are.
+func cellLabel(c GridCell) string {
+	detail := strings.TrimPrefix(strings.TrimPrefix(c.Title, c.IP), " — ")
+	if c.State == "edge" {
+		return c.IP + " " + detail
+	}
+	parts := []string{c.IP + " " + cellStates[c.State]}
+	if c.Kind != "" {
+		parts = append(parts, c.Kind)
+	}
+	if detail != "" {
+		parts = append(parts, detail)
+	}
+	return strings.Join(parts, ", ")
 }
 
 templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow, sortKey, dir string) {
@@ -27,15 +54,15 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		>
 			@GridFrag(sn, cells)
 		</div>
-		<p class="muted">
-			<span class="sq online"></span> online
-			<span class="sq offline"></span> offline
-			<span class="sq reserved"></span> reserved
-			<span class="sq"></span> free
-			<span class="sq conflict"></span> conflict
-			<span class="sq edge"></span> network/broadcast
-			· border: <span class="sq static"></span> static
-			<span class="sq dhcp"></span> dhcp
+		<p class="muted legend-sq">
+			<span class="sq online" aria-hidden="true"></span> online
+			<span class="sq offline" aria-hidden="true"></span> offline
+			<span class="sq reserved" aria-hidden="true"></span> reserved
+			<span class="sq" aria-hidden="true"></span> free
+			<span class="sq conflict" aria-hidden="true"></span> conflict
+			<span class="sq edge" aria-hidden="true"></span> network/broadcast
+			· border: <span class="sq static" aria-hidden="true"></span> static
+			<span class="sq dhcp" aria-hidden="true"></span> dhcp
 		</p>
 		<p class="muted">
 			The grid shows every IP assigned in this subnet. Devices without an IP here (or on other subnets) aren't listed — see the full <a href="/devices">Devices</a> page.
@@ -43,13 +70,15 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		<h2>
 			{ "Devices in this subnet (" + fmt.Sprint(len(devices)) + ")" }
 			if IsAdmin(ctx) {
-				<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</button>
+				<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d", sn.ID)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</a>
 			}
 		</h2>
 		if len(devices) == 0 {
 			<p class="muted">No devices with an IP in this subnet yet.</p>
 		} else {
-			@deviceTable(devices, "", sortKey, dir, fmt.Sprintf("/subnets/%d", sn.ID), false)
+			<div class="table-wrap">
+				@deviceTable(devices, "", sortKey, dir, fmt.Sprintf("/subnets/%d", sn.ID), false)
+			</div>
 		}
 	}
 }
@@ -64,6 +93,7 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 					hx-get={ fmt.Sprintf("/subnets/%d/cell?ip=%s", sn.ID, c.IP) }
 					hx-target="#modal"
 					title={ c.Title }
+					aria-label={ cellLabel(c) }
 				></button>
 			} else if c.State == "free" && IsAdmin(ctx) {
 				<button
@@ -72,9 +102,10 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 					hx-get={ fmt.Sprintf("/devices/new?subnet=%d&ip=%s", sn.ID, c.IP) }
 					hx-target="#modal"
 					title={ c.Title + " — click to add a device" }
+					aria-label={ cellLabel(c) + ", add a device" }
 				></button>
 			} else {
-				<span class={ "sq", c.State } title={ c.Title }></span>
+				<span class={ "sq", c.State } title={ c.Title } role="img" aria-label={ cellLabel(c) }></span>
 			}
 		}
 	</div>
@@ -85,37 +116,35 @@ templ ScanToast(msg string) {
 }
 
 templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
-	<div class="dialog-scrim">
-		<div class="dialog">
-			<div class="dh">
-				<h3>{ ip }</h3>
-				<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
-			</div>
-			<div class="db">
-				if o.DeviceID > 0 {
-					<p>
-						<a href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>{ o.DeviceName }</a>
-						if o.MAC != "" {
-							{ " " }<span class="mono muted">{ o.MAC }</span>
-						}
-					</p>
-					<p class="muted">Last seen: { o.LastSeen } · Lease: { o.Kind }</p>
-				} else {
-					<p class="muted">Free — no assignment.</p>
-				}
-			</div>
+	<dialog class="dialog" aria-labelledby="dlg-title">
+		<div class="dh">
+			<h3 id="dlg-title">{ ip }</h3>
+			<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
+		</div>
+		<div class="db">
 			if o.DeviceID > 0 {
-				<div class="df">
-					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
-					if IsAdmin(ctx) {
-						<button type="button" hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</button>
-						@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
-						@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
+				<p>
+					<a href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>{ o.DeviceName }</a>
+					if o.MAC != "" {
+						{ " " }<span class="mono muted">{ o.MAC }</span>
 					}
-				</div>
+				</p>
+				<p class="muted">Last seen: { o.LastSeen } · Lease: { o.Kind }</p>
+			} else {
+				<p class="muted">Free — no assignment.</p>
 			}
 		</div>
-	</div>
+		if o.DeviceID > 0 {
+			<div class="df">
+				<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
+				if IsAdmin(ctx) {
+					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", o.DeviceID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</a>
+					@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
+					@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
+				}
+			</div>
+		}
+	</dialog>
 }
 
 templ kindButton(subnetID int64, ip, kind, label, current string) {
@@ -129,7 +158,7 @@ templ kindButton(subnetID int64, ip, kind, label, current string) {
 			hx-vals={ fmt.Sprintf(`{"ip":%q,"kind":%q}`, ip, kind) }
 			hx-target="#toasts"
 			hx-swap="beforeend"
-			hx-on::after-request="document.getElementById('modal').innerHTML=''"
+			hx-on::after-request="this.closest('dialog').close()"
 		>{ label }</button>
 	}
 }

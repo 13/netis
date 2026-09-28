@@ -54,8 +54,10 @@ for the background scan loop (every 120s by default).
 - **Dashboard** — per-subnet online/total counts, recent events, quick
   search.
 - **Subnet grid** — one square per IP in a subnet: green for online, dark
-  for used-but-offline, yellow for reserved, empty for free, red for an
-  IP claimed by two devices. Squares update live over SSE during a scan.
+  for used-but-offline, yellow (marked R) for reserved, empty for free, red
+  (marked !) for an IP claimed by two devices. Each square also names its
+  address and state for screen readers. Squares update live over SSE during
+  a scan.
 - **Device list** — filterable/searchable table of every known device.
 - **Device page** — full device detail: interfaces, IPs, open ports,
   uptime, links, tags, custom fields, parent/child devices (e.g. a
@@ -71,6 +73,12 @@ for the background scan loop (every 120s by default).
   button, and an **About**
   tab with the running version, build number, commit, database backend and
   dependency versions. Every page's footer shows the version and links there.
+
+The theme follows the operating system's light/dark preference, including
+when it changes, until you pick one with the theme button; that choice is then
+remembered in the browser. Deleting a device, subnet, user, link or custom
+field, and revoking sessions, asks for confirmation first. The device search
+and the New/Edit device forms also work with JavaScript turned off.
 
 Users are either `admin` or `viewer`. Viewers see the inventory, the subnets,
 events and each integration's status, and manage their own password and

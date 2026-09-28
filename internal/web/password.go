@@ -42,17 +42,18 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// so guesses are limited per account the same way logins are.
 	key := "change:" + strconv.FormatInt(u.ID, 10)
 	if !s.userLimiter.reserve(key) {
-		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
+		s.settingsError(w, r, "users", http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
 	wrong := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(r.FormValue("current_password"))) != nil
 	s.userLimiter.done(key, wrong)
 	if wrong {
-		http.Error(w, "current password is wrong", http.StatusForbidden)
+		s.settingsError(w, r, "users", http.StatusForbidden, "current password is wrong")
 		return
 	}
-	next, ok := s.validNewPassword(w, r)
-	if !ok {
+	next, msg := validNewPassword(r)
+	if msg != "" {
+		s.settingsError(w, r, "users", http.StatusBadRequest, msg)
 		return
 	}
 	if !s.setPassword(w, r, u.ID, next) {
@@ -76,8 +77,9 @@ func (s *Server) handleUserPasswordReset(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	next, ok := s.validNewPassword(w, r)
-	if !ok {
+	next, msg := validNewPassword(r)
+	if msg != "" {
+		s.settingsError(w, r, "users", http.StatusBadRequest, msg)
 		return
 	}
 	if !s.setPassword(w, r, id, next) {
@@ -86,24 +88,20 @@ func (s *Server) handleUserPasswordReset(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
 }
 
-// validNewPassword reads and checks the new-password fields, writing a 400 and
-// returning ok=false when they don't hold up.
-func (s *Server) validNewPassword(w http.ResponseWriter, r *http.Request) (string, bool) {
-	next := r.FormValue("new_password")
+// validNewPassword reads and checks the new-password fields, returning what
+// is wrong with them as msg when they don't hold up.
+func validNewPassword(r *http.Request) (next, msg string) {
+	next = r.FormValue("new_password")
 	if confirm := r.FormValue("confirm_password"); confirm != "" && confirm != next {
-		http.Error(w, "new passwords do not match", http.StatusBadRequest)
-		return "", false
+		return "", "new passwords do not match"
 	}
 	if len(next) < minPasswordLen {
-		http.Error(w, "password must be at least "+strconv.Itoa(minPasswordLen)+" characters",
-			http.StatusBadRequest)
-		return "", false
+		return "", "password must be at least " + strconv.Itoa(minPasswordLen) + " characters"
 	}
 	if len(next) > maxPasswordLen {
-		http.Error(w, passwordTooLongMsg, http.StatusBadRequest)
-		return "", false
+		return "", passwordTooLongMsg
 	}
-	return next, true
+	return next, ""
 }
 
 // setPassword hashes and stores a new password for userID and revokes that

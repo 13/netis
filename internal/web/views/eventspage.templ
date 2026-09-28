@@ -30,25 +30,27 @@ templ EventsPage(username string, evs []store.Event, typeFilter string) {
 			</label>
 			<noscript><button type="submit">Filter</button></noscript>
 		</form>
-		<table>
-			<tr>
-				<th>Time</th>
-				<th>Type</th>
-				<th>Device</th>
-				<th>Details</th>
-			</tr>
-			for _, e := range evs {
+		<div class="table-wrap">
+			<table>
 				<tr>
-					<td class="mono">{ e.TS }</td>
-					<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
-					<td>
-						if e.DeviceID != nil {
-							<a href={ templ.URL(fmt.Sprintf("/devices/%d", *e.DeviceID)) }>{ fmt.Sprint(*e.DeviceID) }</a>
-						}
-					</td>
-					<td>{ e.Details }</td>
+					<th>Time</th>
+					<th>Type</th>
+					<th>Device</th>
+					<th>Details</th>
 				</tr>
-			}
-		</table>
+				for _, e := range evs {
+					<tr>
+						<td class="mono">{ e.TS }</td>
+						<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+						<td>
+							if e.DeviceID != nil {
+								<a href={ templ.URL(fmt.Sprintf("/devices/%d", *e.DeviceID)) }>{ fmt.Sprint(*e.DeviceID) }</a>
+							}
+						</td>
+						<td>{ e.Details }</td>
+					</tr>
+				}
+			</table>
+		</div>
 	}
 }

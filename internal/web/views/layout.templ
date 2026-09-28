@@ -12,6 +12,30 @@ templ footer() {
 	</footer>
 }
 
+// themeBootstrap sets data-theme before first paint so the page never
+// flashes the wrong theme. A choice the user made with the toggle wins;
+// otherwise the OS preference decides, dark when it states none. theme.js
+// keeps following the OS after load. Without JavaScript no data-theme is set
+// and app.css follows prefers-color-scheme on its own.
+templ themeBootstrap() {
+	<script>
+		(function () {
+			var t = null;
+			try {
+				t = localStorage.getItem("netis-theme");
+			} catch (e) {}
+			if (t !== "light" && t !== "dark") {
+				t =
+					window.matchMedia &&
+					window.matchMedia("(prefers-color-scheme: light)").matches
+						? "light"
+						: "dark";
+			}
+			document.documentElement.setAttribute("data-theme", t);
+		})();
+	</script>
+}
+
 templ Layout(title string, username string) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -19,24 +43,13 @@ templ Layout(title string, username string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } — netis</title>
-			<script>
-				// No-flash theme bootstrap: set data-theme before first paint.
-				// Default dark unless a stored choice or an explicit OS light preference says otherwise.
-				(function () {
-					try {
-						// Default to dark unless the user has explicitly chosen a theme.
-						document.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');
-					} catch (e) {
-						document.documentElement.setAttribute('data-theme', 'dark');
-					}
-				})();
-			</script>
+			@themeBootstrap()
 			<link rel="stylesheet" href="/static/app.css"/>
 			<script src="/static/htmx.min.js"></script>
 			<script src="/static/sse.js"></script>
 		</head>
 		<body hx-ext="sse" sse-connect="/events/stream">
-			<nav class="top">
+			<nav class="top" aria-label="Main">
 				<a href="/" class="brand"><span class="dot"></span> netis</a>
 				<div class="links">
 					<a href="/">Dashboard</a>
@@ -60,7 +73,7 @@ templ Layout(title string, username string) {
 			</main>
 			@footer()
 			<div id="modal"></div>
-			<div id="toasts" class="toasts"></div>
+			<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 			<script src="/static/theme.js"></script>
 			<script src="/static/dialog.js"></script>
 			<script src="/static/toasts.js"></script>
