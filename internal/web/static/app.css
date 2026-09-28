@@ -122,6 +122,8 @@ main { padding:20px; max-width:1080px; margin:0 auto; }
 .badge.ip_changed { color:var(--accent); background:var(--accent-soft); }
 .badge.ip_conflict { color:var(--bad); background:var(--bad-soft); }
 .badge.sync_recovered { color:var(--ok); background:var(--ok-soft); }
+.badge.device_missing { color:var(--bad); background:var(--bad-soft); }
+.badge.device_returned { color:var(--ok); background:var(--ok-soft); }
 
 /* ---- buttons / inputs ---- */
 button, .btn { cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--fg);

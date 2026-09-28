@@ -83,6 +83,18 @@ func joinNonEmpty(sep string, parts ...string) string {
 	return strings.Join(kept, sep)
 }
 
+// upstreamName names the integration behind a device source, for the
+// missing-upstream pill.
+func upstreamName(source string) string {
+	switch source {
+	case "proxmox":
+		return "Proxmox"
+	case "wireguard":
+		return "The WireGuard server"
+	}
+	return "Its integration"
+}
+
 // oppositeKind returns the other lease kind, for the toggle's next click.
 func oppositeKind(kind string) string {
 	if kind == "static" {
@@ -175,6 +187,15 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 	</span>
 }
 
+// missingUpstreamPill marks a Proxmox guest or WireGuard peer that its
+// integration no longer lists. The device is kept; the user decides whether
+// it is really gone.
+templ missingUpstreamPill(d store.Device) {
+	if d.UpstreamMissingSince != nil {
+		<span class="pill bad" title={ upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")" }><span class="d"></span>missing upstream</span>
+	}
+}
+
 templ deviceRow(row store.DeviceRow, depth int) {
 	<tr>
 		<td>
@@ -194,6 +215,7 @@ templ deviceRow(row store.DeviceRow, depth int) {
 						} else {
 							<span class="pill reserved"><span class="d"></span>new</span>
 						}
+						@missingUpstreamPill(row.Device)
 					</div>
 					for i, mac := range row.MACs {
 						if i == 0 {
@@ -345,6 +367,7 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 						if !row.Reviewed {
 							<span class="pill reserved" style="margin-left:4px"><span class="d"></span>new</span>
 						}
+						@missingUpstreamPill(row.Device)
 					</div>
 					<div class="ip mono">
 						{ lowestIPStr(row.IPs) }
@@ -612,6 +635,7 @@ templ DevicePage(username string, d DeviceDetail) {
 						} else {
 							<span class="pill offline"><span class="d"></span>offline</span>
 						}
+						@missingUpstreamPill(d.Device)
 						if d.AlertOffline {
 							<span class="badge" title="Offline and online changes are sent as notifications">offline alerts on</span>
 						}
@@ -627,7 +651,7 @@ templ DevicePage(username string, d DeviceDetail) {
 			if IsAdmin(ctx) {
 				<div class="dev-hero-actions">
 					<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</a>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
 						<button type="submit">Wake on LAN</button>
 					</form>
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">

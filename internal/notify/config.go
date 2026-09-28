@@ -40,6 +40,8 @@ var Groups = []Group{
 		Help: "Two interfaces claiming the same address."},
 	{Key: "notify_sync", Label: "Scan and integration errors", Types: []string{"scan_error", "sync_recovered"},
 		Help: "A subnet sweep failing, an integration starting to fail, and its recovery."},
+	{Key: "notify_upstream", Label: "Missing upstream", Types: []string{"device_missing", "device_returned"},
+		Help: "A Proxmox guest or WireGuard peer no longer listed by its integration, and its return."},
 }
 
 // groupOf maps each notifiable event type to its group's setting key. Types

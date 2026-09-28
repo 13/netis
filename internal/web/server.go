@@ -18,6 +18,7 @@ import (
 	"netis/internal/netdetect"
 	"netis/internal/store"
 	"netis/internal/web/views"
+	"netis/internal/wol"
 )
 
 //go:embed static
@@ -78,6 +79,9 @@ type Server struct {
 	trustedProxies []netip.Prefix
 	metricsToken   string
 	backups        BackupStatus
+	// wolSend puts one magic packet on the wire; tests replace it so no
+	// packet leaves the machine.
+	wolSend func(mac, addr string) error
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
@@ -94,6 +98,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		trustedProxies: o.TrustedProxies,
 		metricsToken:   o.MetricsToken,
 		backups:        o.Backups,
+		wolSend:        wol.SendTo,
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))

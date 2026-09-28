@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"netis/internal/events"
 	"netis/internal/store"
@@ -40,12 +41,43 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		}
 		nodeIDs[g.Node] = id
 	}
+	seen := make(map[int64]bool, len(guests))
+	complete := true
 	for _, g := range guests {
-		if err := s.upsertGuest(ctx, g, nodeIDs[g.Node]); err != nil {
+		devID, err := s.upsertGuest(ctx, g, nodeIDs[g.Node])
+		if err != nil {
 			slog.Error("proxmox guest sync", "vmid", g.VMID, "err", err)
 		}
+		if devID == 0 {
+			complete = false // not resolved: cannot say which devices are gone
+			continue
+		}
+		seen[devID] = true
+	}
+	// An empty list is not taken as "every guest was deleted": a token that
+	// lost its privileges gets an empty list with a 200, and flagging every
+	// guest on that would be worse than missing the removal of the last one.
+	if complete && len(guests) > 0 {
+		s.reconcile(ctx, seen)
 	}
 	return Stats{Guests: len(guests), Nodes: len(nodeIDs)}, nil
+}
+
+// reconcile marks the guests missing from a complete guest list, clears the
+// mark on those that are back, and raises one event for each transition.
+// Devices are never deleted: a guest that is gone is the user's to remove.
+func (s *Sync) reconcile(ctx context.Context, seen map[int64]bool) {
+	gone, back, err := s.store.ReconcileUpstream(ctx, store.ScopeProxmoxGuests, seen, time.Now())
+	if err != nil {
+		slog.Error("proxmox missing-guest check", "err", err)
+		return
+	}
+	for _, d := range gone {
+		s.events.Emit(ctx, "device_missing", &d.ID, fmt.Sprintf("proxmox guest %s is no longer in Proxmox", d.Name))
+	}
+	for _, d := range back {
+		s.events.Emit(ctx, "device_returned", &d.ID, fmt.Sprintf("proxmox guest %s is back in Proxmox", d.Name))
+	}
 }
 
 // Status summarises a successful run for the integration status row: the
@@ -70,14 +102,17 @@ func (s *Sync) upsertNode(ctx context.Context, node string) (int64, error) {
 	return id, s.store.SetCustomField(ctx, id, "proxmox_node", node)
 }
 
-func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
+// upsertGuest creates or updates the device for g and returns its id, which
+// is non-zero whenever the guest's device was found or created, even when a
+// later step fails.
+func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) (int64, error) {
 	kind := "vm"
 	if g.Type == "lxc" {
 		kind = "lxc"
 	}
 	devID, found, err := s.store.FindProxmoxGuest(ctx, g.VMID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// Name and kind are only seeded when the guest is created, so the user's
 	// edits stick. Afterwards the sync only moves the parent, and only between
@@ -89,25 +124,25 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 			ParentDeviceID: &nodeID, ProxmoxVMID: &vmid,
 		})
 		if err != nil {
-			return err
+			return 0, err
 		}
 		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("proxmox guest %s (%d)", g.Name, g.VMID))
 	} else if err := s.store.SetProxmoxGuestParent(ctx, devID, nodeID); err != nil {
-		return err
+		return devID, err
 	}
 	if err := s.store.SetCustomField(ctx, devID, "proxmox_status", g.Status); err != nil {
-		return err
+		return devID, err
 	}
 	macs, err := s.client.GuestMACs(ctx, g.Node, g.VMID, g.Type)
 	if err != nil {
-		return err
+		return devID, err
 	}
 	for _, mac := range macs {
 		if err := s.attachMAC(ctx, devID, g, mac); err != nil {
-			return err
+			return devID, err
 		}
 	}
-	return nil
+	return devID, nil
 }
 
 // attachMAC gives the guest an interface for mac. When the MAC is already
