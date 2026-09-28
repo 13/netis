@@ -1,9 +1,8 @@
 package web
 
 import (
-	"context"
+	"errors"
 	"net/http"
-	"time"
 
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -28,9 +27,12 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, views.ScanToast("integration run not available"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-	defer cancel()
-	runErr := s.runner.Run(ctx, name)
+	// The runner applies its own per-run deadline.
+	runErr := s.runner.Run(r.Context(), name)
+	if errors.Is(runErr, ErrIntegrationBusy) {
+		s.render(w, r, views.ScanToast(title+": already running"))
+		return
+	}
 
 	var st *store.IntegrationStatus
 	if list, err := s.store.ListIntegrationStatus(r.Context()); err == nil {

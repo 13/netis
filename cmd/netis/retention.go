@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"netis/internal/store"
@@ -25,9 +26,10 @@ const (
 //
 // It sweeps once at startup so a long-stopped instance tidies up on boot, then
 // every interval. Retention windows are read from settings on each pass, so
-// changing them takes effect without a restart.
-func startRetention(ctx context.Context, st *store.Store, interval time.Duration) {
-	go func() {
+// changing them takes effect without a restart. The loop is tracked on wg so
+// shutdown can wait for a sweep in progress.
+func startRetention(ctx context.Context, wg *sync.WaitGroup, st *store.Store, interval time.Duration) {
+	wg.Go(func() {
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
@@ -38,7 +40,7 @@ func startRetention(ctx context.Context, st *store.Store, interval time.Duration
 			case <-t.C:
 			}
 		}
-	}()
+	})
 }
 
 func runRetention(ctx context.Context, st *store.Store) {

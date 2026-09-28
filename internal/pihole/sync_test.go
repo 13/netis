@@ -169,15 +169,10 @@ func TestPiholeRunOnceStats(t *testing.T) {
 	}
 }
 
-func TestPiholeStartRecordsStatus(t *testing.T) {
-	st, f, sync := testSync(t)
-	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
-	// One iteration: record status via the same path Start uses.
-	stats, rerr := sync.runAndCount(context.Background())
-	sync.recordStatus(context.Background(), stats, rerr)
-	list, _ := st.ListIntegrationStatus(t.Context())
-	if len(list) != 1 || list[0].Name != "pihole" || !list[0].OK || list[0].ItemCount != 1 {
-		t.Fatalf("status=%+v", list)
+func TestPiholeStatsStatus(t *testing.T) {
+	count, detail := Stats{Leases: 48, Created: 2}.Status()
+	if count != 48 || detail != "48 leases, 2 new" {
+		t.Fatalf("status = %d %q", count, detail)
 	}
 }
 

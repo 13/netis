@@ -3,9 +3,7 @@ package pihole
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/netip"
-	"time"
 
 	"netis/internal/events"
 	"netis/internal/store"
@@ -18,10 +16,9 @@ type Fetcher interface {
 }
 
 type Sync struct {
-	store   *store.Store
-	client  Fetcher
-	events  *events.Service
-	failing bool
+	store  *store.Store
+	client Fetcher
+	events *events.Service
 }
 
 func NewSync(st *store.Store, c Fetcher, ev *events.Service) *Sync {
@@ -184,42 +181,8 @@ func subnetForIP(subnets []store.Subnet, ip string) (int64, bool) {
 	return 0, false
 }
 
-func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
-	return s.RunOnce(ctx)
-}
-
-func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	st := store.IntegrationStatus{Name: "pihole", LastRun: now}
-	if err != nil {
-		if !s.failing {
-			s.failing = true
-			s.events.Emit(ctx, "scan_error", nil, "pihole sync failing: "+err.Error())
-		}
-		st.OK = false
-		st.Detail = err.Error()
-	} else {
-		s.failing = false
-		st.OK = true
-		st.ItemCount = stats.Leases
-		st.Detail = fmt.Sprintf("%d leases, %d new", stats.Leases, stats.Created)
-	}
-	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		slog.Error("pihole status write", "err", serr)
-	}
-	s.events.Broker().Publish("dashboard", "refresh")
-}
-
-func (s *Sync) Start(ctx context.Context, interval time.Duration) {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-	for {
-		stats, err := s.runAndCount(ctx)
-		s.recordStatus(ctx, stats, err)
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
+// Status summarises a successful run for the integration status row: the
+// item count and the detail line shown on the settings page.
+func (stats Stats) Status() (int, string) {
+	return stats.Leases, fmt.Sprintf("%d leases, %d new", stats.Leases, stats.Created)
 }

@@ -3,25 +3,65 @@ package main
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"netis/internal/events"
 	"netis/internal/store"
+	"netis/internal/web"
 )
 
-func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
+func openTestStore(t *testing.T) *store.Store {
+	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+func statusOf(t *testing.T, st *store.Store, name string) *store.IntegrationStatus {
+	t.Helper()
+	list, err := st.ListIntegrationStatus(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range list {
+		if list[i].Name == name {
+			return &list[i]
+		}
+	}
+	return nil
+}
+
+func countEvents(t *testing.T, st *store.Store, typ string) int {
+	t.Helper()
+	evs, err := st.ListEvents(t.Context(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range evs {
+		if e.Type == typ {
+			n++
+		}
+	}
+	return n
+}
+
+func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
+	st := openTestStore(t)
 	runner := newIntegrationRunner(st, events.NewService(st, events.NewBroker()))
 
-	// Unconfigured → the not-configured sentinel.
+	// Unconfigured → the not-configured sentinel, and nothing recorded.
 	if err := runner.Run(context.Background(), "pihole"); !errors.Is(err, errNotConfigured) {
 		t.Fatalf("unconfigured pihole: got %v, want errNotConfigured", err)
+	}
+	if s := statusOf(t, st, "pihole"); s != nil {
+		t.Fatalf("unconfigured pihole recorded status %+v", s)
 	}
 
 	// Configured but unreachable → a real error that is NOT the sentinel, proving
@@ -30,9 +70,14 @@ func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
 	if err := st.SetSetting(t.Context(), "pihole_url", "http://127.0.0.1:9"); err != nil {
 		t.Fatal(err)
 	}
-	err = runner.Run(context.Background(), "pihole")
+	err := runner.Run(context.Background(), "pihole")
 	if err == nil || errors.Is(err, errNotConfigured) {
 		t.Fatalf("configured pihole: got %v, want a non-nil non-sentinel error", err)
+	}
+	// The production path records the failure, so the settings page and the
+	// Run-now toast show "failing" instead of "not configured".
+	if s := statusOf(t, st, "pihole"); s == nil || s.OK || s.Detail == "" {
+		t.Fatalf("failing pihole status = %+v, want a failing row", s)
 	}
 
 	// Unknown integration name → error.
@@ -41,14 +86,123 @@ func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
 	}
 }
 
-func TestRunIntegrationLoopRunsThenStops(t *testing.T) {
-	var calls int32
-	runner := integrationRunner{
-		"x": func(ctx context.Context) error {
-			atomic.AddInt32(&calls, 1)
-			return errNotConfigured
-		},
+func TestIntegrationRunnerRecordsStatus(t *testing.T) {
+	st := openTestStore(t)
+	var fail atomic.Bool
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), time.Minute,
+		map[string]integrationFunc{
+			"x": func(context.Context) (int, string, error) {
+				if fail.Load() {
+					return 0, "", errors.New("boom")
+				}
+				return 3, "3 things", nil
+			},
+		})
+
+	if err := runner.Run(t.Context(), "x"); err != nil {
+		t.Fatal(err)
 	}
+	if s := statusOf(t, st, "x"); s == nil || !s.OK || s.ItemCount != 3 || s.Detail != "3 things" || s.LastRun == "" {
+		t.Fatalf("success status = %+v", s)
+	}
+
+	// Two failing runs: both recorded, but only one "sync failing" event per outage.
+	fail.Store(true)
+	for range 2 {
+		if err := runner.Run(t.Context(), "x"); err == nil {
+			t.Fatal("want error")
+		}
+	}
+	if s := statusOf(t, st, "x"); s == nil || s.OK || s.Detail != "boom" {
+		t.Fatalf("failure status = %+v", s)
+	}
+	if n := countEvents(t, st, "scan_error"); n != 1 {
+		t.Fatalf("scan_error events = %d, want 1", n)
+	}
+
+	// Recovery clears the outage, so the next failure alerts again.
+	fail.Store(false)
+	if err := runner.Run(t.Context(), "x"); err != nil {
+		t.Fatal(err)
+	}
+	if s := statusOf(t, st, "x"); s == nil || !s.OK {
+		t.Fatalf("recovered status = %+v", s)
+	}
+	fail.Store(true)
+	runner.Run(t.Context(), "x")
+	if n := countEvents(t, st, "scan_error"); n != 2 {
+		t.Fatalf("scan_error events after second outage = %d, want 2", n)
+	}
+}
+
+// A run that outlives its deadline is cut off and still recorded as failing:
+// the status write gets a fresh context rather than the expired one.
+func TestIntegrationRunnerDeadline(t *testing.T) {
+	st := openTestStore(t)
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), 20*time.Millisecond,
+		map[string]integrationFunc{
+			"x": func(ctx context.Context) (int, string, error) {
+				<-ctx.Done()
+				return 0, "", ctx.Err()
+			},
+		})
+	if err := runner.Run(t.Context(), "x"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got %v, want deadline exceeded", err)
+	}
+	if s := statusOf(t, st, "x"); s == nil || s.OK {
+		t.Fatalf("status = %+v, want a failing row", s)
+	}
+	if n := countEvents(t, st, "scan_error"); n != 1 {
+		t.Fatalf("scan_error events = %d, want 1", n)
+	}
+}
+
+// Run now while the periodic loop (or another click) is mid-run reports busy
+// straight away instead of starting an overlapping sync.
+func TestIntegrationRunnerBusy(t *testing.T) {
+	st := openTestStore(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), time.Minute,
+		map[string]integrationFunc{
+			"x": func(context.Context) (int, string, error) {
+				calls.Add(1)
+				close(started)
+				<-release
+				return 0, "", nil
+			},
+			"y": func(context.Context) (int, string, error) { return 0, "", nil },
+		})
+	done := make(chan error, 1)
+	go func() { done <- runner.Run(t.Context(), "x") }()
+	<-started
+
+	if err := runner.Run(t.Context(), "x"); !errors.Is(err, web.ErrIntegrationBusy) {
+		t.Fatalf("concurrent run: got %v, want ErrIntegrationBusy", err)
+	}
+	// The lock is per integration: another one runs meanwhile.
+	if err := runner.Run(t.Context(), "y"); err != nil {
+		t.Fatalf("other integration: %v", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("x ran %d times, want 1", n)
+	}
+}
+
+func TestRunIntegrationLoopRunsThenStops(t *testing.T) {
+	st := openTestStore(t)
+	var calls int32
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), time.Minute,
+		map[string]integrationFunc{
+			"x": func(ctx context.Context) (int, string, error) {
+				atomic.AddInt32(&calls, 1)
+				return 0, "", errNotConfigured
+			},
+		})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -73,5 +227,47 @@ func TestRunIntegrationLoopRunsThenStops(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("closure called %d times, want exactly 1 (immediate run only)", got)
+	}
+}
+
+// Shutdown waits on the shared WaitGroup before closing the store, so a sync
+// still unwinding after cancel must hold it open until it has finished.
+func TestShutdownWaitsForIntegrationRuns(t *testing.T) {
+	st := openTestStore(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), time.Minute,
+		map[string]integrationFunc{
+			"proxmox": func(context.Context) (int, string, error) {
+				once.Do(func() { close(started) })
+				<-release // ignores cancellation, like a slow store write
+				return 1, "done", nil
+			},
+			"pihole":    func(context.Context) (int, string, error) { return 0, "", errNotConfigured },
+			"wireguard": func(context.Context) (int, string, error) { return 0, "", errNotConfigured },
+		})
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	startIntegrationSyncs(ctx, &wg, runner, time.Hour)
+	startRetention(ctx, &wg, st, time.Hour)
+	<-started
+	cancel()
+
+	waited := make(chan struct{})
+	go func() { wg.Wait(); close(waited) }()
+	select {
+	case <-waited:
+		t.Fatal("wg.Wait returned while a sync was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("wg.Wait did not return after the sync finished")
+	}
+	// The in-flight run finished its status write before Wait returned.
+	if s := statusOf(t, st, "proxmox"); s == nil || !s.OK {
+		t.Fatalf("status = %+v, want the finished run recorded", s)
 	}
 }

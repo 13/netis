@@ -171,6 +171,13 @@ device. Pi-hole data never changes a device's online/last-seen status — that
 stays driven by the scanner. IPs are only attached when they fall inside a
 subnet you've configured in netis.
 
+Each configured integration (Proxmox, Pi-hole, WireGuard) syncs once a minute
+and on demand from Settings → Integrations → Run now. A run is cut off after
+30 seconds. Its result — connected with a count, or failing with the error — is
+shown on the settings page and in `/api/status`, and the first failure of an
+outage adds a `scan_error` event. Clicking Run now while that integration is
+already syncing reports "already running" instead of starting a second run.
+
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.

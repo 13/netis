@@ -94,3 +94,24 @@ func TestIntegrationRunRequiresAdmin(t *testing.T) {
 		t.Fatalf("viewer code=%d, want 403", rec.Code)
 	}
 }
+
+type busyRunner struct{}
+
+func (busyRunner) Run(context.Context, string) error { return ErrIntegrationBusy }
+
+// A Run-now click while that integration is already syncing says so, rather
+// than reading back whatever the previous run recorded.
+func TestIntegrationRunBusy(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	srv := NewServer(st, events.NewBroker(), nil, busyRunner{})
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "pihole", OK: true, Detail: "48 leases, 2 new"})
+	rec := authedPost(t, srv, st, "/settings/integrations/pihole/run", url.Values{})
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pi-hole: already running") {
+		t.Fatalf("busy code=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

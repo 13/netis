@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"embed"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -27,6 +28,11 @@ type ScanTrigger interface {
 type IntegrationRunner interface {
 	Run(ctx context.Context, name string) error
 }
+
+// ErrIntegrationBusy is returned by an IntegrationRunner when the named
+// integration is already mid-run, so a Run-now click does not start an
+// overlapping sync.
+var ErrIntegrationBusy = errors.New("integration already running")
 
 // Options carries deployment settings that are not stored in the database
 // because they describe the environment netis runs in, not the network it
