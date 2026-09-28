@@ -91,6 +91,37 @@ func (c *Client) login(ctx context.Context) error {
 	return nil
 }
 
+// Close ends the cached session with DELETE /api/auth and closes the client's
+// idle connections. Pi-hole caps concurrent sessions (webserver.api.max_sessions),
+// so a client that is thrown away without logging out uses one up until it
+// expires. It is a no-op for the session when none was opened.
+func (c *Client) Close(ctx context.Context) error {
+	defer c.http.CloseIdleConnections()
+	c.mu.Lock()
+	sid := c.sid
+	c.sid = ""
+	c.mu.Unlock()
+	if sid == "" {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, "DELETE", c.base+"/api/auth", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-FTL-SID", sid)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	// Pi-hole answers a successful logout with 410 Gone.
+	if resp.StatusCode != 200 && resp.StatusCode != 204 && resp.StatusCode != 410 {
+		return fmt.Errorf("pihole logout: HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // get performs an authenticated GET, decoding JSON into out. It logs in when
 // no SID is cached, and re-authenticates once on a 401 before retrying.
 func (c *Client) get(ctx context.Context, path string, out any) error {

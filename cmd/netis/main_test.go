@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -269,5 +271,57 @@ func TestShutdownWaitsForIntegrationRuns(t *testing.T) {
 	// The in-flight run finished its status write before Wait returned.
 	if s := statusOf(t, st, "proxmox"); s == nil || !s.OK {
 		t.Fatalf("status = %+v, want the finished run recorded", s)
+	}
+}
+
+// Every pihole run builds a fresh client, so it must end its Pi-hole session
+// afterwards — whether the sync succeeded or failed. Otherwise each minute
+// leaks one session until Pi-hole's max_sessions cap locks everyone out.
+func TestPiholeRunLogsOut(t *testing.T) {
+	st := openTestStore(t)
+	var logins, logouts atomic.Int32
+	var fail atomic.Bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/auth", func(w http.ResponseWriter, r *http.Request) {
+		logins.Add(1)
+		w.Write([]byte(`{"session":{"sid":"SID123","valid":true}}`))
+	})
+	mux.HandleFunc("DELETE /api/auth", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-FTL-SID") == "SID123" {
+			logouts.Add(1)
+		}
+		w.WriteHeader(410)
+	})
+	serve := func(body string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if fail.Load() {
+				w.WriteHeader(500)
+				return
+			}
+			w.Write([]byte(body))
+		}
+	}
+	mux.HandleFunc("/api/dhcp/leases", serve(`{"leases":[]}`))
+	mux.HandleFunc("/api/config/dhcp/hosts", serve(`{"config":{"dhcp":{"hosts":[]}}}`))
+	mux.HandleFunc("/api/config/dns/hosts", serve(`{"config":{"dns":{"hosts":[]}}}`))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	if err := st.SetSetting(t.Context(), "pihole_url", srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	runner := newIntegrationRunner(st, events.NewService(st, events.NewBroker()))
+
+	if err := runner.Run(t.Context(), "pihole"); err != nil {
+		t.Fatalf("successful run: %v", err)
+	}
+	if li, lo := logins.Load(), logouts.Load(); li != 1 || lo != 1 {
+		t.Fatalf("after success: logins=%d logouts=%d, want 1/1", li, lo)
+	}
+	fail.Store(true)
+	if err := runner.Run(t.Context(), "pihole"); err == nil {
+		t.Fatal("failing run: want error")
+	}
+	if li, lo := logins.Load(), logouts.Load(); li != 2 || lo != 2 {
+		t.Fatalf("after failure: logins=%d logouts=%d, want 2/2", li, lo)
 	}
 }
