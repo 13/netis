@@ -6,6 +6,7 @@ import (
 
 	"netis/internal/events"
 	"netis/internal/store"
+	"netis/internal/store/storetest"
 )
 
 type fakeFetcher struct {
@@ -192,5 +193,84 @@ func TestPiholeLeaseKeepsManualStatic(t *testing.T) {
 	ips, _ := st.ListIPs(t.Context(), ifID)
 	if len(ips) != 1 || ips[0].Kind != "static" {
 		t.Fatalf("pihole lease must not downgrade a manual static, got %+v", ips)
+	}
+}
+
+// A lease that moves to a new address retires the old DHCP address, and when
+// that old address is later leased to a different MAC, only the new holder
+// claims it. A static assignment on the moving iface is kept.
+func TestLeaseMoveRetiresOldDHCPAddress(t *testing.T) {
+	storetest.EachDialect(t, testLeaseMoveRetiresOldDHCPAddress)
+}
+
+func testLeaseMoveRetiresOldDHCPAddress(t *testing.T, st *store.Store) {
+	ctx := t.Context()
+	snID, err := st.CreateSubnet(ctx, store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeFetcher{}
+	sync := NewSync(st, f, events.NewService(st, events.NewBroker()))
+	run := func() {
+		t.Helper()
+		if _, err := sync.RunOnce(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ipsOf := func(mac string) map[string]string {
+		t.Helper()
+		iface, ok, err := st.FindIfaceByMAC(ctx, mac)
+		if err != nil || !ok {
+			t.Fatalf("iface %s: ok=%v err=%v", mac, ok, err)
+		}
+		ips, err := st.ListIPs(ctx, iface.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, ip := range ips {
+			out[ip.IP] = ip.Kind
+		}
+		return out
+	}
+
+	const a, b = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+	f.leases = []Lease{{MAC: a, IP: "10.0.0.10", Hostname: "alpha"}}
+	run()
+	// The user pins a static address on the same iface; it must survive.
+	ia, _, _ := st.FindIfaceByMAC(ctx, a)
+	if _, err := st.AssignIP(ctx, ia.ID, snID, "10.0.0.200", "static"); err != nil {
+		t.Fatal(err)
+	}
+
+	f.leases = []Lease{{MAC: a, IP: "10.0.0.11", Hostname: "alpha"}}
+	run()
+	if got := ipsOf(a); len(got) != 2 || got["10.0.0.11"] != "dhcp" || got["10.0.0.200"] != "static" {
+		t.Fatalf("after move, alpha ips = %v, want 10.0.0.11 dhcp + 10.0.0.200 static", got)
+	}
+
+	// Another device's stale DHCP claim on an address is dropped when the
+	// address is leased to someone else: b's lease lapses (b drops out of the
+	// lease list) and its address goes to a.
+	f.leases = []Lease{{MAC: a, IP: "10.0.0.11"}, {MAC: b, IP: "10.0.0.12"}}
+	run()
+	f.leases = []Lease{{MAC: a, IP: "10.0.0.12"}}
+	run()
+	iface, ok, err := st.FindIfaceByIP(ctx, snID, "10.0.0.12")
+	if err != nil || !ok || iface.MAC == nil || *iface.MAC != a {
+		t.Fatalf("10.0.0.12 owner = %+v ok=%v err=%v, want %s", iface, ok, err, a)
+	}
+	rows, err := st.ListSubnetIfaceIPs(ctx, snID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims int
+	for _, row := range rows {
+		if row.IP == "10.0.0.12" {
+			claims++
+		}
+	}
+	if claims != 1 {
+		t.Fatalf("10.0.0.12 claimed by %d ifaces, want 1", claims)
 	}
 }

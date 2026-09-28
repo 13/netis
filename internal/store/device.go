@@ -206,6 +206,26 @@ func (s *Store) RemoveIfaceIPsInSubnetExcept(ctx context.Context, ifaceID, subne
 	return err
 }
 
+// ClaimDHCPLease records that a DHCP server has leased ip to ifaceID, which
+// makes every other DHCP claim involving either side stale: the iface's other
+// DHCP addresses in the subnet (it moved) and other ifaces' DHCP assignments
+// of the same address (it was handed on). Both are deleted in one transaction
+// so the address never ends up claimed twice. Static rows are user or
+// reservation decisions and are left alone.
+func (s *Store) ClaimDHCPLease(ctx context.Context, ifaceID, subnetID int64, ip string) error {
+	return s.withTx(ctx, func(c conn) error {
+		if _, err := s.execOn(ctx, c, `DELETE FROM ip_assignment
+			WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
+			ifaceID, subnetID, ip); err != nil {
+			return err
+		}
+		_, err := s.execOn(ctx, c, `DELETE FROM ip_assignment
+			WHERE iface_id<>? AND subnet_id=? AND ip=? AND kind='dhcp'`,
+			ifaceID, subnetID, ip)
+		return err
+	})
+}
+
 // UpsertIPAssignment assigns ip to (ifaceID, subnetID) idempotently: it
 // inserts the row if absent, otherwise updates its kind. This lets a Pi-hole
 // reservation upgrade an existing dhcp assignment to static without creating a

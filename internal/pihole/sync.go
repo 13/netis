@@ -132,7 +132,7 @@ func (s *Sync) upsertByMAC(ctx context.Context, mac, ip, hostname string, subnet
 		return false, err
 	}
 	if found {
-		if err := s.store.UpsertIPAssignment(ctx, iface.ID, subnetID, ip, kind); err != nil {
+		if err := s.assign(ctx, iface.ID, subnetID, ip, kind); err != nil {
 			return false, err
 		}
 		if hostname != "" {
@@ -157,11 +157,27 @@ func (s *Sync) upsertByMAC(ctx context.Context, mac, ip, hostname string, subnet
 	if err != nil {
 		return false, err
 	}
-	if err := s.store.UpsertIPAssignment(ctx, ifID, subnetID, ip, kind); err != nil {
+	if err := s.assign(ctx, ifID, subnetID, ip, kind); err != nil {
 		return false, err
 	}
 	s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("pihole device %s at %s", name, ip))
 	return true, nil
+}
+
+// assign records ip on the iface with the given kind. A DHCP lease is the
+// server's current word on who holds the address, so it also retires the
+// iface's previous DHCP address in the subnet and any other iface's DHCP claim
+// on this one; otherwise a moved lease leaves the old address behind, and once
+// that is re-leased two ifaces claim it. A reservation (static) retires
+// nothing: the device may still hold an older lease until it renews.
+func (s *Sync) assign(ctx context.Context, ifaceID, subnetID int64, ip, kind string) error {
+	if err := s.store.UpsertIPAssignment(ctx, ifaceID, subnetID, ip, kind); err != nil {
+		return err
+	}
+	if kind != "dhcp" {
+		return nil
+	}
+	return s.store.ClaimDHCPLease(ctx, ifaceID, subnetID, ip)
 }
 
 func subnetForIP(subnets []store.Subnet, ip string) (int64, bool) {
