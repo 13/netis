@@ -177,7 +177,9 @@ When configured, netis polls Pi-hole every minute and merges DHCP leases,
 static reservations, and local DNS A records into the device inventory:
 devices are matched by MAC (unknown MACs are created with source `pihole`),
 reservations mark their IP `static`, and DNS names attach to the matching
-device. Pi-hole data never changes a device's online/last-seen status — that
+device. When a lease moves, the device's old DHCP address is dropped, and an
+address leased to a new MAC is taken off whichever device held it by DHCP
+before; static addresses are never removed. Pi-hole data never changes a device's online/last-seen status — that
 stays driven by the scanner. IPs are only attached when they fall inside a
 subnet you've configured in netis.
 
@@ -196,6 +198,10 @@ takes its name and kind from Proxmox only when it is first imported; renaming
 it or changing its kind in netis sticks. A guest's parent follows it when it
 moves between Proxmox nodes, but a parent you set to a non-Proxmox device is
 kept. Nodes are recognised by the `proxmox_node` custom field the sync adds.
+When the scanner found a guest first, the guest takes over that device's
+interface (and its IPs) as long as you have not reviewed the discovered device;
+the discovered device is deleted if nothing else is left on it. A reviewed
+device keeps its interface.
 
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after

@@ -592,14 +592,8 @@ func (s *Store) deviceTagNames(ctx context.Context, deviceID int64) ([]string, e
 // not.
 func (s *Store) CreateDiscoveredDevice(ctx context.Context, d Device, mac, hostname *string,
 	subnetID int64, ip, kind string) (deviceID, ifaceID int64, err error) {
-	// Scan-discovered devices start unreviewed, matching CreateDevice.
-	reviewed := d.Source != "scan"
 	err = s.withTx(ctx, func(c conn) error {
-		devID, err := s.insertReturningIDOn(ctx, c,
-			`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-			d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID,
-			d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
+		devID, err := s.insertDeviceOn(ctx, c, d)
 		if err != nil {
 			return err
 		}
@@ -620,4 +614,52 @@ func (s *Store) CreateDiscoveredDevice(ctx context.Context, d Device, mac, hostn
 		return 0, 0, err
 	}
 	return deviceID, ifaceID, nil
+}
+
+// insertDeviceOn inserts d on an explicit connection, for the functions that
+// create a device together with its interface in one transaction.
+func (s *Store) insertDeviceOn(ctx context.Context, c conn, d Device) (int64, error) {
+	// Scan-discovered devices start unreviewed, matching CreateDevice.
+	reviewed := d.Source != "scan"
+	return s.insertReturningIDOn(ctx, c,
+		`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID,
+		d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
+}
+
+// CreateDeviceWithIface creates a device and, when a MAC or an IP is given,
+// its interface and that IP's assignment, all in one transaction. It backs the
+// manual create form: a duplicate MAC or a bad parent id fails the whole
+// create (see IsUniqueViolation, IsForeignKeyViolation) rather than leaving a
+// device without the interface the user asked for.
+func (s *Store) CreateDeviceWithIface(ctx context.Context, d Device, mac *string,
+	subnetID int64, ip, kind string) (int64, error) {
+	var deviceID int64
+	err := s.withTx(ctx, func(c conn) error {
+		devID, err := s.insertDeviceOn(ctx, c, d)
+		if err != nil {
+			return err
+		}
+		deviceID = devID
+		if mac == nil && ip == "" {
+			return nil
+		}
+		ifID, err := s.insertReturningIDOn(ctx, c,
+			`INSERT INTO iface (device_id,mac,hostname) VALUES (?,?,?)`, devID, mac, nil)
+		if err != nil {
+			return err
+		}
+		if ip == "" {
+			return nil
+		}
+		_, err = s.insertReturningIDOn(ctx, c,
+			`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
+			ifID, subnetID, ip, kind)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deviceID, nil
 }

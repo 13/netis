@@ -156,7 +156,7 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
-		s.fail(w, r, err)
+		s.failWrite(w, r, err, subnetExistsMsg, "")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -182,11 +182,13 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	sn.ID = id
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
-		s.fail(w, r, err)
+		s.failWrite(w, r, err, subnetExistsMsg, "")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
 }
+
+const subnetExistsMsg = "a subnet with that CIDR already exists"
 
 // parseSubnetForm validates and builds a store.Subnet from the request form,
 // writing a 400 response and returning ok=false on validation failure. The
@@ -314,7 +316,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.store.CreateUser(r.Context(), username, string(hash), role); err != nil {
-		s.fail(w, r, err)
+		s.failWrite(w, r, err, "a user named "+username+" already exists", "")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)

@@ -3,6 +3,7 @@ package web
 import (
 	"database/sql"
 	"errors"
+	"net"
 	"net/http"
 	"net/netip"
 	"sort"
@@ -26,12 +27,15 @@ var validKinds = map[string]bool{"computer": true, "switch": true, "phone": true
 	"server": true, "printer": true, "iot": true, "vm": true, "lxc": true,
 	"wg-peer": true, "router": true, "modem": true, "other": true}
 
-func normMAC(in string) string {
-	m := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(in, "-", ":")))
-	if len(m) != 17 {
-		return ""
+// normMAC parses a 48-bit MAC in any of the usual spellings (colons, dashes
+// or Cisco dots) into the lowercase colon form the store matches on. ok is
+// false for anything else, including the right length made of non-hex.
+func normMAC(in string) (string, bool) {
+	hw, err := net.ParseMAC(strings.TrimSpace(in))
+	if err != nil || len(hw) != 6 {
+		return "", false
 	}
-	return m
+	return hw.String(), true
 }
 
 // parseTags splits a comma-separated tags field into trimmed, non-empty names.
@@ -233,28 +237,68 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 			dev.ParentDeviceID = &pid
 		}
 	}
-	devID, err := s.store.CreateDevice(r.Context(), dev)
+	var macP *string
+	if raw := strings.TrimSpace(r.FormValue("mac")); raw != "" {
+		mac, ok := normMAC(raw)
+		if !ok {
+			http.Error(w, "invalid MAC address", http.StatusBadRequest)
+			return
+		}
+		macP = &mac
+	}
+	var subnetID int64
+	ip := strings.TrimSpace(r.FormValue("ip"))
+	if ip != "" {
+		addr, err := netip.ParseAddr(ip)
+		if err != nil {
+			http.Error(w, "invalid IP address", http.StatusBadRequest)
+			return
+		}
+		sn, ok := s.subnetForForm(w, r)
+		if !ok {
+			return
+		}
+		prefix, err := netip.ParsePrefix(sn.CIDR)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if !prefix.Contains(addr) {
+			http.Error(w, "IP "+addr.String()+" is not in subnet "+sn.CIDR, http.StatusBadRequest)
+			return
+		}
+		subnetID, ip = sn.ID, addr.String()
+	}
+	devID, err := s.store.CreateDeviceWithIface(r.Context(), dev, macP, subnetID, ip, "static")
 	if err != nil {
-		s.fail(w, r, err)
+		s.failWrite(w, r, err, "that MAC address already belongs to another device", "parent device does not exist")
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), devID, parseTags(r.FormValue("tags"))); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	if mac := normMAC(r.FormValue("mac")); mac != "" || r.FormValue("ip") != "" {
-		var macP *string
-		if mac != "" {
-			macP = &mac
-		}
-		ifID, err := s.store.AddIface(r.Context(), devID, macP, nil)
-		if err == nil && r.FormValue("ip") != "" {
-			if snID, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64); err == nil {
-				s.store.AssignIP(r.Context(), ifID, snID, r.FormValue("ip"), "static")
-			}
-		}
-	}
 	http.Redirect(w, r, "/devices/"+strconv.FormatInt(devID, 10), http.StatusSeeOther)
+}
+
+// subnetForForm loads the subnet named by the form's subnet_id, answering 400
+// when it is missing or names no subnet.
+func (s *Server) subnetForForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool) {
+	id, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "choose the subnet the IP belongs to", http.StatusBadRequest)
+		return store.Subnet{}, false
+	}
+	sn, err := s.store.GetSubnet(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "unknown subnet", http.StatusBadRequest)
+			return store.Subnet{}, false
+		}
+		s.fail(w, r, err)
+		return store.Subnet{}, false
+	}
+	return sn, true
 }
 
 func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -291,7 +335,7 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
-		s.fail(w, r, err)
+		s.failWrite(w, r, err, "device conflicts with an existing one", "parent device does not exist")
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), d.ID, parseTags(r.FormValue("tags"))); err != nil {
@@ -513,8 +557,8 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePortScan runs an on-demand TCP port scan against the first IP of
-// the device's first interface, upserts any open ports found, and
-// redirects back to the device page.
+// the device's first interface, records the open ports it found in place of
+// the previous result, and redirects back to the device page.
 func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -530,19 +574,34 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ifaces, err := s.store.ListIfaces(r.Context(), id)
-	if err != nil || len(ifaces) == 0 {
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if len(ifaces) == 0 {
 		http.Error(w, "device has no interface", 400)
 		return
 	}
 	ips, err := s.store.ListIPs(r.Context(), ifaces[0].ID)
-	if err != nil || len(ips) == 0 {
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if len(ips) == 0 {
 		http.Error(w, "device has no IP", 400)
 		return
 	}
 	open := scan.PortScan(r.Context(), ips[0].IP, scan.CommonPorts, time.Second)
-	now := time.Now().UTC().Format(time.RFC3339)
+	found := make([]store.OpenPort, 0, len(open))
 	for _, p := range open {
-		s.store.UpsertOpenPort(r.Context(), ifaces[0].ID, p, "tcp", scan.ServiceGuess(p), now)
+		found = append(found, store.OpenPort{Port: p, ServiceGuess: scan.ServiceGuess(p)})
+	}
+	// The scan is the whole truth for the ports it probes, so it replaces the
+	// recorded set: a port that has closed since the last scan disappears.
+	if err := s.store.ReplaceOpenPorts(r.Context(), ifaces[0].ID, "tcp", found,
+		time.Now().UTC().Format(time.RFC3339)); err != nil {
+		s.fail(w, r, err)
+		return
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
