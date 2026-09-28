@@ -70,13 +70,16 @@ func (s *Server) handleUserPasswordReset(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	if _, found, err := s.store.GetUser(r.Context(), id); err != nil {
+	u, found, err := s.store.GetUser(r.Context(), id)
+	if err != nil {
 		s.fail(w, r, err)
 		return
-	} else if !found {
+	}
+	if !found {
 		http.NotFound(w, r)
 		return
 	}
+	auditNote(r).Target = "user " + u.Username
 	next, msg := validNewPassword(r)
 	if msg != "" {
 		s.settingsError(w, r, "users", http.StatusBadRequest, msg)

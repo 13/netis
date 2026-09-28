@@ -158,6 +158,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /settings/integrations/{name}/run", s.requireAdmin(s.handleIntegrationRun))
 	s.mux.HandleFunc("POST /settings/users", s.requireAdmin(s.handleUserCreate))
 	s.mux.HandleFunc("POST /settings/users/{id}/delete", s.requireAdmin(s.handleUserDelete))
+	s.mux.HandleFunc("POST /settings/users/{id}/role", s.requireAdmin(s.handleUserRole))
 	// Changing your own password needs no role: every account must be able to
 	// rotate its own credential. Resetting someone else's is admin-only.
 	s.mux.HandleFunc("POST /settings/password", s.handlePasswordChange)
@@ -177,7 +178,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
-	app := s.requireAuth(limitBody(s.mux))
+	app := s.requireAuth(limitBody(s.audit(s.mux)))
 	browser := checkOrigin(cop.Handler(app))
 	return securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// An API request carrying a bearer token skips the cross-origin

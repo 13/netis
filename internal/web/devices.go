@@ -278,6 +278,7 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		f.Error = msg
 		s.renderDeviceForm(w, r, f, status)
 	}
+	auditNote(r).Target = "device " + dev.Name
 	// A subnet_id that is missing or not a number is "not chosen" (zero).
 	subnetID, _ := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
 	nd, msg, err := s.checkNewDevice(r.Context(), dev, r.FormValue("mac"), r.FormValue("ip"), subnetID)
@@ -384,6 +385,7 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	auditNote(r).Target = deviceTarget(d)
 	if kind := r.FormValue("kind"); validKinds[kind] {
 		d.Kind = kind
 	}
@@ -445,6 +447,10 @@ func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	// Name it in the audit log while there is still a device to name.
+	if d, err := s.store.GetDevice(r.Context(), id); err == nil {
+		auditNote(r).Target = deviceTarget(d)
 	}
 	if err := s.store.DeleteDevice(r.Context(), id); err != nil {
 		s.fail(w, r, err)

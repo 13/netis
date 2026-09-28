@@ -13,10 +13,12 @@ import (
 // Retention defaults, in days. They bound the database without throwing away
 // anything a user is likely to still want: a month of events covers "what
 // happened while I was away", and a year of hourly availability buckets is what
-// the uptime percentages are computed from.
+// the uptime percentages are computed from. Half a year of audit entries
+// covers any "who changed that" question still worth asking.
 const (
 	defaultEventRetentionDays        = 30
 	defaultAvailabilityRetentionDays = 365
+	defaultAuditRetentionDays        = 180
 	retentionInterval                = 6 * time.Hour
 )
 
@@ -55,6 +57,17 @@ func runRetention(ctx context.Context, st *store.Store) {
 	if r.Total() > 0 {
 		slog.Info("retention sweep", "sessions", r.Sessions, "api_tokens", r.APITokens,
 			"events", r.Events, "availability", r.Availability)
+	}
+
+	if auditDays := retentionSetting(ctx, st, "audit_retention_days", defaultAuditRetentionDays); auditDays > 0 {
+		n, err := st.PruneAudit(ctx, time.Now().AddDate(0, 0, -auditDays))
+		if err != nil {
+			slog.Error("audit retention sweep failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("retention sweep", "audit", n)
+		}
 	}
 }
 

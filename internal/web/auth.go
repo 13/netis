@@ -355,12 +355,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Both buckets are reserved before bcrypt runs and settled once it has
 	// answered, so parallel guesses count against the limit while in flight.
 	ipKey, userKey := limitKey(s.clientIP(r)), "login:"+truncate(username, maxUsernameKeyLen)
+	note := auditNote(r)
 	if !s.limiter.reserve(ipKey) {
+		note.Detail = "rate limited"
 		http.Error(w, "too many attempts, wait a minute", http.StatusTooManyRequests)
 		return
 	}
 	if !s.userLimiter.reserve(userKey) {
 		s.limiter.done(ipKey, false)
+		note.Detail = "rate limited"
 		http.Error(w, "too many attempts for this account, try again later", http.StatusTooManyRequests)
 		return
 	}
@@ -380,6 +383,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// unknown, so this path costs about the same as the known-user
 		// path and doesn't leak username validity via timing.
 		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
+	}
+	// The audit entry names the account only when there is one: an unknown
+	// "username" is as likely to be a password typed into the wrong box.
+	if err == nil && ok {
+		note.UserID, note.Username = &u.ID, u.Username
 	}
 	if err == nil && ok && match {
 		failed = false
@@ -409,6 +417,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
+	}
+	switch {
+	case err != nil:
+		note.Detail = "lookup failed"
+	case !ok:
+		note.Detail = "unknown user"
+	default:
+		note.Detail = "wrong password"
 	}
 	w.WriteHeader(http.StatusUnauthorized)
 	s.render(w, r, views.LoginPage("wrong username or password"))
@@ -468,6 +484,10 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if !created {
 		http.Error(w, "already set up", http.StatusForbidden)
 		return
+	}
+	if u, ok, err := s.store.GetUserByName(r.Context(), username); err == nil && ok {
+		note := auditNote(r)
+		note.UserID, note.Username = &u.ID, u.Username
 	}
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

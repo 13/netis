@@ -92,6 +92,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "tokens", http.StatusBadRequest, "token name is too long")
 		return
 	}
+	auditNote(r).Target = "token " + name
 	now := time.Now().UTC()
 	expires := ""
 	if v := strings.TrimSpace(r.FormValue("expires_days")); v != "" {

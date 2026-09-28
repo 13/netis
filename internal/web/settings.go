@@ -103,7 +103,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	values["offline_after"] = offlineAfter
 
 	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled",
-		"event_retention_days", "availability_retention_days", "presence_fallback"} {
+		"event_retention_days", "availability_retention_days", "audit_retention_days", "presence_fallback"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			return views.SettingsData{}, err
@@ -122,7 +122,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 
 	switch tab {
 	case "subnets", "integrations", "users", "tokens", "about":
-	case "general", "notifications":
+	case "general", "notifications", "audit":
 		if !admin {
 			tab = "subnets"
 		}
@@ -187,8 +187,16 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 	}
 
+	var audit views.AuditData
+	if tab == "audit" {
+		if audit, err = s.auditData(r); err != nil {
+			return views.SettingsData{}, err
+		}
+	}
+
 	return views.SettingsData{
 		Notify:  notifyData,
+		Audit:   audit,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses, Tokens: tokens,
@@ -219,6 +227,7 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "subnets", http.StatusBadRequest, msg)
 		return
 	}
+	auditNote(r).Target = "subnet " + sn.CIDR
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
 		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
 		return
@@ -246,6 +255,7 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sn.ID = id
+	auditNote(r).Target = "subnet " + sn.CIDR
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
 		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
 		return
@@ -290,6 +300,9 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	if sn, err := s.store.GetSubnet(r.Context(), id); err == nil {
+		auditNote(r).Target = "subnet " + sn.CIDR
 	}
 	if err := s.store.DeleteSubnet(r.Context(), id); err != nil {
 		s.fail(w, r, err)
@@ -365,6 +378,8 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
 	role := r.FormValue("role")
+	note := auditNote(r)
+	note.Target, note.Detail = "user "+username, "role "+role
 	if username == "" || len(password) < minPasswordLen {
 		s.settingsError(w, r, "users", http.StatusBadRequest, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars")
 		return
@@ -394,6 +409,9 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.NotFound(w, r)
 		return
+	}
+	if u, found, err := s.store.GetUser(r.Context(), id); err == nil && found {
+		auditNote(r).Target = "user " + u.Username
 	}
 	// DeleteUserGuarded performs the existence check, admin count, and
 	// delete atomically in a single SQL statement so two concurrent
@@ -425,6 +443,46 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot delete the last admin")
+		return
+	}
+	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+}
+
+// handleUserRole promotes a viewer or demotes an admin. Sessions are left
+// alone: the role is read from the database on every request, so the change
+// applies to the user's very next one.
+func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	u, found, err := s.store.GetUser(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	role := r.FormValue("role")
+	note := auditNote(r)
+	note.Target, note.Detail = "user "+u.Username, u.Role+" -> "+role
+	if role != "admin" && role != "viewer" {
+		note.Detail = "bad role"
+		s.settingsError(w, r, "users", http.StatusBadRequest, "bad role")
+		return
+	}
+	// Guarded in one statement, like delete: two admins demoting each other
+	// at once cannot leave nobody able to administer netis.
+	changed, err := s.store.SetUserRoleGuarded(r.Context(), id, role)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if !changed {
+		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot demote the last admin")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
@@ -483,7 +541,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	// Retention windows, in days. Zero is meaningful — keep forever — so it is
 	// accepted rather than treated as unset.
-	for _, k := range []string{"event_retention_days", "availability_retention_days"} {
+	for _, k := range []string{"event_retention_days", "availability_retention_days", "audit_retention_days"} {
 		v := r.FormValue(k)
 		if v == "" {
 			continue

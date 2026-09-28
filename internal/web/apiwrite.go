@@ -105,6 +105,7 @@ func (s *Server) handleAPIDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONBody(w, r, &in) {
 		return
 	}
+	auditNote(r).Target = "device " + in.Name
 	dev := store.Device{
 		Name: in.Name, Kind: in.Kind, Notes: in.Notes, Icon: in.Icon, Source: "manual",
 		Vendor: in.Vendor, Model: in.Model, Function: in.Function, ParentDeviceID: in.ParentID,
@@ -201,6 +202,7 @@ func (s *Server) handleAPIDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	auditNote(r).Target = deviceTarget(d)
 	var body map[string]json.RawMessage
 	if !s.decodeJSONBody(w, r, &body) {
 		return
@@ -281,6 +283,7 @@ func (s *Server) handleAPIDeviceDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	auditNote(r).Target = deviceTarget(d)
 	if err := s.store.DeleteDevice(r.Context(), d.ID); err != nil {
 		s.fail(w, r, err)
 		return

@@ -1,0 +1,107 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"time"
+
+	"netis/internal/store"
+)
+
+// AuditData is the Audit tab: one page of entries, newest first, under the
+// user and action filters, plus the values those filters can take.
+type AuditData struct {
+	Entries []store.AuditEntry
+	// More says there are older entries past this page.
+	More bool
+	// Paged says this is not the first page, so "Newest" is worth offering.
+	Paged   bool
+	User    string
+	Action  string
+	Users   []string
+	Actions []string
+}
+
+templ filterSelect(name, label, current string, options []string) {
+	<label>
+		{ label }
+		<select name={ name } onchange="this.form.submit()">
+			<option value="">all</option>
+			for _, o := range options {
+				if o == current {
+					<option value={ o } selected>{ o }</option>
+				} else {
+					<option value={ o }>{ o }</option>
+				}
+			}
+		</select>
+	</label>
+}
+
+templ auditTab(a AuditData) {
+	<h2>Audit log</h2>
+	<p class="muted">Every change made through netis, and every refused attempt, newest first.</p>
+	<form method="get" action="/settings" class="toolbar">
+		<input type="hidden" name="tab" value="audit"/>
+		@filterSelect("user", "User", a.User, a.Users)
+		@filterSelect("action", "Action", a.Action, a.Actions)
+		<noscript><button type="submit">Filter</button></noscript>
+	</form>
+	if len(a.Entries) == 0 {
+		<p class="muted">No entries.</p>
+	} else {
+		<div class="table-wrap">
+			<table>
+				<tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th><th>Status</th><th>IP</th></tr>
+				for _, e := range a.Entries {
+					<tr>
+						<td class="mono" title={ e.At.UTC().Format(time.RFC3339) }>{ relTime(e.At.UTC().Format(time.RFC3339)) }</td>
+						<td>
+							if e.Username == "" {
+								<span class="muted">—</span>
+							} else {
+								{ e.Username }
+							}
+						</td>
+						<td class="mono">{ e.Action }</td>
+						<td>{ e.Target }</td>
+						<td>{ e.Detail }</td>
+						<td>
+							if e.Status >= 400 {
+								<span class="badge offline">{ strconv.Itoa(e.Status) }</span>
+							} else {
+								<span class="badge">{ strconv.Itoa(e.Status) }</span>
+							}
+						</td>
+						<td class="mono">{ e.IP }</td>
+					</tr>
+				}
+			</table>
+		</div>
+	}
+	<p>
+		if a.Paged {
+			<a href={ templ.URL(auditPageURL(a, 0)) }>Newest</a>
+		}
+		if a.More && len(a.Entries) > 0 {
+			<a href={ templ.URL(auditPageURL(a, a.Entries[len(a.Entries)-1].ID)) }>Older →</a>
+		}
+	</p>
+}
+
+// auditPageURL links to the Audit tab under the current filters, starting
+// below the entry with id before (0 for the newest page).
+func auditPageURL(a AuditData, before int64) string {
+	q := url.Values{"tab": {"audit"}}
+	if a.User != "" {
+		q.Set("user", a.User)
+	}
+	if a.Action != "" {
+		q.Set("action", a.Action)
+	}
+	if before > 0 {
+		q.Set("before", fmt.Sprint(before))
+	}
+	return "/settings?" + q.Encode()
+}

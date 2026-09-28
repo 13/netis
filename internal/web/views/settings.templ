@@ -30,6 +30,8 @@ type SettingsData struct {
 	About      AboutData
 	// Notify is the Notifications tab, filled for admins on that tab only.
 	Notify NotifyData
+	// Audit is the Audit tab, loaded only when an admin opens it.
+	Audit AuditData
 	// Error is why the form just submitted on ActiveTab was refused, shown
 	// above the tab.
 	Error string
@@ -308,6 +310,18 @@ templ usersTab(d SettingsData) {
 						<td>{ u.Username }</td>
 						<td><span class="badge">{ u.Role }</span></td>
 						<td>
+							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
+								<select name="role" aria-label={ "Role for " + u.Username }>
+									for _, role := range []string{"viewer", "admin"} {
+										if role == u.Role {
+											<option value={ role } selected>{ role }</option>
+										} else {
+											<option value={ role }>{ role }</option>
+										}
+									}
+								</select>
+								<button type="submit" class="ghost">set role</button>
+							</form>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
 								<input type="password" name="new_password" placeholder="new password" minlength="8" required/>
 								<button type="submit" class="ghost">reset password</button>
@@ -443,6 +457,7 @@ templ generalTab(d SettingsData) {
 			<div class="field-grid">
 				<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
 				<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
+				<label>Keep audit log (days) <input type="number" name="audit_retention_days" min="0" value={ settingOr(d.Values, "audit_retention_days", "180") }/></label>
 			</div>
 			<p class="muted" style="margin:6px 0 4px">
 				Older rows are deleted every six hours. Availability history is one row
@@ -534,6 +549,7 @@ templ SettingsPage(username string, d SettingsData) {
 				@tabLink(d.ActiveTab, "users", "Users")
 				@tabLink(d.ActiveTab, "general", "General")
 				@tabLink(d.ActiveTab, "notifications", "Notifications")
+				@tabLink(d.ActiveTab, "audit", "Audit")
 			} else {
 				@tabLink(d.ActiveTab, "users", "Account")
 			}
@@ -566,6 +582,8 @@ templ SettingsPage(username string, d SettingsData) {
 			@generalTab(d)
 		} else if d.ActiveTab == "notifications" {
 			@notificationsTab(d.Notify)
+		} else if d.ActiveTab == "audit" {
+			@auditTab(d.Audit)
 		} else if d.ActiveTab == "about" {
 			@aboutTab(d.About)
 		}

@@ -85,7 +85,28 @@ and the New/Edit device forms also work with JavaScript turned off.
 Users are either `admin` or `viewer`. Viewers see the inventory, the subnets,
 events and each integration's status, and manage their own password, API tokens and
 sessions; they do not see integration settings, the user list, or any of the
-edit, delete, scan, Wake-on-LAN and port-scan controls.
+edit, delete, scan, Wake-on-LAN and port-scan controls. An admin can change
+any user's role from Settings → Users; netis refuses to demote the last admin,
+just as it refuses to delete it. A role change applies to that user's next
+request, without signing them out.
+
+### Audit log
+
+Every state-changing request that reaches netis is recorded in an audit log,
+shown to admins under Settings → **Audit**: when, who, the action
+(`device.update`, `user.role`, `login`, ...), what it acted on, the HTTP
+status it was answered with and the client address (honouring
+`NETIS_TRUSTED_PROXIES`). Refused attempts are recorded too — a failed login, a
+viewer's 403 — so the status column tells a change from an attempt. Writes made
+through the API with a personal token are attributed to the token's owner and
+marked "via API token". The log can
+be filtered by user and action and is paged newest first.
+
+No password, secret or form value is ever written to it. A failed login names
+the account only when it exists: an unknown username is logged blank, since it
+is often a password typed into the wrong box. Page views are not logged.
+Entries are kept for `audit_retention_days` (default 180) and survive the
+deletion of the account that made them.
 
 ## Install
 
@@ -231,6 +252,7 @@ database's key/value settings table:
 | `presence_fallback` | `on` (default) or `off`: count hosts that ignore ping but answer ARP as seen. See [Discovery](#discovery). |
 | `event_retention_days` | Days of event history to keep, swept every 6h; `0` keeps everything (default 30). |
 | `availability_retention_days` | Days of availability history to keep (default 365). One row per interface per hour, so this is the fastest-growing table. |
+| `audit_retention_days` | Days of audit log to keep (default 180); `0` keeps everything. |
 | `proxmox_url` | Base URL of the Proxmox API, e.g. `https://pve.local:8006`. |
 | `proxmox_token_id` | Proxmox API token ID, e.g. `user@pam!netis`. |
 | `proxmox_secret` | Proxmox API token secret. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
