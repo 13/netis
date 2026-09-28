@@ -195,6 +195,8 @@ nav.tabs .tab.active { background:var(--accent-soft); color:var(--accent); }
 .auth { display:grid; place-items:center; min-height:100vh; }
 .auth-card { background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow);
              padding:22px; border-radius:var(--radius); display:flex; flex-direction:column; gap:12px; width:320px; max-width:100%; }
+.auth-form { display:flex; flex-direction:column; gap:12px; }
+.auth-card .sso-button { justify-content:center; }
 
 /* ---- dialog shell (used by C) ---- */
 /* Modals are native <dialog> elements opened with showModal() (dialog.js):

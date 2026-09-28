@@ -146,6 +146,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	u, _ := userFrom(r)
 	var sessions []store.Session
 	currentSessionID := ""
+	var sso views.SSOAccount
 	if tab == "users" {
 		sessions, err = s.store.ListSessionsForUser(r.Context(), u.ID)
 		if err != nil {
@@ -153,6 +154,12 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 		if c, cerr := r.Cookie("netis_session"); cerr == nil {
 			currentSessionID = store.SessionID(c.Value)
+		}
+		if s.oidc != nil {
+			sso.Enabled = true
+			if sso.Linked, err = s.store.OIDCLinked(r.Context(), u.ID); err != nil {
+				return views.SettingsData{}, err
+			}
 		}
 	}
 
@@ -197,6 +204,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	return views.SettingsData{
 		Notify:  notifyData,
 		Audit:   audit,
+		SSO:     sso,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses, Tokens: tokens,

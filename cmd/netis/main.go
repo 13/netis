@@ -316,6 +316,14 @@ func main() {
 		slog.Error("NETIS_SECRET_KEY", "err", err)
 		os.Exit(1)
 	}
+	oidcCfg, err := config.LoadOIDC()
+	if err != nil {
+		slog.Error("OIDC configuration", "err", err)
+		os.Exit(1)
+	}
+	if oidcCfg.Enabled() {
+		slog.Info("single sign-on enabled", "issuer", oidcCfg.Issuer, "redirect", oidcCfg.RedirectURL)
+	}
 	st, err := store.Open(cfg.DSN, store.Options{
 		MaxOpenConns: cfg.MaxOpenConns,
 		MaxIdleConns: cfg.MaxIdleConns,
@@ -377,6 +385,7 @@ func main() {
 			TrustedProxies: trustedProxies,
 			MetricsToken:   cfg.MetricsToken,
 			Backups:        backups,
+			OIDC:           oidcCfg,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		// ReadTimeout bounds reading the whole request, so a client cannot

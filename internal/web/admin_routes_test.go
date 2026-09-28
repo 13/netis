@@ -115,6 +115,7 @@ var selfService = map[string]bool{
 	// non-admin to their own tokens (TestTokenRevokeScopedToOwner).
 	"POST /settings/tokens":             true,
 	"POST /settings/tokens/{id}/delete": true,
+	"POST /settings/sso/link":           true,
 }
 
 // The parse must agree with the mux: every route it found must resolve to

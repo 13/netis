@@ -14,6 +14,7 @@ import (
 	"github.com/a-h/templ"
 
 	"netis/internal/backup"
+	"netis/internal/config"
 	"netis/internal/events"
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -60,6 +61,9 @@ type Options struct {
 	// Backups reports on scheduled backups for the About tab and /metrics.
 	// Nil means scheduled backups are off.
 	Backups BackupStatus
+	// OIDC configures single sign-on through an OpenID Connect provider. The
+	// zero value leaves it off.
+	OIDC config.OIDC
 }
 
 type Server struct {
@@ -82,6 +86,7 @@ type Server struct {
 	// wolSend puts one magic packet on the wire; tests replace it so no
 	// packet leaves the machine.
 	wolSend func(mac, addr string) error
+	oidc    *oidcAuth // nil when SSO is off
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
@@ -99,12 +104,17 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		metricsToken:   o.MetricsToken,
 		backups:        o.Backups,
 		wolSend:        wol.SendTo,
+		oidc:           newOIDCAuth(o.OIDC),
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("POST /login", s.handleLogin)
 	s.mux.HandleFunc("POST /logout", s.handleLogout)
+	// Single sign-on. Both GETs are reachable signed out; the callback is
+	// protected by the state in the signed flow cookie, not by a session.
+	s.mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
+	s.mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
 	s.mux.HandleFunc("GET /setup", s.handleSetupPage)
 	s.mux.HandleFunc("POST /setup", s.handleSetup)
 	s.mux.HandleFunc("GET /events/stream", s.handleSSE)
@@ -174,6 +184,8 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	// the revoke handler lets an admin reach everyone's.
 	s.mux.HandleFunc("POST /settings/tokens", s.handleTokenCreate)
 	s.mux.HandleFunc("POST /settings/tokens/{id}/delete", s.handleTokenRevoke)
+	// Linking your own account to an SSO identity is likewise yours to do.
+	s.mux.HandleFunc("POST /settings/sso/link", s.handleOIDCLink)
 	s.mux.HandleFunc("POST /settings/users/{id}/password", s.requireAdmin(s.handleUserPasswordReset))
 	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
 	s.mux.HandleFunc("POST /settings/notifications", s.requireAdmin(s.handleNotificationsSave))

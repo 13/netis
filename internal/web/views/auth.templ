@@ -68,17 +68,39 @@ templ authShell(title string) {
 	</html>
 }
 
-templ LoginPage(errMsg string) {
+// LoginOptions says which ways in the login page offers.
+type LoginOptions struct {
+	// SSO shows the "Sign in with SSO" button.
+	SSO bool
+	// HidePassword leaves the password form off, behind a "local account"
+	// link, when SSO is the primary way in.
+	HidePassword bool
+}
+
+templ LoginPage(errMsg string, o LoginOptions) {
 	@authShell("Login") {
 		@onboardBrand()
-		<form method="post" action="/login" class="auth-card">
+		<div class="auth-card">
 			if errMsg != "" {
 				<p class="error">{ errMsg }</p>
 			}
-			<input name="username" placeholder="username" autofocus required/>
-			<input name="password" type="password" placeholder="password" required/>
-			<button type="submit" class="primary">Sign in</button>
-		</form>
+			if o.SSO {
+				<a href="/auth/oidc/login" class="btn primary sso-button">Sign in with SSO</a>
+			}
+			if o.HidePassword {
+				<a href="/login?local=1" class="muted">Sign in with a local account</a>
+			} else {
+				<form method="post" action="/login" class="auth-form">
+					<input name="username" placeholder="username" autofocus?={ !o.SSO } required/>
+					<input name="password" type="password" placeholder="password" required/>
+					if o.SSO {
+						<button type="submit">Sign in with password</button>
+					} else {
+						<button type="submit" class="primary">Sign in</button>
+					}
+				</form>
+			}
+		</div>
 	}
 }
 
