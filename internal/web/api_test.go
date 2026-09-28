@@ -83,6 +83,9 @@ func TestAPIDevices(t *testing.T) {
 	if len(d.MACs) != 1 || len(d.Tags) != 1 || d.Tags[0] != "core" {
 		t.Errorf("macs=%v tags=%v", d.MACs, d.Tags)
 	}
+	if d.PrivateMAC {
+		t.Error("a universally administered MAC is not private")
+	}
 
 	var one apiDevice
 	getJSON(t, srv, st, "/api/devices/"+itoa(devID), &one)
@@ -91,6 +94,30 @@ func TestAPIDevices(t *testing.T) {
 	}
 	if rec := authedGet(t, srv, st, "/api/devices/9999"); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown device: code=%d", rec.Code)
+	}
+}
+
+// A device on a randomized MAC is flagged, in the API and on both pages.
+func TestPrivateMACSurfaced(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	devID, err := st.CreateDevice(t.Context(), store.Device{Name: "phone", Kind: "other", Source: "scan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac := "da:a1:19:00:00:01"
+	if _, err := st.AddIface(t.Context(), devID, &mac, nil); err != nil {
+		t.Fatal(err)
+	}
+	var one apiDevice
+	body := getJSON(t, srv, st, "/api/devices/"+itoa(devID), &one).Body.String()
+	if !one.PrivateMAC || !strings.Contains(body, `"private_mac":true`) {
+		t.Fatalf("private_mac not set: %s", body)
+	}
+	for _, path := range []string{"/devices", "/devices/" + itoa(devID)} {
+		if b := authedGet(t, srv, st, path).Body.String(); !strings.Contains(b, "private MAC") {
+			t.Errorf("%s: no private MAC badge", path)
+		}
 	}
 }
 

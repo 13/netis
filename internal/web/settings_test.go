@@ -309,6 +309,33 @@ func TestGeneralSavesSubnetDefaults(t *testing.T) {
 	}
 }
 
+func TestGeneralSavesPresenceFallback(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	if body := authedGet(t, srv, st, "/settings?tab=general").Body.String(); !strings.Contains(body, `name="presence_fallback"`) {
+		t.Fatal("general tab missing presence_fallback")
+	}
+	rec := authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after": {"3"}, "presence_fallback": {"off"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("code=%d", rec.Code)
+	}
+	if v, _ := st.GetSetting(t.Context(), "presence_fallback"); v != "off" {
+		t.Fatalf("presence_fallback=%q", v)
+	}
+	body := authedGet(t, srv, st, "/settings?tab=general").Body.String()
+	if !strings.Contains(body, `<option value="off" selected>`) {
+		t.Error("saved off is not shown as selected")
+	}
+	rec = authedPost(t, srv, st, "/settings/general", url.Values{
+		"offline_after": {"3"}, "presence_fallback": {"maybe"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad value code=%d, want 400", rec.Code)
+	}
+}
+
 func TestGeneralSaveRejectsBadDefaults(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")

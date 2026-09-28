@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"netis/internal/events"
+	"netis/internal/macaddr"
 	"netis/internal/store"
 )
 
@@ -19,6 +21,17 @@ type Engine struct {
 	Sweeper Sweeper
 	ARP     func() (map[string]string, error)
 	Resolve func(context.Context, string) string
+	// Presence confirms a host that answered ARP but not ping (TCPProbe in
+	// production). Nil skips straight to the ARP re-check.
+	Presence func(context.Context, string) (float64, bool)
+	// ARPSettle is how long after a sweep an unconfirmed ARP entry must still
+	// resolve to count as presence (DefaultARPSettle in production).
+	ARPSettle time.Duration
+
+	// nameMiss remembers when an address last resolved to nothing, so a
+	// nameless host is not looked up on every sweep.
+	nameMu   sync.Mutex
+	nameMiss map[string]time.Time
 }
 
 // defaultOfflineAfter is the consecutive-miss threshold used when the
@@ -57,14 +70,26 @@ func logStoreErr(op string, ifaceID int64, err error) {
 }
 
 func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
-	results, err := e.Sweeper.Sweep(ctx, sn.CIDR)
+	swept, err := e.Sweeper.Sweep(ctx, sn.CIDR)
 	if err != nil {
 		e.Events.Emit(ctx, "scan_error", nil, fmt.Sprintf("subnet %s: %v", sn.CIDR, err))
 		return err
 	}
+	sweptAt := time.Now()
 	arp, err := e.ARP()
 	if err != nil {
 		arp = map[string]string{}
+	}
+	// Copied so presence can mark hosts alive without touching the sweeper's
+	// slice.
+	results := append([]Result(nil), swept...)
+	if e.presenceEnabled(ctx) {
+		confirmed := e.confirmPresence(ctx, results, arp, sweptAt)
+		for i := range results {
+			if rtt, ok := confirmed[results[i].IP]; ok {
+				results[i].Alive, results[i].RTTms = true, rtt
+			}
+		}
 	}
 	offlineAfter := e.offlineAfter(ctx)
 	now := time.Now().UTC()
@@ -78,6 +103,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	for _, k := range known {
 		knownByIP[k.IP] = k
 	}
+	names := e.resolveAll(ctx, namesWanted(results, knownByIP, arp))
 
 	aliveIPs := make(map[string]bool)
 	seen := make(map[int64]bool)        // ifaceID -> seen this sweep, on any IP
@@ -98,6 +124,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		// Without an ARP entry, as on a routed subnet, the IP is all there is.
 		if k, ok := knownByIP[r.IP]; ok && !macConflict(k.MAC, mac) {
 			e.markSeen(ctx, k.IfaceID, k.DeviceID, r.RTTms, now, bucket)
+			e.fillHostname(ctx, k.IfaceID, names[r.IP])
 			seen[k.IfaceID] = true
 			continue
 		}
@@ -109,11 +136,12 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 				e.Events.Emit(ctx, "ip_changed", &iface.DeviceID,
 					fmt.Sprintf("MAC %s now at %s", mac, r.IP))
 				e.markSeen(ctx, iface.ID, iface.DeviceID, r.RTTms, now, bucket)
+				e.fillHostname(ctx, iface.ID, names[r.IP])
 				seen[iface.ID] = true
 				continue
 			}
 		}
-		if ifID, ok := e.createUnknown(ctx, sn, r, mac, now, bucket); ok {
+		if ifID, ok := e.createUnknown(ctx, sn, r, mac, names[r.IP], now, bucket); ok {
 			seen[ifID] = true
 		}
 	}
@@ -161,11 +189,19 @@ func (e *Engine) markSeen(ctx context.Context, ifaceID, deviceID int64, rtt floa
 // createUnknown creates a device+iface for a previously-unseen IP/MAC.
 // It returns the new iface ID and true on success, so the caller can mark
 // it seen for this sweep and avoid the closing loop mis-marking it missed.
-func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, mac string, now time.Time, bucket string) (int64, bool) {
-	resolved := e.Resolve(ctx, r.IP)
+//
+// A device with a randomized (private) MAC and no resolved name is named
+// private-<mac>, and its device_new event says why: the MAC will change, so
+// the user is better off knowing it is probably a phone than hunting a vendor.
+func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, mac, resolved string, now time.Time, bucket string) (int64, bool) {
+	private := macaddr.IsPrivate(mac)
 	name := resolved
 	if name == "" && mac != "" {
-		name = "unknown-" + mac
+		if private {
+			name = "private-" + mac
+		} else {
+			name = "unknown-" + mac
+		}
 	}
 	if name == "" {
 		name = "unknown-" + r.IP
@@ -190,6 +226,94 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	logStoreErr("MarkSeen", ifID, err)
 	logStoreErr("RecordAvailability", ifID,
 		e.Store.RecordAvailability(ctx, ifID, true, bucket))
-	e.Events.Emit(ctx, "device_new", &devID, fmt.Sprintf("new device %s at %s", name, r.IP))
+	msg := fmt.Sprintf("new device %s at %s", name, r.IP)
+	if private {
+		msg += " (randomized MAC — may be a phone with Private Wi-Fi Address)"
+	}
+	e.Events.Emit(ctx, "device_new", &devID, msg)
 	return ifID, true
+}
+
+// resolveParallel bounds concurrent name lookups in a sweep.
+const resolveParallel = 16
+
+// nameRetryAfter is how long an address that resolved to nothing is left
+// alone before it is looked up again.
+const nameRetryAfter = 30 * time.Minute
+
+// namesWanted lists the alive addresses worth a name lookup: those that will
+// become a new device or a moved iface, and known ifaces with no hostname yet.
+func namesWanted(results []Result, knownByIP map[string]store.SubnetIfaceIP, arp map[string]string) []string {
+	var out []string
+	for _, r := range results {
+		if r.Err != nil || !r.Alive {
+			continue
+		}
+		k, ok := knownByIP[r.IP]
+		if !ok || macConflict(k.MAC, arp[r.IP]) || k.Hostname == nil || *k.Hostname == "" {
+			out = append(out, r.IP)
+		}
+	}
+	return out
+}
+
+// resolveAll looks names up for ips concurrently, skipping addresses that
+// came back empty within nameRetryAfter. Lookups are slow (reverse DNS and
+// then mDNS each wait for a timeout on a miss), so one host at a time made
+// discovering a busy subnet take minutes.
+func (e *Engine) resolveAll(ctx context.Context, ips []string) map[string]string {
+	out := make(map[string]string)
+	if len(ips) == 0 {
+		return out
+	}
+	now := time.Now()
+	e.nameMu.Lock()
+	var todo []string
+	for _, ip := range ips {
+		if t, ok := e.nameMiss[ip]; ok && now.Sub(t) < nameRetryAfter {
+			continue
+		}
+		todo = append(todo, ip)
+	}
+	e.nameMu.Unlock()
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, resolveParallel)
+	for _, ip := range todo {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(ip string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			name := e.Resolve(ctx, ip)
+			mu.Lock()
+			out[ip] = name
+			mu.Unlock()
+		}(ip)
+	}
+	wg.Wait()
+
+	e.nameMu.Lock()
+	defer e.nameMu.Unlock()
+	if e.nameMiss == nil {
+		e.nameMiss = make(map[string]time.Time)
+	}
+	for ip, name := range out {
+		if name == "" {
+			e.nameMiss[ip] = now
+		} else {
+			delete(e.nameMiss, ip)
+		}
+	}
+	return out
+}
+
+// fillHostname records a discovered name on an iface that has none. It never
+// replaces a hostname a user or an integration already set.
+func (e *Engine) fillHostname(ctx context.Context, ifaceID int64, name string) {
+	if name == "" {
+		return
+	}
+	logStoreErr("SetIfaceHostnameIfEmpty", ifaceID, e.Store.SetIfaceHostnameIfEmpty(ctx, ifaceID, name))
 }

@@ -456,10 +456,11 @@ type SubnetIfaceIP struct {
 	DeviceID int64
 	IP       string
 	MAC      *string
+	Hostname *string
 }
 
 func (s *Store) ListSubnetIfaceIPs(ctx context.Context, subnetID int64) ([]SubnetIfaceIP, error) {
-	rows, err := s.query(ctx, `SELECT f.id, f.device_id, a.ip, f.mac
+	rows, err := s.query(ctx, `SELECT f.id, f.device_id, a.ip, f.mac, f.hostname
 		FROM ip_assignment a JOIN iface f ON f.id=a.iface_id
 		WHERE a.subnet_id=?`, subnetID)
 	if err != nil {
@@ -469,7 +470,7 @@ func (s *Store) ListSubnetIfaceIPs(ctx context.Context, subnetID int64) ([]Subne
 	var out []SubnetIfaceIP
 	for rows.Next() {
 		var r SubnetIfaceIP
-		if err := rows.Scan(&r.IfaceID, &r.DeviceID, &r.IP, &r.MAC); err != nil {
+		if err := rows.Scan(&r.IfaceID, &r.DeviceID, &r.IP, &r.MAC, &r.Hostname); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

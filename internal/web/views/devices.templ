@@ -6,8 +6,11 @@ import (
 	"net/url"
 	"strings"
 
+	"netis/internal/macaddr"
 	"netis/internal/store"
 )
+
+const privateMACTitle = "Randomized (locally administered) MAC: may be a phone with Private Wi-Fi Address, and may change"
 
 // deviceKinds is the fixed set of device kinds accepted by the schema's
 // CHECK constraint (see the latest device-table migration,
@@ -191,7 +194,12 @@ templ deviceRow(row store.DeviceRow, depth int) {
 					</div>
 					for i, mac := range row.MACs {
 						if i == 0 {
-							<div class="mono muted" style="font-size:11.5px">{ mac }</div>
+							<div class="mono muted" style="font-size:11.5px">
+								{ mac }
+								if macaddr.AnyPrivate(row.MACs) {
+									<span class="chip" title={ privateMACTitle }>private MAC</span>
+								}
+							</div>
 						}
 					}
 					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
@@ -628,6 +636,10 @@ templ DevicePage(username string, d DeviceDetail) {
 							<p class="mono">
 								if ifd.Iface.MAC != nil {
 									{ *ifd.Iface.MAC }
+									if macaddr.IsPrivate(*ifd.Iface.MAC) {
+										{ " " }
+										<span class="chip" title={ privateMACTitle }>private MAC</span>
+									}
 								}
 								if ifd.Iface.Hostname != nil {
 									{ " " } { *ifd.Iface.Hostname }

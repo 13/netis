@@ -83,7 +83,7 @@ func TestListChildrenAndSubnetIfaceIPs(t *testing.T) {
 
 		sn1, _ := s.CreateSubnet(ctx, Subnet{CIDR: "10.0.0.0/24", Name: "a", Kind: "lan", ScanIntervalSec: 120})
 		sn2, _ := s.CreateSubnet(ctx, Subnet{CIDR: "10.0.1.0/24", Name: "b", Kind: "lan", ScanIntervalSec: 120})
-		withMAC, _ := s.AddIface(ctx, parent, strp("aa:bb:cc:dd:ee:01"), nil)
+		withMAC, _ := s.AddIface(ctx, parent, strp("aa:bb:cc:dd:ee:01"), strp("host.lan"))
 		noMAC, _ := s.AddIface(ctx, parent, nil, nil)
 		s.AssignIP(ctx, withMAC, sn1, "10.0.0.5", "static")
 		s.AssignIP(ctx, noMAC, sn1, "10.0.0.6", "dhcp")
@@ -100,10 +100,11 @@ func TestListChildrenAndSubnetIfaceIPs(t *testing.T) {
 		for _, r := range rows {
 			got[r.IP] = r
 		}
-		if r := got["10.0.0.5"]; r.IfaceID != withMAC || r.DeviceID != parent || r.MAC == nil || *r.MAC != "aa:bb:cc:dd:ee:01" {
+		if r := got["10.0.0.5"]; r.IfaceID != withMAC || r.DeviceID != parent || r.MAC == nil || *r.MAC != "aa:bb:cc:dd:ee:01" ||
+			r.Hostname == nil || *r.Hostname != "host.lan" {
 			t.Errorf("10.0.0.5 row = %+v", r)
 		}
-		if r := got["10.0.0.6"]; r.IfaceID != noMAC || r.MAC != nil {
+		if r := got["10.0.0.6"]; r.IfaceID != noMAC || r.MAC != nil || r.Hostname != nil {
 			t.Errorf("10.0.0.6 row = %+v, want iface %d with no MAC", r, noMAC)
 		}
 	})
