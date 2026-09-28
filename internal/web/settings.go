@@ -20,13 +20,20 @@ import (
 )
 
 // settingsKeys is the fixed set of settings written by the integrations
-// form. proxmox_secret and pihole_password are handled specially: they're
+// form. The secrets among them (formSecrets) are handled specially: they're
 // never echoed back into the form, and posting a blank value keeps the
-// existing stored secret.
+// existing stored secret. The *_insecure keys are checkboxes.
 var settingsKeys = []string{
 	"proxmox_url", "proxmox_token_id", "proxmox_secret", "proxmox_insecure",
 	"wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path", "wg_ssh_known_hosts", "wg_iface",
 	"pihole_url", "pihole_password", "pihole_insecure",
+	"adguard_url", "adguard_user", "adguard_password", "adguard_insecure",
+	"opnsense_url", "opnsense_key", "opnsense_secret", "opnsense_insecure",
+}
+
+// formSecrets are the integrations form's credential fields.
+var formSecrets = map[string]bool{
+	"proxmox_secret": true, "pihole_password": true, "adguard_password": true, "opnsense_secret": true,
 }
 
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +93,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	}
 	values := make(map[string]string)
 	for _, k := range settingsKeys {
-		if k == "proxmox_secret" || k == "pihole_password" {
+		if formSecrets[k] {
 			// Never echo secrets back into the form.
 			continue
 		}
@@ -115,6 +122,8 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		"proxmox":   values["proxmox_url"] != "",
 		"wireguard": values["wg_ssh_addr"] != "",
 		"pihole":    values["pihole_url"] != "",
+		"adguard":   values["adguard_url"] != "",
+		"opnsense":  values["opnsense_url"] != "",
 	}
 	if !admin {
 		values = map[string]string{}
@@ -334,11 +343,11 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 	}
 	for _, k := range settingsKeys {
 		v := r.FormValue(k)
-		if (k == "proxmox_secret" || k == "pihole_password") && v == "" {
+		if formSecrets[k] && v == "" {
 			// Blank means "leave unchanged" — don't wipe the stored secret.
 			continue
 		}
-		if k == "proxmox_insecure" || k == "pihole_insecure" {
+		if strings.HasSuffix(k, "_insecure") {
 			// Normalize the checkbox ("on"/"") to the "1"/"" that main.go reads.
 			if v == "on" {
 				v = "1"

@@ -96,6 +96,47 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	}
 }
 
+// The AdGuard Home and OPNsense cards save like Pi-hole's: secrets are never
+// shown back, a blank one keeps the stored value, and the TLS checkbox
+// becomes "1". Both have Run now buttons and appear in the setup wizard.
+func TestDHCPSourceSettings(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetSetting(t.Context(), "adguard_password", "agsecret")
+	st.SetSetting(t.Context(), "opnsense_secret", "opnsecret")
+	rec := authedGet(t, srv, st, "/settings?tab=integrations")
+	body := rec.Body.String()
+	for _, secret := range []string{"agsecret", "opnsecret"} {
+		if strings.Contains(body, secret) {
+			t.Fatalf("secret %q rendered into the settings form", secret)
+		}
+	}
+	for _, want := range []string{`name="adguard_url"`, `name="opnsense_key"`,
+		`/settings/integrations/adguard/run`, `/settings/integrations/opnsense/run`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("settings page lacks %s", want)
+		}
+	}
+	authedPost(t, srv, st, "/settings/integrations", url.Values{
+		"adguard_url": {"http://adguard.lan"}, "adguard_user": {"admin"}, "adguard_password": {""},
+		"opnsense_url": {"https://fw.lan"}, "opnsense_key": {"k"}, "opnsense_secret": {""},
+		"opnsense_insecure": {"on"},
+	})
+	for k, want := range map[string]string{
+		"adguard_url": "http://adguard.lan", "adguard_user": "admin", "adguard_password": "agsecret",
+		"adguard_insecure": "", "opnsense_url": "https://fw.lan", "opnsense_key": "k",
+		"opnsense_secret": "opnsecret", "opnsense_insecure": "1",
+	} {
+		if v, _ := st.GetSetting(t.Context(), k); v != want {
+			t.Errorf("%s = %q, want %q", k, v, want)
+		}
+	}
+	wiz := authedGet(t, srv, st, "/welcome/integrations").Body.String()
+	if !strings.Contains(wiz, `name="adguard_url"`) || !strings.Contains(wiz, `name="opnsense_url"`) {
+		t.Error("setup wizard lacks the DHCP source fields")
+	}
+}
+
 // The WireGuard interface name ends up in a command the remote host's shell
 // runs, so a value that is not a plain interface name is refused at the form,
 // with nothing from that submission saved. Blank is allowed: it means wg0.

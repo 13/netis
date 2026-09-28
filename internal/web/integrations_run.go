@@ -12,6 +12,8 @@ var integrationTitles = map[string]string{
 	"proxmox":   "Proxmox",
 	"wireguard": "WireGuard",
 	"pihole":    "Pi-hole",
+	"adguard":   "AdGuard Home",
+	"opnsense":  "OPNsense",
 }
 
 // handleIntegrationRun triggers a single on-demand run of an integration and

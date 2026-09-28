@@ -15,10 +15,12 @@ import (
 	"syscall"
 	"time"
 
+	"netis/internal/adguard"
 	"netis/internal/buildinfo"
 	"netis/internal/config"
 	"netis/internal/events"
 	"netis/internal/notify"
+	"netis/internal/opnsense"
 	"netis/internal/pihole"
 	"netis/internal/proxmox"
 	"netis/internal/scan"
@@ -217,6 +219,42 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) *integrationRunn
 			count, detail := stats.Status()
 			return count, detail, nil
 		},
+		"adguard": func(ctx context.Context) (int, string, error) {
+			s, err := readSettings(ctx, st, "adguard_url", "adguard_user", "adguard_password", "adguard_insecure")
+			if err != nil {
+				return 0, "", err
+			}
+			if s["adguard_url"] == "" {
+				return 0, "", errNotConfigured
+			}
+			client := adguard.NewClient(s["adguard_url"], s["adguard_user"], s["adguard_password"],
+				s["adguard_insecure"] == "1")
+			defer client.Close()
+			stats, err := adguard.NewSync(st, client, evs).RunOnce(ctx)
+			if err != nil {
+				return 0, "", err
+			}
+			count, detail := stats.Status()
+			return count, detail, nil
+		},
+		"opnsense": func(ctx context.Context) (int, string, error) {
+			s, err := readSettings(ctx, st, "opnsense_url", "opnsense_key", "opnsense_secret", "opnsense_insecure")
+			if err != nil {
+				return 0, "", err
+			}
+			if s["opnsense_url"] == "" {
+				return 0, "", errNotConfigured
+			}
+			client := opnsense.NewClient(s["opnsense_url"], s["opnsense_key"], s["opnsense_secret"],
+				s["opnsense_insecure"] == "1")
+			defer client.Close()
+			stats, err := opnsense.NewSync(st, client, evs).RunOnce(ctx)
+			if err != nil {
+				return 0, "", err
+			}
+			count, detail := stats.Status()
+			return count, detail, nil
+		},
 		"wireguard": func(ctx context.Context) (int, string, error) {
 			s, err := readSettings(ctx, st, "wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path",
 				"wg_ssh_known_hosts", "wg_iface")
@@ -246,7 +284,7 @@ func newIntegrationRunner(st *store.Store, evs *events.Service) *integrationRunn
 }
 
 // integrationNames is the fixed set of integrations the periodic sync drives.
-var integrationNames = []string{"proxmox", "pihole", "wireguard"}
+var integrationNames = []string{"proxmox", "pihole", "adguard", "opnsense", "wireguard"}
 
 // startIntegrationSyncs periodically runs each integration from the current
 // settings so changes take effect without a restart. Each loop is tracked on

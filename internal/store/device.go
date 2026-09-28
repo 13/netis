@@ -184,7 +184,7 @@ func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, er
 }
 
 // AdoptDiscoveredIface moves an interface to toDeviceID when the device that
-// holds it was created by discovery (scan or Pi-hole) and the user has not
+// holds it was created by discovery (scan or a DHCP source) and the user has not
 // reviewed it. An integration that knows better what the interface belongs to
 // (a Proxmox guest recognised by its MAC) uses this to merge the two devices.
 //
@@ -203,7 +203,7 @@ func (s *Store) AdoptDiscoveredIface(ctx context.Context, ifaceID, toDeviceID in
 			return err
 		}
 		res, err := s.execOn(ctx, c, `UPDATE iface SET device_id=? WHERE id=? AND device_id IN
-			(SELECT id FROM device WHERE id=? AND source IN ('scan','pihole') AND reviewed=FALSE)`,
+			(SELECT id FROM device WHERE id=? AND source IN ('scan','pihole','adguard','opnsense') AND reviewed=FALSE)`,
 			toDeviceID, ifaceID, fromID)
 		if err != nil {
 			return err
@@ -294,6 +294,13 @@ func (s *Store) ClaimDHCPLease(ctx context.Context, ifaceID, subnetID int64, ip 
 // reservation upgrade an existing dhcp assignment to static without creating a
 // duplicate row.
 func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64, ip, kind string) error {
+	return s.UpsertIPAssignmentFrom(ctx, ifaceID, subnetID, ip, kind, "")
+}
+
+// UpsertIPAssignmentFrom is UpsertIPAssignment for an integration: a row it
+// inserts is labelled with source. An existing row keeps its label, so an
+// address the user (or another integration) recorded stays theirs.
+func (s *Store) UpsertIPAssignmentFrom(ctx context.Context, ifaceID, subnetID int64, ip, kind, source string) error {
 	var id int64
 	err := s.queryRow(ctx,
 		`SELECT id FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip=?`,
@@ -301,8 +308,8 @@ func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64,
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			_, err = s.exec(ctx,
-				`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
-				ifaceID, subnetID, ip, kind)
+				`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind,source) VALUES (?,?,?,?,?)`,
+				ifaceID, subnetID, ip, kind, source)
 			return err
 		}
 		return err
@@ -313,6 +320,20 @@ func (s *Store) UpsertIPAssignment(ctx context.Context, ifaceID, subnetID int64,
 		`UPDATE ip_assignment SET kind=? WHERE id=? AND NOT (kind='static' AND ?='dhcp')`,
 		kind, id, kind)
 	return err
+}
+
+// SetIfaceMACIfEmpty gives an interface that has no MAC the one an
+// integration saw at its address. It changes nothing when the interface
+// already has a MAC or another interface holds this one, and reports whether
+// it filled it.
+func (s *Store) SetIfaceMACIfEmpty(ctx context.Context, ifaceID int64, mac string) (bool, error) {
+	res, err := s.exec(ctx, `UPDATE iface SET mac=? WHERE id=? AND (mac IS NULL OR mac='')
+		AND NOT EXISTS (SELECT 1 FROM iface o WHERE o.mac=?)`, mac, ifaceID, mac)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // SetIfaceHostnameIfEmpty sets the interface hostname only when it is not

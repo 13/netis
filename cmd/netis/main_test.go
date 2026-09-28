@@ -92,6 +92,48 @@ func TestIntegrationRunnerReadsCurrentSettings(t *testing.T) {
 	}
 }
 
+// The DHCP lease integrations follow the same path: unconfigured records
+// nothing, configured against a dead address records a categorised failure.
+func TestIntegrationRunnerDHCPSources(t *testing.T) {
+	st := openTestStore(t)
+	runner := newIntegrationRunner(st, events.NewService(st, events.NewBroker()))
+	for _, name := range []string{"adguard", "opnsense"} {
+		if err := runner.Run(context.Background(), name); !errors.Is(err, errNotConfigured) {
+			t.Fatalf("unconfigured %s: got %v, want errNotConfigured", name, err)
+		}
+		if s := statusOf(t, st, name); s != nil {
+			t.Fatalf("unconfigured %s recorded status %+v", name, s)
+		}
+		if err := st.SetSetting(t.Context(), name+"_url", "http://127.0.0.1:9"); err != nil {
+			t.Fatal(err)
+		}
+		if err := runner.Run(context.Background(), name); err == nil || errors.Is(err, errNotConfigured) {
+			t.Fatalf("configured %s: got %v, want a failure", name, err)
+		}
+		if s := statusOf(t, st, name); s == nil || s.OK || s.Detail != "connection failed" {
+			t.Fatalf("%s status = %+v, want failing with connection failed", name, s)
+		}
+	}
+	for _, name := range []string{"adguard", "opnsense"} {
+		found := false
+		for _, n := range integrationNames {
+			found = found || n == name
+		}
+		if !found {
+			t.Errorf("%s is not driven by the periodic sync", name)
+		}
+	}
+}
+
+// An HTTP 401 from a lease source is filed under authentication failed.
+func TestFailureCategoryDHCPAuth(t *testing.T) {
+	for _, msg := range []string{"adguard /control/dhcp/status: HTTP 401", "opnsense /api/kea/leases4/search: HTTP 403"} {
+		if got := failureCategory(errors.New(msg)); got != "authentication failed" {
+			t.Errorf("%q -> %q", msg, got)
+		}
+	}
+}
+
 func TestIntegrationRunnerRecordsStatus(t *testing.T) {
 	st := openTestStore(t)
 	var fail atomic.Bool

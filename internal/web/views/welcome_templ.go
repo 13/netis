@@ -146,7 +146,7 @@ func WelcomeIntegrations(username string, values map[string]string) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<h1>Connect an integration</h1><p class=\"muted\">Optional — link Proxmox, WireGuard, or Pi-hole. You can do this later in Settings.</p><form method=\"post\" action=\"/welcome/integrations\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<h1>Connect an integration</h1><p class=\"muted\">Optional — link Proxmox, WireGuard, or a DHCP server (Pi-hole, AdGuard Home, OPNsense). You can do this later in Settings.</p><form method=\"post\" action=\"/welcome/integrations\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

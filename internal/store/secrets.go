@@ -18,7 +18,8 @@ const encPrefix = "enc:v1:"
 // than configuration. They are encrypted at rest when a key is configured;
 // everything else in the setting table is plain configuration and stays
 // readable, which keeps the table useful to look at with a SQL client.
-var SecretSettings = []string{"proxmox_secret", "pihole_password", "notify_webhook_auth", "notify_ntfy_token"}
+var SecretSettings = []string{"proxmox_secret", "pihole_password", "adguard_password", "opnsense_secret",
+	"notify_webhook_auth", "notify_ntfy_token"}
 
 func isSecretSetting(key string) bool {
 	for _, k := range SecretSettings {
