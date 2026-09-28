@@ -42,6 +42,25 @@ func TestRedirectToSetupWhenNoUsers(t *testing.T) {
 	}
 }
 
+// A session lookup that fails because the database is down is not a missing
+// session. Treating it as one bounced every signed-in user to the login page,
+// which looks like being logged out and hides the outage.
+func TestSessionLookupFailureIsNotALogout(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	authedGet(t, srv, st, "/") // admin + session "testtok"
+	st.Close()
+	for _, path := range []string{"/", "/api/status"} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "testtok"})
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s: code=%d loc=%q, want 503", path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+}
+
 func TestSetupCreatesAdminOnce(t *testing.T) {
 	srv, st := testServer(t)
 	form := url.Values{"username": {"ben"}, "password": {"secret123"}}
