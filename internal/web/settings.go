@@ -177,8 +177,20 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 			Uptime:  buildinfo.Uptime().String(),
 			Backend: string(s.store.Dialect()),
 			Now:     time.Now().UTC().Format(time.RFC3339),
+			Backup:  s.backupSummary(),
 		},
 	}, nil
+}
+
+// backupSummary is the About tab's line on scheduled backups.
+func (s *Server) backupSummary() string {
+	switch {
+	case s.backups != nil:
+		return s.backups.Status().Summary()
+	case s.store.Dialect() == store.Postgres:
+		return "not available on Postgres (use pg_dump)"
+	}
+	return "off (set NETIS_BACKUP_DIR)"
 }
 
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {

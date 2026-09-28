@@ -93,6 +93,21 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "netis_integration_last_ok{name=\"%s\"} %s\n", promLabelValue(it.Name), formatFloat(ok))
 	}
 
+	if s.backups != nil {
+		bs := s.backups.Status()
+		last, ok := 0.0, 0.0
+		if !bs.LastSuccess.IsZero() {
+			last = float64(bs.LastSuccess.Unix())
+		}
+		if bs.OK {
+			ok = 1
+		}
+		writeMetric(&b, "netis_last_backup_timestamp_seconds",
+			"Unix time the newest scheduled backup was written; 0 if none.", "gauge", "", last)
+		writeMetric(&b, "netis_last_backup_success",
+			"Whether the last scheduled backup succeeded.", "gauge", "", ok)
+	}
+
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Write([]byte(b.String()))
 }
