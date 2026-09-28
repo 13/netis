@@ -11,8 +11,9 @@ import (
 var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 
 // SettingsData is the view-model for the settings page. Values never contains
-// proxmox_secret or pihole_password — those fields always render blank so the
-// stored secrets are never echoed back.
+// an integration secret (proxmox_secret, pihole_password, adguard_password,
+// opnsense_secret) — those fields always render blank so the stored secrets
+// are never echoed back.
 type SettingsData struct {
 	Subnets []store.Subnet
 	Users   []store.User
@@ -108,6 +109,38 @@ templ piholeFields(values map[string]string) {
 	</label>
 }
 
+templ adguardFields(values map[string]string) {
+	<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
+	<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
+	<label>Password <input type="password" name="adguard_password" placeholder="leave blank to keep current password"/></label>
+	<label>
+		<input
+			type="checkbox"
+			name="adguard_insecure"
+			if values["adguard_insecure"] == "1" {
+				checked
+			}
+		/>
+		Skip TLS verification
+	</label>
+}
+
+templ opnsenseFields(values map[string]string) {
+	<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
+	<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
+	<label>API secret <input type="password" name="opnsense_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>
+		<input
+			type="checkbox"
+			name="opnsense_insecure"
+			if values["opnsense_insecure"] == "1" {
+				checked
+			}
+		/>
+		Skip TLS verification
+	</label>
+}
+
 // integrationsFields renders the plain fieldsets used by the onboarding welcome
 // page; its output must stay identical to the pre-split version.
 templ integrationsFields(values map[string]string) {
@@ -122,6 +155,14 @@ templ integrationsFields(values map[string]string) {
 	<fieldset>
 		<legend>Pi-hole (v6)</legend>
 		@piholeFields(values)
+	</fieldset>
+	<fieldset>
+		<legend>AdGuard Home</legend>
+		@adguardFields(values)
+	</fieldset>
+	<fieldset>
+		<legend>OPNsense</legend>
+		@opnsenseFields(values)
 	</fieldset>
 }
 
@@ -161,6 +202,14 @@ templ integrationsStatusTab(d SettingsData) {
 		<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)
 </div>
 	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Configured["adguard"], d.Statuses)
+</div>
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Configured["opnsense"], d.Statuses)
+</div>
+	</div>
 }
 
 templ integrationsTab(d SettingsData) {
@@ -181,6 +230,16 @@ templ integrationsTab(d SettingsData) {
 			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)
 <button type="button" class="ghost" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
 			@piholeFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Values["adguard_url"] != "", d.Statuses)
+<button type="button" class="ghost" hx-post="/settings/integrations/adguard/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+			@adguardFields(d.Values)
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Values["opnsense_url"] != "", d.Statuses)
+<button type="button" class="ghost" hx-post="/settings/integrations/opnsense/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+			@opnsenseFields(d.Values)
 		</div>
 		<button type="submit" class="primary">Save integrations</button>
 	</form>

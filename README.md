@@ -8,7 +8,8 @@ peers), their IPs and MACs, live online/offline status with last-seen
 tracking, background network scanning, and a per-subnet grid overview
 showing which IPs are online, offline, reserved, free, or conflicting. It
 integrates with Proxmox (auto-import of VMs/LXCs), Pi-hole (DHCP leases,
-reservations and local DNS names) and WireGuard (peer status via SSH). It ships as a single static Go binary with an embedded
+reservations and local DNS names), AdGuard Home and OPNsense (DHCP leases and
+reservations) and WireGuard (peer status via SSH). It ships as a single static Go binary with an embedded
 SQLite database — no external services required.
 
 ## Quick start
@@ -272,6 +273,12 @@ database's key/value settings table:
 | `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
 | `pihole_password` | Pi-hole app password (never shown back in the UI). Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
+| `adguard_url` | Base URL of AdGuard Home, e.g. `http://adguard.lan:3000`. |
+| `adguard_user`, `adguard_password` | AdGuard Home admin login. The password is encrypted at rest when `NETIS_SECRET_KEY` is set. |
+| `adguard_insecure` | `1` to skip TLS verification. |
+| `opnsense_url` | Base URL of the OPNsense web UI, e.g. `https://opnsense.lan`. |
+| `opnsense_key`, `opnsense_secret` | OPNsense API key and secret. The secret is encrypted at rest when `NETIS_SECRET_KEY` is set. |
+| `opnsense_insecure` | `1` to skip TLS verification. |
 | `notify_webhook_url`, `notify_ntfy_url` | Notification channels; blank disables one. See [Notifications](#notifications). |
 | `notify_webhook_auth`, `notify_ntfy_token` | Webhook `Authorization` header value and ntfy access token. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `notify_base_url` | netis's own URL, used to link messages to a device or the event log. |
@@ -295,7 +302,37 @@ before; static addresses are never removed. Pi-hole data never changes a device'
 stays driven by the scanner. IPs are only attached when they fall inside a
 subnet you've configured in netis.
 
-Each configured integration (Proxmox, Pi-hole, WireGuard) syncs once a minute
+### AdGuard Home and OPNsense
+
+Two more DHCP servers netis can read leases from, set in Settings →
+Integrations (or the setup wizard). Their leases and reservations are merged
+exactly like Pi-hole's — matched by MAC, reservations `static`, a moved lease
+dropping the old DHCP address, nothing you set overwritten — and devices they
+discover get source `adguard` or `opnsense`.
+
+- **AdGuard Home**: `adguard_url`, `adguard_user`, `adguard_password`,
+  `adguard_insecure`. netis reads `/control/dhcp/status` with the admin login.
+  Only AdGuard's built-in DHCP server is read; when it is switched off the
+  integration reports "DHCP server disabled in AdGuard Home" and changes
+  nothing.
+- **OPNsense**: `opnsense_url`, `opnsense_key`, `opnsense_secret`,
+  `opnsense_insecure`. Create an API key under System → Access → Users. netis
+  reads leases from Kea, ISC dhcpd or Dnsmasq — whichever has them, in that
+  order — and Kea reservations and ISC static mappings as reservations. The
+  key needs the privileges for the DHCP server in use (for example "Services:
+  Kea DHCP" or "Status: DHCP leases") and, optionally, "Diagnostics: ARP
+  Table".
+
+  With the ARP privilege netis also reads the firewall's ARP table, which
+  fills in MAC addresses on routed subnets where netis's own scan sees only
+  IPs: an interface at an address that has no MAC yet gets the one the
+  firewall saw there. It is careful about it — expired entries, a MAC seen at
+  several addresses, an address two devices claim and a MAC another device
+  already has are skipped, nothing is created from ARP, and a MAC that is set
+  is never changed. Without the privilege the leases still sync and the status
+  line says the ARP table was unavailable.
+
+Each configured integration (Proxmox, Pi-hole, AdGuard Home, OPNsense, WireGuard) syncs once a minute
 and on demand from Settings → Integrations → Run now. A run is cut off after
 30 seconds. Its result — connected with a count, or failing with a category
 (timeout, authentication failed, host key rejected, connection failed,
@@ -471,7 +508,8 @@ it.
 
 ## Encrypting stored credentials
 
-The Proxmox API token, the Pi-hole password and the notification credentials
+The Proxmox API token, the Pi-hole and AdGuard Home passwords, the OPNsense
+API secret and the notification credentials
 (webhook header, ntfy token) live in the database's `setting` table. Set
 `NETIS_SECRET_KEY` and they are encrypted there with AES-256-GCM instead:
 
@@ -778,7 +816,9 @@ pg_dump "$NETIS_DB" > /backups/netis-$(date +%F).sql
 - MAC address discovery only works for subnets on the same local L2
   segment as the netis host (it reads the kernel ARP table after pinging).
   Remote/routed subnets get ping-only scanning: online/offline status and
-  IP tracking work, but no MAC or vendor.
+  IP tracking work, but no MAC or vendor — unless a DHCP integration leases
+  those addresses, or the OPNsense integration can read the router's ARP
+  table.
 - WireGuard peer status is read by SSHing into the host running WireGuard
   and parsing `wg show dump`; it is not a local integration and requires
   a reachable SSH endpoint with a configured key.
