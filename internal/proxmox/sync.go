@@ -4,17 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"netis/internal/events"
 	"netis/internal/store"
 )
 
 type Sync struct {
-	store   *store.Store
-	client  *Client
-	events  *events.Service
-	failing bool
+	store  *store.Store
+	client *Client
+	events *events.Service
 }
 
 func NewSync(st *store.Store, c *Client, ev *events.Service) *Sync {
@@ -50,34 +48,10 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	return Stats{Guests: len(guests), Nodes: len(nodeIDs)}, nil
 }
 
-// runAndCount runs one cycle and returns the stats and error, so Start and
-// tests share exactly one code path.
-func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
-	return s.RunOnce(ctx)
-}
-
-// recordStatus writes the integration_status row and manages the
-// once-per-outage scan_error event.
-func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	st := store.IntegrationStatus{Name: "proxmox", LastRun: now}
-	if err != nil {
-		if !s.failing {
-			s.failing = true
-			s.events.Emit(ctx, "scan_error", nil, "proxmox sync failing: "+err.Error())
-		}
-		st.OK = false
-		st.Detail = err.Error()
-	} else {
-		s.failing = false
-		st.OK = true
-		st.ItemCount = stats.Guests
-		st.Detail = fmt.Sprintf("%d guests, %d nodes", stats.Guests, stats.Nodes)
-	}
-	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		slog.Error("proxmox status write", "err", serr)
-	}
-	s.events.Broker().Publish("dashboard", "refresh")
+// Status summarises a successful run for the integration status row: the
+// item count and the detail line shown on the settings page.
+func (stats Stats) Status() (int, string) {
+	return stats.Guests, fmt.Sprintf("%d guests, %d nodes", stats.Guests, stats.Nodes)
 }
 
 func (s *Sync) upsertNode(ctx context.Context, node string) (int64, error) {
@@ -134,18 +108,4 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 		}
 	}
 	return nil
-}
-
-func (s *Sync) Start(ctx context.Context, interval time.Duration) {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-	for {
-		stats, err := s.runAndCount(ctx)
-		s.recordStatus(ctx, stats, err)
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-	}
 }

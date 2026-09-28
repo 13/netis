@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -23,14 +24,89 @@ import (
 	"netis/internal/wireguard"
 )
 
-type integrationRunner map[string]func(context.Context) error
+// integrationRunTimeout bounds one integration run, so a hung remote host
+// (an SSH session that never answers, an API that never responds) cannot
+// stall that integration's loop or hold its lock forever.
+const integrationRunTimeout = 30 * time.Second
 
-func (r integrationRunner) Run(ctx context.Context, name string) error {
-	fn, ok := r[name]
+// integrationFunc runs one integration from the current settings and returns
+// the item count and detail line for its status row.
+type integrationFunc func(context.Context) (int, string, error)
+
+// integration is one named integration and its run state. mu is held for the
+// length of a run, so the periodic loop and Run now never overlap; failing is
+// guarded by it and remembers an ongoing outage so it is announced once.
+type integration struct {
+	run     integrationFunc
+	mu      sync.Mutex
+	failing bool
+}
+
+// integrationRunner is the single path every integration run takes, periodic
+// or Run now: it serialises runs per integration, applies the per-run
+// deadline, and records the outcome as the integration's status.
+type integrationRunner struct {
+	st      *store.Store
+	evs     *events.Service
+	timeout time.Duration
+	byName  map[string]*integration
+}
+
+func newRunner(st *store.Store, evs *events.Service, timeout time.Duration, funcs map[string]integrationFunc) *integrationRunner {
+	r := &integrationRunner{st: st, evs: evs, timeout: timeout, byName: make(map[string]*integration, len(funcs))}
+	for name, fn := range funcs {
+		r.byName[name] = &integration{run: fn}
+	}
+	return r
+}
+
+// Run runs the named integration once and records its status. It returns
+// web.ErrIntegrationBusy without waiting if that integration is already
+// running, and errNotConfigured — recording nothing — if it has no settings.
+func (r *integrationRunner) Run(ctx context.Context, name string) error {
+	in, ok := r.byName[name]
 	if !ok {
 		return fmt.Errorf("%s not configured", name)
 	}
-	return fn(ctx)
+	if !in.mu.TryLock() {
+		return web.ErrIntegrationBusy
+	}
+	defer in.mu.Unlock()
+
+	runCtx, cancel := context.WithTimeout(ctx, r.timeout)
+	count, detail, err := in.run(runCtx)
+	cancel()
+	if errors.Is(err, errNotConfigured) {
+		return err
+	}
+	// The run's context may have expired or been cancelled by shutdown; the
+	// status write gets its own short deadline so the outcome is still kept.
+	recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	r.recordStatus(recCtx, name, in, count, detail, err)
+	return err
+}
+
+// recordStatus writes the integration_status row and raises one scan_error
+// event per outage. The caller holds in.mu.
+func (r *integrationRunner) recordStatus(ctx context.Context, name string, in *integration, count int, detail string, err error) {
+	st := store.IntegrationStatus{Name: name, LastRun: time.Now().UTC().Format(time.RFC3339)}
+	if err != nil {
+		if !in.failing {
+			in.failing = true
+			r.evs.Emit(ctx, "scan_error", nil, name+" sync failing: "+err.Error())
+		}
+		st.Detail = err.Error()
+	} else {
+		in.failing = false
+		st.OK = true
+		st.ItemCount = count
+		st.Detail = detail
+	}
+	if serr := r.st.SetIntegrationStatus(ctx, st); serr != nil {
+		slog.Error("integration status write", "name", name, "err", serr)
+	}
+	r.evs.Broker().Publish("dashboard", "refresh")
 }
 
 var errNotConfigured = errors.New("not configured")
@@ -52,78 +128,94 @@ func readSettings(ctx context.Context, st *store.Store, keys ...string) (map[str
 	return out, nil
 }
 
-// newIntegrationRunner builds a run-now registry whose closures read the current
-// settings on each call, so "Run now" reflects settings saved after startup.
-func newIntegrationRunner(st *store.Store, evs *events.Service) integrationRunner {
-	return integrationRunner{
-		"proxmox": func(ctx context.Context) error {
+// newIntegrationRunner builds the runner for the real integrations. Each
+// closure reads the current settings on every call, so both the periodic sync
+// and "Run now" pick up settings saved after startup.
+func newIntegrationRunner(st *store.Store, evs *events.Service) *integrationRunner {
+	return newRunner(st, evs, integrationRunTimeout, map[string]integrationFunc{
+		"proxmox": func(ctx context.Context) (int, string, error) {
 			s, err := readSettings(ctx, st, "proxmox_url", "proxmox_token_id", "proxmox_secret", "proxmox_insecure")
 			if err != nil {
-				return err
+				return 0, "", err
 			}
 			if s["proxmox_url"] == "" {
-				return errNotConfigured
+				return 0, "", errNotConfigured
 			}
 			client := proxmox.NewClient(s["proxmox_url"], s["proxmox_token_id"],
 				s["proxmox_secret"], s["proxmox_insecure"] == "1")
-			_, err = proxmox.NewSync(st, client, evs).RunOnce(ctx)
-			return err
+			stats, err := proxmox.NewSync(st, client, evs).RunOnce(ctx)
+			if err != nil {
+				return 0, "", err
+			}
+			count, detail := stats.Status()
+			return count, detail, nil
 		},
-		"pihole": func(ctx context.Context) error {
+		"pihole": func(ctx context.Context) (int, string, error) {
 			s, err := readSettings(ctx, st, "pihole_url", "pihole_password", "pihole_insecure")
 			if err != nil {
-				return err
+				return 0, "", err
 			}
 			if s["pihole_url"] == "" {
-				return errNotConfigured
+				return 0, "", errNotConfigured
 			}
 			client := pihole.NewClient(s["pihole_url"], s["pihole_password"], s["pihole_insecure"] == "1")
-			_, err = pihole.NewSync(st, client, evs).RunOnce(ctx)
-			return err
+			stats, err := pihole.NewSync(st, client, evs).RunOnce(ctx)
+			if err != nil {
+				return 0, "", err
+			}
+			count, detail := stats.Status()
+			return count, detail, nil
 		},
-		"wireguard": func(ctx context.Context) error {
+		"wireguard": func(ctx context.Context) (int, string, error) {
 			s, err := readSettings(ctx, st, "wg_ssh_addr", "wg_ssh_user", "wg_ssh_key_path",
 				"wg_ssh_known_hosts", "wg_iface")
 			if err != nil {
-				return err
+				return 0, "", err
 			}
 			addr, user, key := s["wg_ssh_addr"], s["wg_ssh_user"], s["wg_ssh_key_path"]
 			knownHosts, iface := s["wg_ssh_known_hosts"], s["wg_iface"]
 			if addr == "" {
-				return errNotConfigured
+				return 0, "", errNotConfigured
 			}
 			if iface == "" {
 				iface = "wg0"
 			}
 			sshRunner, err := wireguard.NewSSHRunner(addr, user, key, knownHosts)
 			if err != nil {
-				return err
+				return 0, "", err
 			}
-			_, err = wireguard.NewSync(st, sshRunner, evs, iface).RunOnce(ctx)
-			return err
+			stats, err := wireguard.NewSync(st, sshRunner, evs, iface).RunOnce(ctx)
+			if err != nil {
+				return 0, "", err
+			}
+			count, detail := stats.Status()
+			return count, detail, nil
 		},
-	}
+	})
 }
 
 // integrationNames is the fixed set of integrations the periodic sync drives.
 var integrationNames = []string{"proxmox", "pihole", "wireguard"}
 
 // startIntegrationSyncs periodically runs each integration from the current
-// settings so changes take effect without a restart.
-func startIntegrationSyncs(ctx context.Context, runNow integrationRunner, interval time.Duration) {
+// settings so changes take effect without a restart. Each loop is tracked on
+// wg so shutdown can wait for an in-flight run before closing the store.
+func startIntegrationSyncs(ctx context.Context, wg *sync.WaitGroup, runNow *integrationRunner, interval time.Duration) {
 	for _, name := range integrationNames {
-		go runIntegrationLoop(ctx, runNow, name, interval)
+		wg.Go(func() { runIntegrationLoop(ctx, runNow, name, interval) })
 	}
 }
 
 // runIntegrationLoop runs one integration immediately, then every interval,
 // reading current settings each time. An unconfigured integration
-// (errNotConfigured) is skipped silently; other errors are logged.
-func runIntegrationLoop(ctx context.Context, runNow integrationRunner, name string, interval time.Duration) {
+// (errNotConfigured) is skipped silently, as is a tick that finds a Run now
+// still in progress; other errors are logged.
+func runIntegrationLoop(ctx context.Context, runNow *integrationRunner, name string, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		if err := runNow.Run(ctx, name); err != nil && !errors.Is(err, errNotConfigured) {
+		if err := runNow.Run(ctx, name); err != nil && !errors.Is(err, errNotConfigured) &&
+			!errors.Is(err, web.ErrIntegrationBusy) {
 			slog.Error("integration run failed", "name", name, "err", err)
 		}
 		select {
@@ -210,9 +302,12 @@ func main() {
 	sched := scan.NewScheduler(engine, st)
 	go sched.Start(ctx)
 
+	// Background loops that write to the store; shutdown waits on bg before
+	// the deferred st.Close().
+	var bg sync.WaitGroup
 	runNow := newIntegrationRunner(st, evs)
-	startIntegrationSyncs(ctx, runNow, time.Minute)
-	startRetention(ctx, st, retentionInterval)
+	startIntegrationSyncs(ctx, &bg, runNow, time.Minute)
+	startRetention(ctx, &bg, st, retentionInterval)
 
 	srv := &http.Server{
 		Addr: cfg.Addr,
@@ -243,8 +338,9 @@ func main() {
 		slog.Error("shutdown", "err", err)
 		srv.Close()
 	}
-	// Scans run in their own goroutines, and the deferred st.Close() is next:
-	// wait for the sweeps the cancelled context is unwinding so none of them
-	// writes into a closed database.
+	// Scans, integration syncs and retention run in their own goroutines, and
+	// the deferred st.Close() is next: wait for the work the cancelled context
+	// is unwinding so none of it writes into a closed database.
 	sched.Wait()
+	bg.Wait()
 }

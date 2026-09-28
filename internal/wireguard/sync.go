@@ -3,7 +3,6 @@ package wireguard
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/netip"
 	"strings"
 	"time"
@@ -15,11 +14,10 @@ import (
 const onlineWindow = 3 * time.Minute
 
 type Sync struct {
-	store   *store.Store
-	runner  Runner
-	events  *events.Service
-	iface   string
-	failing bool
+	store  *store.Store
+	runner Runner
+	events *events.Service
+	iface  string
 }
 
 func NewSync(st *store.Store, r Runner, ev *events.Service, iface string) *Sync {
@@ -52,30 +50,10 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	return Stats{Peers: len(peers)}, nil
 }
 
-func (s *Sync) runAndCount(ctx context.Context) (Stats, error) {
-	return s.RunOnce(ctx)
-}
-
-func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	st := store.IntegrationStatus{Name: "wireguard", LastRun: now}
-	if err != nil {
-		if !s.failing {
-			s.failing = true
-			s.events.Emit(ctx, "scan_error", nil, "wireguard sync failing: "+err.Error())
-		}
-		st.OK = false
-		st.Detail = err.Error()
-	} else {
-		s.failing = false
-		st.OK = true
-		st.ItemCount = stats.Peers
-		st.Detail = fmt.Sprintf("%d peers", stats.Peers)
-	}
-	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
-		slog.Error("wireguard status write", "err", serr)
-	}
-	s.events.Broker().Publish("dashboard", "refresh")
+// Status summarises a successful run for the integration status row: the
+// item count and the detail line shown on the settings page.
+func (stats Stats) Status() (int, string) {
+	return stats.Peers, fmt.Sprintf("%d peers", stats.Peers)
 }
 
 func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, now time.Time) error {
@@ -148,25 +126,6 @@ func (s *Sync) assignAllowedIPs(ctx context.Context, ifaceID int64, p Peer, subn
 				continue
 			}
 			s.store.AssignIP(ctx, ifaceID, sn.ID, addr.String(), "static")
-		}
-	}
-}
-
-func (s *Sync) Start(ctx context.Context, interval time.Duration) {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-	for {
-		// Bound each cycle so a hung `wg show dump` over SSH can't stall the
-		// poller forever; a deadline surfaces as a RunOnce error and is
-		// recorded as a failing status.
-		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		stats, err := s.runAndCount(cctx)
-		s.recordStatus(cctx, stats, err)
-		cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-tick.C:
 		}
 	}
 }
