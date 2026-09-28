@@ -348,6 +348,18 @@ templ generalTab(d SettingsData) {
 			<div class="sc-head"><h3>Availability</h3></div>
 			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
 			<p class="muted" style="margin:6px 0 4px">A device is marked offline after this many consecutive missed scans.</p>
+			<label>Presence without ping
+				<select name="presence_fallback">
+					if d.Values["presence_fallback"] != "off" {
+						<option value="on" selected>Enabled</option>
+						<option value="off">Disabled</option>
+					} else {
+						<option value="on">Enabled</option>
+						<option value="off" selected>Disabled</option>
+					}
+				</select>
+			</label>
+			<p class="muted" style="margin:6px 0 4px">On directly attached subnets, a host that ignores ping but answers ARP (confirmed by a TCP connect or a second ARP check) counts as seen.</p>
 		</div>
 		<div class="setting-card">
 			<div class="sc-head"><h3>Defaults for new subnets</h3></div>

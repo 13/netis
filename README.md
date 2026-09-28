@@ -130,6 +130,31 @@ lacks permission to open ICMP sockets), the sweep is reported as a scan
 error on the dashboard and in Events, and device states are left as they
 were rather than counted as misses.
 
+## Discovery
+
+- **Hosts that ignore ping.** Sleeping phones, Windows with its firewall on
+  and a lot of IoT gear drop ICMP. On a directly attached subnet the sweep's
+  pings still make the kernel ARP for every address, so a host that answers
+  ARP ends up with a complete entry in `/proc/net/arp`. Such a host is
+  counted as seen when a TCP connect to one of ports 22, 80, 443, 445, 62078
+  or 8080 is accepted or refused (400 ms), or, failing that, when its ARP
+  entry still resolves to the same MAC about 9 seconds after the sweep, by
+  which time the kernel has re-probed a stale entry and dropped it if nobody
+  answered. A host that left within the last half minute can therefore look
+  present for one more sweep. Turn it off with **Presence without ping** in
+  Settings > General. Routed subnets have no ARP entries, so it does nothing
+  there.
+- **Randomized MACs.** A MAC with the locally administered bit set (phones'
+  "Private Wi-Fi Address") gets a *private MAC* badge on the device list and
+  page, and `private_mac` in the API. A new device on one is named
+  `private-<mac>` and its event says it may be a phone. The QEMU/KVM
+  (`52:54:00`) and Docker (`02:42`) prefixes are not counted.
+- **Names.** Reverse DNS first, then an mDNS reverse lookup (a PTR query to
+  `224.0.0.251:5353` asking for a unicast answer), which is where Apple
+  devices, printers and Avahi hosts name themselves. Lookups run 16 at a time;
+  an address that returned no name is retried after 30 minutes. A discovered
+  name only fills an interface hostname that is empty.
+
 ## Proxmox LXC install
 
 1. Build the static binary as above (or download a prebuilt one) and copy
@@ -190,6 +215,7 @@ database's key/value settings table:
 | Key | Meaning |
 | --- | --- |
 | `offline_after` | Consecutive missed scan sweeps before a device is marked offline (default 3). |
+| `presence_fallback` | `on` (default) or `off`: count hosts that ignore ping but answer ARP as seen. See [Discovery](#discovery). |
 | `event_retention_days` | Days of event history to keep, swept every 6h; `0` keeps everything (default 30). |
 | `availability_retention_days` | Days of availability history to keep (default 365). One row per interface per hour, so this is the fastest-growing table. |
 | `proxmox_url` | Base URL of the Proxmox API, e.g. `https://pve.local:8006`. |
@@ -253,7 +279,7 @@ A read-only JSON API, authenticated with the same session cookie the pages use:
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/devices` | every device with its IPs, MACs, tags and online state |
+| `GET /api/devices` | every device with its IPs, MACs, tags and online state; `private_mac` is true when a MAC is randomized |
 | `GET /api/devices/{id}` | one device |
 | `GET /api/subnets` | configured subnets |
 | `GET /api/events?limit=N` | recent events, newest first (default 100, max 1000) |
@@ -464,7 +490,9 @@ pg_dump "$NETIS_DB" > /backups/netis-$(date +%F).sql
   and parsing `wg show dump`; it is not a local integration and requires
   a reachable SSH endpoint with a configured key.
 - Port scanning is on-demand per device only (the button on the device
-  page); netis never automatically scans ports across a subnet.
+  page); netis never automatically scans ports across a subnet. The only
+  automatic TCP connects are the six-port presence checks on hosts that
+  answered ARP but not ping.
 - Proxmox guest IPs depend on the QEMU guest agent being installed and
   running in the VM; without it, only the guest's configured MAC/bridge
   is known, not its IP.

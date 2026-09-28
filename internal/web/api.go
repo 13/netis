@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"netis/internal/buildinfo"
+	"netis/internal/macaddr"
 	"netis/internal/store"
 )
 
@@ -37,7 +38,10 @@ type apiDevice struct {
 	LastSeen *string  `json:"last_seen"`
 	IPs      []apiIP  `json:"ips"`
 	MACs     []string `json:"macs"`
-	Tags     []string `json:"tags"`
+	// PrivateMAC is set when any MAC is a randomized (locally administered)
+	// address, typically a phone's per-network private Wi-Fi address.
+	PrivateMAC bool     `json:"private_mac"`
+	Tags       []string `json:"tags"`
 	ParentID *int64   `json:"parent_device_id,omitempty"`
 	VMID     *int64   `json:"proxmox_vmid,omitempty"`
 }
@@ -67,7 +71,7 @@ func toAPIDevice(row store.DeviceRow) apiDevice {
 		Vendor: row.Vendor, Model: row.Model, Function: row.Function,
 		Notes: row.Notes, Icon: row.Icon, Reviewed: row.Reviewed,
 		Online: row.Online, LastSeen: row.LastSeen,
-		IPs: ips, MACs: macs, Tags: tags,
+		IPs: ips, MACs: macs, PrivateMAC: macaddr.AnyPrivate(macs), Tags: tags,
 		ParentID: row.ParentDeviceID, VMID: row.ProxmoxVMID,
 	}
 }

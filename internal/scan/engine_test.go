@@ -430,3 +430,58 @@ func TestSweepErrorAppliesNoMisses(t *testing.T) {
 		t.Fatalf("events=%+v", evs)
 	}
 }
+
+// TestPrivateMACNewDevice covers a phone with a randomized address: the
+// device is named for it and the event explains the MAC will not be stable.
+func TestPrivateMACNewDevice(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	e.ARP = func() (map[string]string, error) {
+		return map[string]string{"10.0.0.9": "da:a1:19:00:00:01"}, nil
+	}
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := st.ListDevices(t.Context())
+	if len(rows) != 1 || rows[0].Name != "private-da:a1:19:00:00:01" {
+		t.Fatalf("devices=%+v", rows)
+	}
+	evs, _ := st.ListEvents(t.Context(), 1)
+	if len(evs) != 1 || !strings.Contains(evs[0].Details, "randomized MAC") {
+		t.Fatalf("events=%+v", evs)
+	}
+}
+
+// TestSweepFillsEmptyHostnameOnly covers name discovery for devices that are
+// already known: a nameless iface gets the discovered name, one that has a
+// hostname keeps it.
+func TestSweepFillsEmptyHostnameOnly(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	e.ARP = func() (map[string]string, error) {
+		return map[string]string{"10.0.0.9": "aa:00:00:00:00:09", "10.0.0.10": "aa:00:00:00:00:10"}, nil
+	}
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true}, {IP: "10.0.0.10", Alive: true}}
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	named, _, _ := st.FindIfaceByMAC(t.Context(), "aa:00:00:00:00:10")
+	if err := st.SetIfaceHostnameIfEmpty(t.Context(), named.ID, "user-set"); err != nil {
+		t.Fatal(err)
+	}
+
+	e.Resolve = func(ctx context.Context, ip string) string { return "found-" + ip }
+	e.nameMiss = nil // forget the first sweep's misses instead of waiting them out
+	if err := e.RunSubnet(context.Background(), sn); err != nil {
+		t.Fatal(err)
+	}
+	a, _, _ := st.FindIfaceByMAC(t.Context(), "aa:00:00:00:00:09")
+	if a.Hostname == nil || *a.Hostname != "found-10.0.0.9" {
+		t.Fatalf("empty hostname not filled: %v", a.Hostname)
+	}
+	b, _, _ := st.FindIfaceByMAC(t.Context(), "aa:00:00:00:00:10")
+	if b.Hostname == nil || *b.Hostname != "user-set" {
+		t.Fatalf("existing hostname overwritten: %v", b.Hostname)
+	}
+}

@@ -344,6 +344,10 @@ func main() {
 		Sweeper: scan.NewICMPSweeper(64),
 		ARP:     scan.ReadARPTable,
 		Resolve: scan.ResolveName,
+		// Hosts that drop ping but answered ARP are confirmed by TCP, or by
+		// their ARP entry surviving the kernel's re-probe.
+		Presence:  scan.TCPProbe,
+		ARPSettle: scan.DefaultARPSettle,
 	}
 	sched := scan.NewScheduler(engine, st)
 	go sched.Start(ctx)

@@ -26,3 +26,16 @@ func TestParseARPTable(t *testing.T) {
 		t.Error("incomplete entry must be skipped")
 	}
 }
+
+// TestParseARPTableNeedsComplete keeps entries without ATF_COM out: a
+// permanent-but-unresolved or failed entry says nothing about a live host.
+func TestParseARPTableNeedsComplete(t *testing.T) {
+	m := ParseARPTable(strings.NewReader(`IP address       HW type     Flags       HW address            Mask     Device
+10.0.0.2         0x1         0x4         aa:bb:cc:00:00:02     *        eth0
+10.0.0.3         0x1         0x6         aa:bb:cc:00:00:03     *        eth0
+10.0.0.4         0x1         junk        aa:bb:cc:00:00:04     *        eth0
+`))
+	if len(m) != 1 || m["10.0.0.3"] != "aa:bb:cc:00:00:03" {
+		t.Fatalf("m=%v", m)
+	}
+}

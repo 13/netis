@@ -68,7 +68,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	values["offline_after"] = offlineAfter
 
 	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled",
-		"event_retention_days", "availability_retention_days"} {
+		"event_retention_days", "availability_retention_days", "presence_fallback"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			s.fail(w, r, err)
@@ -400,6 +400,16 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	if v := r.FormValue("presence_fallback"); v != "" {
+		if v != "on" && v != "off" {
+			http.Error(w, "bad presence fallback", 400)
+			return
+		}
+		if err := s.store.SetSetting(r.Context(), "presence_fallback", v); err != nil {
 			s.fail(w, r, err)
 			return
 		}
