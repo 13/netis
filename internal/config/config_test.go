@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -139,6 +140,37 @@ func TestParseSecretKey(t *testing.T) {
 	} {
 		if _, err := ParseSecretKey(in); err == nil {
 			t.Errorf("ParseSecretKey(%q): want error", in)
+		}
+	}
+}
+
+func TestLoadBackupSettings(t *testing.T) {
+	// Unset: off, with the defaults ready for when a directory is given.
+	t.Setenv("NETIS_BACKUP_DIR", "")
+	t.Setenv("NETIS_BACKUP_INTERVAL", "")
+	t.Setenv("NETIS_BACKUP_KEEP", "")
+	c := Load()
+	if c.BackupDir != "" || c.BackupInterval != 24*time.Hour || c.BackupKeep != 7 {
+		t.Errorf("defaults = %q %v %d", c.BackupDir, c.BackupInterval, c.BackupKeep)
+	}
+
+	t.Setenv("NETIS_BACKUP_DIR", "/data/backups")
+	t.Setenv("NETIS_BACKUP_INTERVAL", "6h")
+	t.Setenv("NETIS_BACKUP_KEEP", "14")
+	c = Load()
+	if c.BackupDir != "/data/backups" || c.BackupInterval != 6*time.Hour || c.BackupKeep != 14 {
+		t.Errorf("from env = %q %v %d", c.BackupDir, c.BackupInterval, c.BackupKeep)
+	}
+
+	// Garbage, a zero keep and a too-short interval fall back to the defaults.
+	for _, tc := range []struct{ interval, keep string }{
+		{"daily", "lots"}, {"1s", "0"}, {"-1h", "-3"},
+	} {
+		t.Setenv("NETIS_BACKUP_INTERVAL", tc.interval)
+		t.Setenv("NETIS_BACKUP_KEEP", tc.keep)
+		c = Load()
+		if c.BackupInterval != DefaultBackupInterval || c.BackupKeep != DefaultBackupKeep {
+			t.Errorf("%+v: got %v %d, want defaults", tc, c.BackupInterval, c.BackupKeep)
 		}
 	}
 }

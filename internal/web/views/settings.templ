@@ -37,6 +37,7 @@ type AboutData struct {
 	Uptime  string
 	Backend string // "sqlite" or "postgres"
 	Now     string
+	Backup  string // scheduled backup status, one line
 }
 
 templ tabLink(active, tab, label string) {
@@ -443,6 +444,7 @@ templ aboutTab(a AboutData) {
 					@aboutRow("Database", a.Backend)
 					@aboutRow("Uptime", a.Uptime)
 					@aboutRow("Server time", a.Now)
+					@aboutRow("Last backup", a.Backup)
 				</tbody>
 			</table>
 		</div>

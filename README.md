@@ -176,6 +176,9 @@ Environment variables:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NETIS_ADDR` | `:8080` | HTTP listen address. |
+| `NETIS_BACKUP_DIR` | unset | Directory the server writes scheduled SQLite backups to. Unset turns them off. See [Scheduled backups](#scheduled-backups). |
+| `NETIS_BACKUP_INTERVAL` | `24h` | Time between scheduled backups (a Go duration: `6h`, `90m`). Values under `1m` or unparseable fall back to the default. |
+| `NETIS_BACKUP_KEEP` | `7` | Scheduled backups kept; older ones are deleted. |
 | `NETIS_DB` | `netis.db` | Database to use. A path selects SQLite; a `postgres://` URL selects Postgres. See [Database backends](#database-backends). |
 | `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
 | `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
@@ -263,8 +266,9 @@ Nothing here writes: state changes go through the UI's form posts, where the
 role checks and cross-origin protection live.
 
 `GET /metrics` serves the Prometheus text format — device and subnet counts,
-how many devices are online, and when each integration last ran and whether it
-worked. It needs a session too, unless you set a scrape token:
+how many devices are online, when each integration last ran and whether it
+worked, and — with [scheduled backups](#scheduled-backups) on —
+`netis_last_backup_timestamp_seconds` and `netis_last_backup_success`. It needs a session too, unless you set a scrape token:
 
 ```sh
 NETIS_METRICS_TOKEN="$(openssl rand -hex 16)" ./netis
@@ -423,10 +427,48 @@ WantedBy=timers.target
 ```
 
 Enable it with `systemctl enable --now netis-backup.timer`. Neither prunes old
-backups; delete them on whatever schedule suits you, and copy them off the
-machine.
+backups (the [scheduled backups](#scheduled-backups) below do); delete them on
+whatever schedule suits you, and copy them off the machine.
 
-To restore a SQLite backup:
+### Scheduled backups
+
+netis can take these snapshots itself. Set `NETIS_BACKUP_DIR` and the server
+writes `netis-YYYYMMDD-HHMMSS.db` (UTC) there every `NETIS_BACKUP_INTERVAL`
+(default `24h`), keeping the newest `NETIS_BACKUP_KEEP` (default `7`). Each
+file is the same `VACUUM INTO` snapshot as `netis backup`, taken through the
+server's own database connection, written under a temporary name and renamed
+into place once complete, so a crash never leaves a half-written backup.
+Pruning only deletes files matching that name pattern; anything else in the
+directory is left alone.
+
+The first backup is due one interval after the newest one already in the
+directory, so restarts do not take extra backups and an instance that was
+stopped for longer catches up at once. A failed backup is retried after at most
+an hour, logged in full, and announced once as a `scan_error` event. Settings →
+About shows the last backup (or the failure), and `/metrics` exports
+`netis_last_backup_timestamp_seconds` and `netis_last_backup_success` for
+alerting on stale backups.
+
+In Docker, point it at a directory on a volume — ideally a different one from
+the database, so it can be copied off or mounted from the host:
+
+```sh
+docker run -d --name netis \
+  --network host \
+  -v netis-data:/data \
+  -v /srv/backups/netis:/backups \
+  -e NETIS_DB=/data/netis.db \
+  -e NETIS_BACKUP_DIR=/backups \
+  ghcr.io/13/netis:latest
+```
+
+With Postgres the setting is ignored with a warning at startup: use `pg_dump`
+(below). Restore a scheduled backup exactly like a manual one; see
+[Restoring a backup](#restoring-a-backup).
+
+### Restoring a backup
+
+To restore a SQLite backup (manual or scheduled):
 
 1. Stop netis (`systemctl stop netis`, or `docker stop netis`).
 2. Copy the backup over the database file, e.g.
@@ -440,6 +482,10 @@ To restore a SQLite backup:
 4. Start netis again and check the dashboard and device list. If
    `NETIS_SECRET_KEY` was set when the backup was taken, the same key must be
    set now (see [Encrypting stored credentials](#encrypting-stored-credentials)).
+
+With the Docker example from [Scheduled backups](#scheduled-backups), mount
+both volumes in step 2:
+`docker run --rm -v netis-data:/data -v /srv/backups/netis:/backups alpine sh -c 'cp /backups/netis-20260928-031500.db /data/netis.db && rm -f /data/netis.db-wal /data/netis.db-shm'`.
 
 A backup from an older release is fine: netis migrates it forward on start.
 

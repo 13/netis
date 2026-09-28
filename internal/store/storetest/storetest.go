@@ -37,6 +37,17 @@ func EachDialect(t *testing.T, fn func(t *testing.T, st *store.Store)) {
 	})
 }
 
+// Postgres returns a store on a scratch Postgres schema, skipping the test
+// when NETIS_TEST_PG_DSN is not set.
+func Postgres(t *testing.T) *store.Store {
+	t.Helper()
+	dsn := os.Getenv("NETIS_TEST_PG_DSN")
+	if dsn == "" {
+		t.Skip("NETIS_TEST_PG_DSN not set")
+	}
+	return openPGSchema(t, dsn)
+}
+
 // openPGSchema creates a scratch schema on the server named by dsn, returns a
 // store whose search_path points at it, and drops the schema afterwards.
 func openPGSchema(t *testing.T, dsn string) *store.Store {

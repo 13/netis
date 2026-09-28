@@ -354,12 +354,14 @@ func main() {
 	runNow := newIntegrationRunner(st, evs)
 	startIntegrationSyncs(ctx, &bg, runNow, time.Minute)
 	startRetention(ctx, &bg, st, retentionInterval)
+	backups := startBackups(ctx, &bg, cfg, st, evs)
 
 	srv := &http.Server{
 		Addr: cfg.Addr,
 		Handler: web.NewServer(st, broker, sched, runNow, web.Options{
 			TrustedProxies: trustedProxies,
 			MetricsToken:   cfg.MetricsToken,
+			Backups:        backups,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		// ReadTimeout bounds reading the whole request, so a client cannot
@@ -389,7 +391,7 @@ func main() {
 		slog.Error("shutdown", "err", err)
 		srv.Close()
 	}
-	// Scans, integration syncs and retention run in their own goroutines, and
+	// Scans, integration syncs, retention and backups run in their own goroutines, and
 	// the deferred st.Close() is next: wait for the work the cancelled context
 	// is unwinding so none of it writes into a closed database.
 	sched.Wait()

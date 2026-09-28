@@ -13,6 +13,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"netis/internal/backup"
 	"netis/internal/events"
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -38,6 +39,11 @@ type IntegrationRunner interface {
 // overlapping sync.
 var ErrIntegrationBusy = errors.New("integration already running")
 
+// BackupStatus reports on scheduled backups. *backup.Scheduler satisfies it.
+type BackupStatus interface {
+	Status() backup.Status
+}
+
 // Options carries deployment settings that are not stored in the database
 // because they describe the environment netis runs in, not the network it
 // tracks.
@@ -50,6 +56,9 @@ type Options struct {
 	// without a session. Empty means /metrics needs a logged-in session, which
 	// no scraper has.
 	MetricsToken string
+	// Backups reports on scheduled backups for the About tab and /metrics.
+	// Nil means scheduled backups are off.
+	Backups BackupStatus
 }
 
 type Server struct {
@@ -66,6 +75,7 @@ type Server struct {
 
 	trustedProxies []netip.Prefix
 	metricsToken   string
+	backups        BackupStatus
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
@@ -80,6 +90,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		detect:         netdetect.DetectSubnets,
 		trustedProxies: o.TrustedProxies,
 		metricsToken:   o.MetricsToken,
+		backups:        o.Backups,
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))

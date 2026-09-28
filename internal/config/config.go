@@ -8,6 +8,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
+)
+
+// Scheduled backup defaults: one snapshot a day, a week of them kept.
+const (
+	DefaultBackupInterval = 24 * time.Hour
+	DefaultBackupKeep     = 7
+	// minBackupInterval stops a typo like "1s" from turning the backup loop
+	// into a disk-filling busy loop.
+	minBackupInterval = time.Minute
 )
 
 type Config struct {
@@ -31,6 +41,13 @@ type Config struct {
 	// hex that encrypts the credential settings at rest. Parse it with
 	// ParseSecretKey.
 	SecretKey string
+	// BackupDir is NETIS_BACKUP_DIR, where the server writes its scheduled
+	// SQLite backups. Empty turns scheduled backups off.
+	BackupDir string
+	// BackupInterval (NETIS_BACKUP_INTERVAL) is the time between scheduled
+	// backups, and BackupKeep (NETIS_BACKUP_KEEP) how many are kept.
+	BackupInterval time.Duration
+	BackupKeep     int
 }
 
 func Load() Config {
@@ -46,6 +63,15 @@ func Load() Config {
 	c.TrustedProxies = os.Getenv("NETIS_TRUSTED_PROXIES")
 	c.SecretKey = os.Getenv("NETIS_SECRET_KEY")
 	c.MetricsToken = os.Getenv("NETIS_METRICS_TOKEN")
+	c.BackupDir = os.Getenv("NETIS_BACKUP_DIR")
+	c.BackupInterval = DefaultBackupInterval
+	if d, err := time.ParseDuration(os.Getenv("NETIS_BACKUP_INTERVAL")); err == nil && d >= minBackupInterval {
+		c.BackupInterval = d
+	}
+	c.BackupKeep = DefaultBackupKeep
+	if n := envInt("NETIS_BACKUP_KEEP"); n > 0 {
+		c.BackupKeep = n
+	}
 	return c
 }
 
