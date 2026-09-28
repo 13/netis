@@ -9,3 +9,7 @@ netis.db-wal
 
 # subagent-driven-development runtime scratch (ledger, briefs, reviews)
 .superpowers/sdd/
+
+# coverage output (CI writes these)
+cover*.out
+test-output.txt
