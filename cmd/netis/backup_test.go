@@ -104,3 +104,25 @@ func TestBackupRequiresDestination(t *testing.T) {
 		t.Fatal("-to is required")
 	}
 }
+
+// The pg_dump hint used to quote the whole URL, password included, into an
+// error that lands in a terminal or a CI log.
+func TestBackupPostgresHintRedactsPassword(t *testing.T) {
+	for _, dsn := range []string{
+		"postgres://netis:hunter2@db.lan/netis",
+		"postgres://db.lan/netis?sslmode=disable&password=hunter2",
+	} {
+		err := runBackup(context.Background(), []string{"-from", dsn, "-to", t.TempDir() + "/x.db"})
+		if err == nil || strings.Contains(err.Error(), "hunter2") {
+			t.Fatalf("err = %v, want the password redacted", err)
+		}
+	}
+}
+
+// -to must be a Postgres URL; a mistyped one still carries its password.
+func TestMigrateDBBadDestinationRedactsPassword(t *testing.T) {
+	err := runMigrateDB(context.Background(), []string{"-from", "x.db", "-to", "postgre://netis:hunter2@db.lan/netis"})
+	if err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Fatalf("err = %v, want the password redacted", err)
+	}
+}
