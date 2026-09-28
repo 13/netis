@@ -101,29 +101,39 @@ func Open(dsn string, opts ...Options) (*Store, error) {
 	return s, nil
 }
 
+// sqlitePragmas are applied by the driver to every connection it opens, not
+// once through db.Exec, which reaches only whichever pooled connection runs it.
+// The pool is held to one connection, but database/sql still replaces that
+// connection when the driver reports it bad, and the replacement would come up
+// with foreign keys off and no busy timeout. busy_timeout guards against an
+// external process (e.g. sqlite3 CLI) briefly locking the file; NORMAL is the
+// recommended synchronous level under WAL (durable at checkpoint, much cheaper
+// per write).
+const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)" +
+	"&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+
+// sqliteDSN appends sqlitePragmas to a SQLite path, keeping any query the path
+// already carries.
+func sqliteDSN(path string) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + sqlitePragmas
+}
+
 func openSQLite(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", sqliteDSN(path))
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite: single writer, avoids SQLITE_BUSY
-	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	// NORMAL is the recommended synchronous level under WAL (durable at
-	// checkpoint, much cheaper per write); busy_timeout guards against an
-	// external process (e.g. sqlite3 CLI) briefly locking the file.
-	if _, err := db.Exec(`PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;`); err != nil {
-		db.Close()
-		return nil, err
-	}
 	s := &Store{DB: db, dialect: SQLite}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
-	// Enforce foreign keys for all normal operation (migrations ran with them off).
+	// Enforce foreign keys again on the connection migrate turned them off on.
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
 		db.Close()
 		return nil, err
