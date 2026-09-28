@@ -102,3 +102,75 @@ func TestSSEKeepaliveIsAComment(t *testing.T) {
 		t.Errorf("sseKeepalive = %v, too slow to beat a 60s proxy idle timeout", sseKeepalive)
 	}
 }
+
+// Event data can carry text from the network — a DHCP or PTR hostname can
+// hold a line break — and a bare newline inside one data: line would end the
+// frame early and turn the rest into a malformed field. Each line of the data
+// goes out as its own data: line, which EventSource joins back with "\n".
+func TestSSEMultilineDataIsFramed(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("GET", "/events/stream", nil).WithContext(ctx)
+	addSessionCookie(t, st, req)
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		srv.Handler().ServeHTTP(rec, req)
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	srv.broker.Publish("events", "host\nevent: forged\r\ndata: x\rtail")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+
+	want := "event: events\ndata: host\ndata: event: forged\ndata: data: x\ndata: tail\n\n"
+	if body := rec.Body.String(); !strings.Contains(body, want) {
+		t.Errorf("stream body = %q, want it to contain %q", body, want)
+	}
+}
+
+// A stream is authenticated when it opens, but it can stay open for days.
+// Revoking the session behind it — signing out elsewhere, a password change,
+// deleting the user — has to end it too, or the revoked browser keeps
+// receiving live updates.
+func TestSSEEndsWhenSessionRevoked(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	old := sseKeepalive
+	sseKeepalive = 20 * time.Millisecond
+	t.Cleanup(func() { sseKeepalive = old })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest("GET", "/events/stream", nil).WithContext(ctx)
+	addSessionCookie(t, st, req)
+	c, err := req.Cookie("netis_session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		srv.Handler().ServeHTTP(rec, req)
+		close(done)
+	}()
+	time.Sleep(60 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("stream ended while its session was still valid")
+	default:
+	}
+	if err := st.DeleteSession(t.Context(), c.Value); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream still open after its session was revoked")
+	}
+}
