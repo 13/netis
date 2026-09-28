@@ -113,6 +113,37 @@ func (s *Store) ListIfaces(ctx context.Context, deviceID int64) ([]Iface, error)
 	return out, rows.Err()
 }
 
+// findDeviceID runs a query selecting one device id, reporting ok=false when
+// no row matches.
+func (s *Store) findDeviceID(ctx context.Context, q string, args ...any) (int64, bool, error) {
+	var id int64
+	err := s.queryRow(ctx, q, args...).Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+// FindProxmoxNode finds the device the Proxmox sync created for a cluster
+// node, which it tells apart from guests by the absent VMID.
+func (s *Store) FindProxmoxNode(ctx context.Context, name string) (int64, bool, error) {
+	return s.findDeviceID(ctx,
+		`SELECT id FROM device WHERE name=? AND source='proxmox' AND proxmox_vmid IS NULL`, name)
+}
+
+// FindProxmoxGuest finds the device the Proxmox sync created for a guest.
+func (s *Store) FindProxmoxGuest(ctx context.Context, vmid int64) (int64, bool, error) {
+	return s.findDeviceID(ctx, `SELECT id FROM device WHERE proxmox_vmid=? AND source='proxmox'`, vmid)
+}
+
+// FindDeviceByWGPubKey finds the device carrying a WireGuard public key.
+func (s *Store) FindDeviceByWGPubKey(ctx context.Context, pubkey string) (int64, bool, error) {
+	return s.findDeviceID(ctx, `SELECT id FROM device WHERE wg_pubkey=?`, pubkey)
+}
+
 func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, error) {
 	var i Iface
 	err := s.queryRow(ctx, `SELECT id,device_id,mac,hostname FROM iface WHERE mac=?`, mac).

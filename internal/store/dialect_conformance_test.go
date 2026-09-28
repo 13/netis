@@ -782,3 +782,53 @@ func TestConformanceSetDeviceTagsIsAtomic(t *testing.T) {
 		}
 	})
 }
+
+// The integration syncs look devices up by their external identity every run;
+// these lookups once bypassed rebind and failed on Postgres.
+func TestConformanceIntegrationDeviceLookups(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		node, err := s.CreateDevice(ctx, Device{Name: "pve1", Kind: "server", Source: "proxmox"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		vmid := int64(100)
+		guest, err := s.CreateDevice(ctx, Device{Name: "vm", Kind: "vm", Source: "proxmox",
+			ParentDeviceID: &node, ProxmoxVMID: &vmid})
+		if err != nil {
+			t.Fatal(err)
+		}
+		pk := "peerA="
+		peer, err := s.CreateDevice(ctx, Device{Name: "p", Kind: "wg-peer", Source: "wireguard", WGPubKey: &pk})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A manual device sharing the node's name is not the node.
+		if _, err := s.CreateDevice(ctx, Device{Name: "pve2", Kind: "server", Source: "manual"}); err != nil {
+			t.Fatal(err)
+		}
+
+		if id, ok, err := s.FindProxmoxNode(ctx, "pve1"); err != nil || !ok || id != node {
+			t.Errorf("FindProxmoxNode(pve1) = %d %v %v, want %d", id, ok, err, node)
+		}
+		// A guest is never mistaken for a node, even under the node's name.
+		if _, ok, err := s.FindProxmoxNode(ctx, "vm"); err != nil || ok {
+			t.Errorf("FindProxmoxNode(vm) = %v %v, want not found", ok, err)
+		}
+		if _, ok, err := s.FindProxmoxNode(ctx, "pve2"); err != nil || ok {
+			t.Errorf("FindProxmoxNode(pve2) = %v %v, want not found", ok, err)
+		}
+		if id, ok, err := s.FindProxmoxGuest(ctx, 100); err != nil || !ok || id != guest {
+			t.Errorf("FindProxmoxGuest(100) = %d %v %v, want %d", id, ok, err, guest)
+		}
+		if _, ok, err := s.FindProxmoxGuest(ctx, 101); err != nil || ok {
+			t.Errorf("FindProxmoxGuest(101) = %v %v, want not found", ok, err)
+		}
+		if id, ok, err := s.FindDeviceByWGPubKey(ctx, "peerA="); err != nil || !ok || id != peer {
+			t.Errorf("FindDeviceByWGPubKey(peerA=) = %d %v %v, want %d", id, ok, err, peer)
+		}
+		if _, ok, err := s.FindDeviceByWGPubKey(ctx, "peerB="); err != nil || ok {
+			t.Errorf("FindDeviceByWGPubKey(peerB=) = %v %v, want not found", ok, err)
+		}
+	})
+}

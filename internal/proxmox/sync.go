@@ -2,8 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -83,15 +81,12 @@ func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 }
 
 func (s *Sync) upsertNode(ctx context.Context, node string) (int64, error) {
-	var id int64
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT id FROM device WHERE name=? AND source='proxmox' AND proxmox_vmid IS NULL`, node).
-		Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	id, ok, err := s.store.FindProxmoxNode(ctx, node)
+	if err != nil {
 		return 0, err
+	}
+	if ok {
+		return id, nil
 	}
 	return s.store.CreateDevice(ctx, store.Device{Name: node, Kind: "server", Source: "proxmox"})
 }
@@ -101,13 +96,11 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 	if g.Type == "lxc" {
 		kind = "lxc"
 	}
-	var devID int64
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT id FROM device WHERE proxmox_vmid=? AND source='proxmox'`, g.VMID).Scan(&devID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	devID, found, err := s.store.FindProxmoxGuest(ctx, g.VMID)
+	if err != nil {
 		return err
 	}
-	if errors.Is(err, sql.ErrNoRows) { // new guest
+	if !found { // new guest
 		vmid := g.VMID
 		devID, err = s.store.CreateDevice(ctx, store.Device{
 			Name: g.Name, Kind: kind, Source: "proxmox",

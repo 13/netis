@@ -2,8 +2,6 @@ package wireguard
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -81,15 +79,15 @@ func (s *Sync) recordStatus(ctx context.Context, stats Stats, err error) {
 }
 
 func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, now time.Time) error {
-	var devID, ifaceID int64
-	err := s.store.DB.QueryRowContext(ctx, `SELECT id FROM device WHERE wg_pubkey=?`, p.PubKey).Scan(&devID)
-	// PROJECT DECISION: distinguish sql.ErrNoRows (new peer) from real errors.
+	var ifaceID int64
+	devID, found, err := s.store.FindDeviceByWGPubKey(ctx, p.PubKey)
+	// PROJECT DECISION: distinguish a missing peer from real errors.
 	// device has no unique constraint on wg_pubkey, so falling through to
 	// CreateDevice on a transient error would create a duplicate peer.
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil {
 		return err
 	}
-	if errors.Is(err, sql.ErrNoRows) { // new peer
+	if !found { // new peer
 		name := p.PubKey
 		if len(name) > 8 {
 			name = name[:8]
