@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,21 @@ import (
 )
 
 const onlineWindow = 3 * time.Minute
+
+// ifaceRE is what an interface name may look like: the characters Linux
+// interface names are made of in practice, and at most IFNAMSIZ-1 of them.
+// Nothing in it means anything to a shell.
+var ifaceRE = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
+
+// ValidIface reports whether name is safe to use as the WireGuard interface.
+// The name is spliced into a command the remote host's shell runs, so anything
+// else in it (a space, a semicolon, a $( ) ...) would run as a command there.
+func ValidIface(name string) error {
+	if !ifaceRE.MatchString(name) {
+		return fmt.Errorf("invalid wireguard interface name %q: use 1-15 letters, digits, '.', '_' or '-'", name)
+	}
+	return nil
+}
 
 type Sync struct {
 	store  *store.Store
@@ -29,6 +45,11 @@ type Stats struct {
 }
 
 func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
+	// Checked here as well as when the setting is saved: this is the point
+	// where the name reaches a shell, whatever route it took to get here.
+	if err := ValidIface(s.iface); err != nil {
+		return Stats{}, err
+	}
 	out, err := s.runner.Run(ctx, "wg show "+s.iface+" dump")
 	if err != nil {
 		return Stats{}, err

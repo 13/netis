@@ -1,6 +1,9 @@
 package store
 
 import (
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"strings"
 	"testing"
 )
@@ -190,5 +193,106 @@ func TestSessionIDIsADigest(t *testing.T) {
 	}
 	if SessionID("another-token") == id {
 		t.Fatal("SessionID must differ per token")
+	}
+}
+
+// A session row is a bearer credential at rest. Only a digest of the token is
+// stored, so a leaked database file or backup does not hand out live sessions,
+// and every lookup still works from the raw token the cookie carries.
+func TestSessionTokenStoredHashed(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		id, err := s.CreateUser(t.Context(), "ben", "h", "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expires := "2999-01-01T00:00:00Z"
+		if err := s.CreateSession(t.Context(), "raw-token", id, expires); err != nil {
+			t.Fatal(err)
+		}
+		var stored string
+		if err := s.queryRow(t.Context(), `SELECT token_hash FROM session`).Scan(&stored); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(stored, "raw-token") {
+			t.Fatalf("session table holds the raw token: %q", stored)
+		}
+		sum := sha256.Sum256([]byte("raw-token"))
+		if want := hex.EncodeToString(sum[:]); stored != want {
+			t.Fatalf("stored %q, want sha256 %q", stored, want)
+		}
+		if _, ok, err := s.GetSession(t.Context(), "raw-token"); err != nil || !ok {
+			t.Fatalf("GetSession: ok=%v err=%v", ok, err)
+		}
+		// Presenting the stored digest as a cookie must not work: it is not
+		// the credential, only a record of it.
+		if _, ok, _ := s.GetSession(t.Context(), stored); ok {
+			t.Fatal("the stored digest authenticates as a token")
+		}
+
+		sessions, err := s.ListSessionsForUser(t.Context(), id)
+		if err != nil || len(sessions) != 1 || sessions[0].ID != SessionID("raw-token") {
+			t.Fatalf("ListSessionsForUser = %+v, %v", sessions, err)
+		}
+		if deleted, err := s.DeleteSessionByID(t.Context(), id+1, SessionID("raw-token")); err != nil || deleted {
+			t.Fatalf("revoke by another user: deleted=%v err=%v", deleted, err)
+		}
+		if deleted, err := s.DeleteSessionByID(t.Context(), id, SessionID("raw-token")); err != nil || !deleted {
+			t.Fatalf("revoke by owner: deleted=%v err=%v", deleted, err)
+		}
+		if _, ok, _ := s.GetSession(t.Context(), "raw-token"); ok {
+			t.Fatal("revoked session still resolves")
+		}
+	})
+}
+
+// Sessions written before tokens were hashed hold the raw token, which no
+// longer matches any lookup. Migration 0008 drops them rather than leave
+// plaintext credentials sitting in the table; their owners sign in again.
+func TestMigration0008DropsPlaintextSessions(t *testing.T) {
+	path := t.TempDir() + "/mig.db"
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	names := []string{"0001_init.sql", "0002_pihole_source.sql", "0003_integration_status.sql",
+		"0004_device_reviewed.sql", "0005_device_model_function.sql", "0006_lookup_indexes.sql",
+		"0007_session_metadata.sql"}
+	for _, name := range names {
+		b, err := migrationsFS.ReadFile("migrations/sqlite/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(string(b)); err != nil {
+			t.Fatalf("apply %s: %v", name, err)
+		}
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if _, err := db.Exec(`INSERT INTO schema_migrations (version) VALUES (?)`, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO user (id,username,password_hash,role) VALUES (1,'ben','h','admin')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO session (token,user_id,expires_at) VALUES ('plain',1,'2999-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open (runs 0008): %v", err)
+	}
+	defer s.Close()
+	var n int
+	if err := s.queryRow(t.Context(), `SELECT count(*) FROM session`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("%d plaintext session(s) survived the migration", n)
 	}
 }

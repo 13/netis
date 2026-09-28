@@ -155,7 +155,7 @@ database's key/value settings table:
 | `wg_ssh_user` | SSH username for the WireGuard host. |
 | `wg_ssh_key_path` | Path to the SSH private key used to connect. |
 | `wg_ssh_known_hosts` | Path to an OpenSSH `known_hosts` file used to verify the WireGuard host. Unset means the host is **not** verified. |
-| `wg_iface` | WireGuard interface name to poll (default `wg0`). |
+| `wg_iface` | WireGuard interface name to poll (default `wg0`): 1-15 letters, digits, `.`, `_` or `-`. It is part of the command run over SSH, so anything else is refused. |
 | `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
 | `pihole_password` | Pi-hole app password (never shown back in the UI). Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
@@ -251,6 +251,11 @@ settings, and it says so rather than treating the credential as unset. Changing
 the key has the same effect — clear the affected settings and enter them again.
 `netis migrate-db` copies the rows as they are, so the same key works on the
 Postgres side.
+
+Session tokens need no key: the database only ever holds their SHA-256
+digest, so a copy of it cannot be used to sign in as anyone. Sessions from
+before netis stored them that way are dropped on upgrade, and everyone signs in
+once more.
 
 ## Behind a reverse proxy
 

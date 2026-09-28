@@ -99,3 +99,41 @@ func TestWireguardRunOnceStats(t *testing.T) {
 		t.Fatalf("stats=%+v err=%v", stats, err)
 	}
 }
+
+// recordingRunner remembers whether it was asked to run anything.
+type recordingRunner struct{ called bool }
+
+func (r *recordingRunner) Run(ctx context.Context, cmd string) ([]byte, error) {
+	r.called = true
+	return nil, nil
+}
+
+func TestValidIface(t *testing.T) {
+	for _, name := range []string{"wg0", "wg-home", "wg_1.lan", "a", "abcdefghijklmno"} {
+		if err := ValidIface(name); err != nil {
+			t.Errorf("ValidIface(%q) = %v, want nil", name, err)
+		}
+	}
+	for _, name := range []string{"", "wg0; reboot", "wg0 dump", "$(id)", "wg0`id`", "a|b",
+		"wg0\nid", "abcdefghijklmnop", "wg/0", "wg0'"} {
+		if err := ValidIface(name); err == nil {
+			t.Errorf("ValidIface(%q) = nil, want an error", name)
+		}
+	}
+}
+
+// The interface name is part of a command run by the remote shell, so a name
+// that is not a plain interface name is refused before anything is sent, even
+// if it got into the settings some other way than the settings form.
+func TestRunOnceRefusesUnsafeIface(t *testing.T) {
+	st, _ := store.Open(":memory:")
+	defer st.Close()
+	r := &recordingRunner{}
+	sync := NewSync(st, r, events.NewService(st, events.NewBroker()), "wg0; touch /tmp/pwned")
+	if _, err := sync.RunOnce(context.Background()); err == nil {
+		t.Fatal("RunOnce accepted a shell command as the interface name")
+	}
+	if r.called {
+		t.Fatal("the unsafe command was sent to the remote host")
+	}
+}

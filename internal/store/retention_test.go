@@ -72,7 +72,7 @@ func TestPrune(t *testing.T) {
 			t.Errorf("live session: ok=%v err=%v", ok, err)
 		}
 		var n int
-		if err := s.queryRow(ctx, `SELECT count(*) FROM session WHERE token=?`, "dead").
+		if err := s.queryRow(ctx, `SELECT count(*) FROM session WHERE token_hash=?`, hashToken("dead")).
 			Scan(&n); err != nil {
 			t.Fatal(err)
 		}

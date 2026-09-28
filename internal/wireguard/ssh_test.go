@@ -1,12 +1,16 @@
 package wireguard
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -109,3 +113,63 @@ type fakeAddr struct{}
 
 func (fakeAddr) Network() string { return "tcp" }
 func (fakeAddr) String() string  { return "127.0.0.1:22" }
+
+// A host that accepts the TCP connection and then never speaks would hang the
+// SSH handshake: the client config's timeout covers only the TCP connect. Run
+// has to give up when its context does.
+func TestRunHonoursContextDuringHandshake(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	var conns []net.Conn
+	var mu sync.Mutex
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns = append(conns, c) // held open, never written to
+			mu.Unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range conns {
+			c.Close()
+		}
+	})
+
+	r := &SSHRunner{addr: ln.Addr().String(), config: &ssh.ClientConfig{
+		User:            "x",
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}}
+
+	t.Run("deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		if _, err := r.Run(ctx, "true"); err == nil {
+			t.Fatal("Run succeeded against a silent server")
+		}
+		if d := time.Since(start); d > 2*time.Second {
+			t.Fatalf("Run took %v after a 100ms deadline", d)
+		}
+	})
+	t.Run("cancel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(100*time.Millisecond, cancel)
+		start := time.Now()
+		if _, err := r.Run(ctx, "true"); err == nil {
+			t.Fatal("Run succeeded against a silent server")
+		}
+		if d := time.Since(start); d > 2*time.Second {
+			t.Fatalf("Run took %v after cancellation", d)
+		}
+	})
+}

@@ -140,8 +140,9 @@ type SessionMeta struct {
 
 // Session is one row of a user's session list. The token is deliberately not
 // part of it: a page that rendered live session tokens would be handing out the
-// credential it is supposed to be managing. ID is a short digest of the token,
-// enough to name one session in a revoke request.
+// credential it is supposed to be managing, and the store only keeps a digest
+// of it anyway. ID is a short prefix of that digest, enough to name one session
+// in a revoke request.
 type Session struct {
 	ID        string
 	CreatedAt *string
@@ -151,11 +152,22 @@ type Session struct {
 }
 
 // SessionID is the public identifier for a session token: the first bytes of
-// its SHA-256, hex encoded. It is derived rather than stored so old sessions
-// have one too, and it cannot be used to reconstruct the token.
+// its SHA-256, hex encoded. It is a prefix of the stored digest, so it can be
+// matched in SQL, and it cannot be used to reconstruct the token.
 func SessionID(token string) string {
+	return hashToken(token)[:sessionIDLen]
+}
+
+// sessionIDLen is the length of a SessionID in hex characters.
+const sessionIDLen = 16
+
+// hashToken is the form a session token is stored and looked up in: its full
+// SHA-256, hex encoded. Only the browser holds the token itself, so a copy of
+// the database does not carry working sessions. A plain digest is enough; the
+// tokens are long random values, not guessable passwords.
+func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:8])
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Store) CreateSession(ctx context.Context, token string, userID int64, expiresAt string, meta ...SessionMeta) error {
@@ -163,9 +175,9 @@ func (s *Store) CreateSession(ctx context.Context, token string, userID int64, e
 	if len(meta) > 0 {
 		m = meta[0]
 	}
-	_, err := s.exec(ctx, `INSERT INTO session (token,user_id,expires_at,created_at,ip,user_agent)
+	_, err := s.exec(ctx, `INSERT INTO session (token_hash,user_id,expires_at,created_at,ip,user_agent)
 		VALUES (?,?,?,?,?,?)`,
-		token, userID, expiresAt, nullable(m.CreatedAt), nullable(m.IP), nullable(m.UserAgent))
+		hashToken(token), userID, expiresAt, nullable(m.CreatedAt), nullable(m.IP), nullable(m.UserAgent))
 	return err
 }
 
@@ -182,7 +194,7 @@ func nullable(v string) *string {
 // with no created_at (written before it was recorded) sort last.
 func (s *Store) ListSessionsForUser(ctx context.Context, userID int64) ([]Session, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
-	rows, err := s.query(ctx, `SELECT token,created_at,expires_at,ip,user_agent FROM session
+	rows, err := s.query(ctx, `SELECT token_hash,created_at,expires_at,ip,user_agent FROM session
 		WHERE user_id=? AND expires_at>? ORDER BY created_at DESC NULLS LAST, expires_at DESC`,
 		userID, now)
 	if err != nil {
@@ -191,12 +203,12 @@ func (s *Store) ListSessionsForUser(ctx context.Context, userID int64) ([]Sessio
 	defer rows.Close()
 	var out []Session
 	for rows.Next() {
-		var token string
+		var hash string
 		var sess Session
-		if err := rows.Scan(&token, &sess.CreatedAt, &sess.ExpiresAt, &sess.IP, &sess.UserAgent); err != nil {
+		if err := rows.Scan(&hash, &sess.CreatedAt, &sess.ExpiresAt, &sess.IP, &sess.UserAgent); err != nil {
 			return nil, err
 		}
-		sess.ID = SessionID(token)
+		sess.ID = hash[:min(len(hash), sessionIDLen)]
 		out = append(out, sess)
 	}
 	return out, rows.Err()
@@ -204,46 +216,29 @@ func (s *Store) ListSessionsForUser(ctx context.Context, userID int64) ([]Sessio
 
 // DeleteSessionByID revokes one of a user's sessions by its public id,
 // reporting whether it found one. Scoped to the user so an id guessed or
-// borrowed from elsewhere cannot revoke somebody else's session.
-// The id is a digest, so the match has to be made in Go. The tokens are read
-// out and the cursor closed before the delete runs: SQLite is held to a single
-// connection, so a write issued with rows still open waits on a connection the
-// caller is holding itself.
+// borrowed from elsewhere cannot revoke somebody else's session. The id is a
+// prefix of the stored digest, so an id of any other length matches nothing.
 func (s *Store) DeleteSessionByID(ctx context.Context, userID int64, id string) (bool, error) {
-	tokens, err := s.userSessionTokens(ctx, userID)
+	if len(id) != sessionIDLen {
+		return false, nil
+	}
+	res, err := s.exec(ctx, `DELETE FROM session WHERE user_id=? AND substr(token_hash,1,?)=?`,
+		userID, sessionIDLen, id)
 	if err != nil {
 		return false, err
 	}
-	for _, token := range tokens {
-		if SessionID(token) == id {
-			return true, s.DeleteSession(ctx, token)
-		}
-	}
-	return false, nil
-}
-
-func (s *Store) userSessionTokens(ctx context.Context, userID int64) ([]string, error) {
-	rows, err := s.query(ctx, `SELECT token FROM session WHERE user_id=?`, userID)
+	n, err := res.RowsAffected()
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			return nil, err
-		}
-		out = append(out, token)
-	}
-	return out, rows.Err()
+	return n > 0, nil
 }
 
 func (s *Store) GetSession(ctx context.Context, token string) (User, bool, error) {
 	var u User
 	now := time.Now().UTC().Format(time.RFC3339)
 	err := s.queryRow(ctx, `SELECT u.id,u.username,u.password_hash,u.role FROM session s
-		JOIN "user" u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?`, token, now).
+		JOIN "user" u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`, hashToken(token), now).
 		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -255,7 +250,7 @@ func (s *Store) GetSession(ctx context.Context, token string) (User, bool, error
 }
 
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
-	_, err := s.exec(ctx, `DELETE FROM session WHERE token=?`, token)
+	_, err := s.exec(ctx, `DELETE FROM session WHERE token_hash=?`, hashToken(token))
 	return err
 }
 
@@ -266,7 +261,7 @@ func (s *Store) DeleteSession(ctx context.Context, token string) error {
 // anyone out, so this runs with every change; keep is the session of the person
 // making it, so they are not logged out of their own browser.
 func (s *Store) DeleteSessionsForUser(ctx context.Context, userID int64, keep string) error {
-	_, err := s.exec(ctx, `DELETE FROM session WHERE user_id=? AND token<>?`, userID, keep)
+	_, err := s.exec(ctx, `DELETE FROM session WHERE user_id=? AND token_hash<>?`, userID, hashToken(keep))
 	return err
 }
 

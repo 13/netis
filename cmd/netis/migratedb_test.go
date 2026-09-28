@@ -113,6 +113,11 @@ func TestMigrateDB(t *testing.T) {
 	if _, ok, err := dst.GetUserByName(ctx, "root"); err != nil || !ok {
 		t.Errorf("user did not survive: ok=%v err=%v", ok, err)
 	}
+	// Sessions are stored as digests, and the digest carries across as is, so
+	// a browser signed in before the move is still signed in after it.
+	if _, ok, err := dst.GetSession(ctx, "root-session"); err != nil || !ok {
+		t.Errorf("session did not survive: ok=%v err=%v", ok, err)
+	}
 
 	// The identity sequences must be past the imported ids, or the next insert
 	// collides with an existing row.
@@ -188,7 +193,11 @@ func seedForMigration(t *testing.T, s *store.Store) {
 	if _, err := s.AddEvent(ctx, "device_new", &hostID, "seen"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateUser(ctx, "root", "hash", "admin"); err != nil {
+	rootID, err := s.CreateUser(ctx, "root", "hash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSession(ctx, "root-session", rootID, "2999-01-01T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSetting(ctx, "offline_after", "3"); err != nil {

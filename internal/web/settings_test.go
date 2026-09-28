@@ -96,6 +96,40 @@ func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	}
 }
 
+// The WireGuard interface name ends up in a command the remote host's shell
+// runs, so a value that is not a plain interface name is refused at the form,
+// with nothing from that submission saved. Blank is allowed: it means wg0.
+func TestIntegrationsRejectUnsafeWGIface(t *testing.T) {
+	for _, path := range []string{"/settings/integrations", "/welcome/integrations"} {
+		t.Run(path, func(t *testing.T) {
+			srv, st := testServer(t)
+			if path == "/settings/integrations" {
+				st.SetSetting(t.Context(), "onboarded", "1")
+			}
+			rec := authedPost(t, srv, st, path, url.Values{
+				"wg_ssh_addr": {"10.0.0.1:22"},
+				"wg_iface":    {"wg0; reboot"},
+			})
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("code=%d, want 400", rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), "interface") {
+				t.Errorf("body = %q, want it to say what was wrong", rec.Body.String())
+			}
+			for _, k := range []string{"wg_iface", "wg_ssh_addr"} {
+				if v, _ := st.GetSetting(t.Context(), k); v != "" {
+					t.Errorf("%s saved as %q from a rejected form", k, v)
+				}
+			}
+
+			rec = authedPost(t, srv, st, path, url.Values{"wg_iface": {""}})
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("blank wg_iface: code=%d, want 303", rec.Code)
+			}
+		})
+	}
+}
+
 // TestConcurrentAdminDeleteKeepsOne guards against a TOCTOU race in the
 // last-admin delete check: two concurrent deletes of two different admins
 // must not both succeed, which would leave zero admins (a permanent

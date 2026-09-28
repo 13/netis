@@ -16,6 +16,7 @@ import (
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
+	"netis/internal/wireguard"
 )
 
 // settingsKeys is the fixed set of settings written by the integrations
@@ -216,7 +217,16 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 // saveIntegrationSettings writes the integration settings from a submitted
 // form: a blank secret keeps the stored value, and the *_insecure checkboxes
 // normalize "on" to "1". Shared by the settings page and the setup wizard.
+// A value that fails validation is returned as a badInput, before anything
+// from the form is written.
 func (s *Server) saveIntegrationSettings(r *http.Request) error {
+	// The interface name is spliced into a command the WireGuard host's shell
+	// runs. Blank is fine: it falls back to wg0.
+	if v := r.FormValue("wg_iface"); v != "" {
+		if err := wireguard.ValidIface(v); err != nil {
+			return badInput{err.Error()}
+		}
+	}
 	for _, k := range settingsKeys {
 		v := r.FormValue(k)
 		if (k == "proxmox_secret" || k == "pihole_password") && v == "" {
@@ -238,9 +248,25 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 	return nil
 }
 
+// badInput is a form value the caller got wrong, answered with a 400 and the
+// message rather than as a server failure.
+type badInput struct{ msg string }
+
+func (e badInput) Error() string { return e.msg }
+
+// failSave answers an error from saveIntegrationSettings.
+func (s *Server) failSave(w http.ResponseWriter, r *http.Request, err error) {
+	var bad badInput
+	if errors.As(err, &bad) {
+		http.Error(w, bad.msg, http.StatusBadRequest)
+		return
+	}
+	s.fail(w, r, err)
+}
+
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {
-		s.fail(w, r, err)
+		s.failSave(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=integrations", http.StatusSeeOther)
