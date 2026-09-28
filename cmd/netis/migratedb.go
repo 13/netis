@@ -39,7 +39,7 @@ var copyOrder = []string{
 // column carries over as the driver returns it.
 var boolColumns = map[string]map[string]bool{
 	"subnet":             {"scan_enabled": true},
-	"device":             {"reviewed": true},
+	"device":             {"reviewed": true, "alert_offline": true},
 	"iface_status":       {"online": true},
 	"integration_status": {"ok": true},
 }

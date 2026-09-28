@@ -241,6 +241,10 @@ database's key/value settings table:
 | `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
 | `pihole_password` | Pi-hole app password (never shown back in the UI). Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
+| `notify_webhook_url`, `notify_ntfy_url` | Notification channels; blank disables one. See [Notifications](#notifications). |
+| `notify_webhook_auth`, `notify_ntfy_token` | Webhook `Authorization` header value and ntfy access token. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
+| `notify_base_url` | netis's own URL, used to link messages to a device or the event log. |
+| `notify_device_new`, `notify_offline`, `notify_ip_conflict`, `notify_sync` | `0` switches that kind of notification off (default on). |
 
 ### Pi-hole (v6)
 
@@ -266,7 +270,7 @@ and on demand from Settings → Integrations → Run now. A run is cut off after
 (timeout, authentication failed, host key rejected, connection failed,
 configuration error, sync error) — is shown on the settings page, the dashboard
 and in `/api/status`, and the first failure of an outage adds a `scan_error`
-event. The full error, which can name key paths and internal addresses, goes
+event (its end adds a `sync_recovered` one). The full error, which can name key paths and internal addresses, goes
 only to the server log. Clicking Run now while that integration is
 already syncing reports "already running" instead of starting a second run.
 
@@ -322,23 +326,65 @@ Without it the endpoint is not left open: the metrics name every subnet and
 count every device, which is not something to publish to whoever can reach the
 port.
 
+## Notifications
+
+Settings → Notifications (admins only) sends the events worth hearing about to
+a generic webhook, an [ntfy](https://ntfy.sh) topic, or both:
+
+| Kind | When |
+| --- | --- |
+| New devices | A scan or an integration finds a device netis has not seen before. |
+| Offline / online | A device goes offline or comes back — **only** for devices you mark with **Alert when offline** on their page. The mark is off for every device by default, so phones and laptops coming and going stay quiet. |
+| IP conflicts | After a subnet sweep, an address is newly claimed by more than one interface. Announced once per conflict; one still present after a restart is announced again. |
+| Scan and integration errors | A subnet sweep fails (the same error at most once an hour), an integration starts failing (once per outage), and when it works again. |
+
+Each kind can be switched off. Events are collected for 30 seconds and sent
+together, so a scan that turns up fifty devices sends one summary instead of
+fifty messages. Sending never holds up a scan: events wait in a bounded queue,
+and if it fills (an endpoint down for a long time during a busy period) the
+overflow is dropped and logged. Each channel gets 5 seconds per attempt and
+three attempts; a 4xx answer other than 429 is not retried.
+
+The webhook receives a JSON `POST`:
+
+```json
+{"event": "offline", "device": {"id": 3, "name": "nas"},
+ "details": "nas (192.168.1.5) went offline",
+ "time": "2026-09-28T10:00:00Z", "url": "https://netis.lan/devices/3"}
+```
+
+A batch has `"event": "batch"`, a summary in `details` ("12 new devices, 1 went
+offline") and the individual events in `events`. `device` is `null` for events
+not about one device, and `url` is empty unless a base URL is set. An optional
+`Authorization` header value is sent as given.
+
+ntfy gets the details as the message body, with `Title`, `Tags` (an emoji per
+kind), `Priority` (4 for offline, conflicts and errors) and, with a base URL,
+`Click` headers. Set the topic URL (e.g. `https://ntfy.sh/my-netis-topic` or
+your own server) and, for a protected topic, an access token.
+
+**Send test** posts a test message with the saved settings and shows each
+channel's result. The webhook header and ntfy token are never shown back in the
+form; leave the field blank to keep the stored value or tick *clear* to remove
+it.
+
 ## Encrypting stored credentials
 
-The Proxmox API token and the Pi-hole password live in the database's `setting`
-table. Set `NETIS_SECRET_KEY` and they are encrypted there with AES-256-GCM
-instead:
+The Proxmox API token, the Pi-hole password and the notification credentials
+(webhook header, ntfy token) live in the database's `setting` table. Set
+`NETIS_SECRET_KEY` and they are encrypted there with AES-256-GCM instead:
 
 ```sh
 NETIS_SECRET_KEY="$(openssl rand -base64 32)" ./netis
 ```
 
-Only those two rows are encrypted — the rest of the table is configuration, and
+Only those rows are encrypted — the rest of the table is configuration, and
 stays readable in a SQL client. Values already stored in plaintext are
 re-encrypted on the next start, so adding the key to an existing deployment
 does not mean re-entering anything.
 
 The key never lives in the database, so keep it with (but not inside) your
-backups: a dump restored without it leaves netis unable to read those two
+backups: a dump restored without it leaves netis unable to read those
 settings, and it says so rather than treating the credential as unset. Changing
 the key has the same effect — clear the affected settings and enter them again.
 `netis migrate-db` copies the rows as they are, so the same key works on the

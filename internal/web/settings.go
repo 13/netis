@@ -122,7 +122,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 
 	switch tab {
 	case "subnets", "integrations", "users", "about":
-	case "general":
+	case "general", "notifications":
 		if !admin {
 			tab = "subnets"
 		}
@@ -168,7 +168,15 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 	}
 
+	var notifyData views.NotifyData
+	if tab == "notifications" {
+		if notifyData, err = s.notifyData(r.Context()); err != nil {
+			return views.SettingsData{}, err
+		}
+	}
+
 	return views.SettingsData{
+		Notify:  notifyData,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,

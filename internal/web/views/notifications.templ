@@ -1,0 +1,87 @@
+package views
+
+// NotifyData is the Notifications tab's view-model. The two credentials are
+// never included, only whether one is stored.
+type NotifyData struct {
+	BaseURL        string
+	WebhookURL     string
+	NtfyURL        string
+	HasWebhookAuth bool
+	HasNtfyToken   bool
+	Groups         []NotifyGroup
+}
+
+// NotifyGroup is one per-type toggle.
+type NotifyGroup struct {
+	Key, Label, Help string
+	On               bool
+}
+
+templ secretState(stored bool) {
+	if stored {
+		<span class="badge">stored</span>
+	} else {
+		<span class="muted">none</span>
+	}
+}
+
+templ notificationsTab(n NotifyData) {
+	<h2>Notifications</h2>
+	<p class="muted">
+		Events are collected for 30 seconds and sent together, so a scan that finds
+		many devices sends one message. Offline and online alerts are sent only for
+		devices marked "alert when offline" on their page.
+	</p>
+	<form method="post" action="/settings/notifications">
+		<div class="setting-card">
+			<div class="sc-head"><h3>Webhook</h3></div>
+			<div class="field-grid">
+				<label>URL <input type="url" name="notify_webhook_url" value={ n.WebhookURL } placeholder="https://example.lan/hooks/netis"/></label>
+				<label>Authorization header <input type="password" name="notify_webhook_auth" placeholder="leave blank to keep current value" autocomplete="off"/></label>
+			</div>
+			<p class="muted" style="margin:0 0 6px">
+				Stored header: @secretState(n.HasWebhookAuth)
+				if n.HasWebhookAuth {
+					<label class="chk"><input type="checkbox" name="notify_webhook_auth_clear"/> clear</label>
+				}
+			</p>
+			<p class="muted" style="margin:0">POSTs JSON: <span class="mono">{ `{event, device, details, time, url}` }</span>.</p>
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>ntfy</h3></div>
+			<div class="field-grid">
+				<label>Topic URL <input type="url" name="notify_ntfy_url" value={ n.NtfyURL } placeholder="https://ntfy.sh/my-netis-topic"/></label>
+				<label>Access token <input type="password" name="notify_ntfy_token" placeholder="leave blank to keep current token" autocomplete="off"/></label>
+			</div>
+			<p class="muted" style="margin:0">
+				Stored token: @secretState(n.HasNtfyToken)
+				if n.HasNtfyToken {
+					<label class="chk"><input type="checkbox" name="notify_ntfy_token_clear"/> clear</label>
+				}
+			</p>
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Send for</h3></div>
+			for _, g := range n.Groups {
+				<label class="chk">
+					<input
+						type="checkbox"
+						name={ g.Key }
+						if g.On {
+							checked
+						}
+					/>
+					{ g.Label } <span class="muted">— { g.Help }</span>
+				</label>
+			}
+		</div>
+		<div class="setting-card">
+			<div class="sc-head"><h3>Links</h3></div>
+			<label>netis base URL <input type="url" name="notify_base_url" value={ n.BaseURL } placeholder="https://netis.lan"/></label>
+			<p class="muted" style="margin:6px 0 4px">Used to link each message to the device or event log. Leave blank to send no links.</p>
+		</div>
+		<button type="submit" class="primary">Save notifications</button>
+		<button type="button" class="ghost" hx-post="/settings/notifications/test" hx-target="#toasts" hx-swap="beforeend">Send test</button>
+		<p class="muted" style="margin:6px 0 0">Send test uses the saved settings.</p>
+	</form>
+}

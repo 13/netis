@@ -32,6 +32,8 @@ type Engine struct {
 	// nameless host is not looked up on every sweep.
 	nameMu   sync.Mutex
 	nameMiss map[string]time.Time
+
+	conflicts conflictTracker
 }
 
 // defaultOfflineAfter is the consecutive-miss threshold used when the
@@ -163,6 +165,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		}
 	}
 
+	e.checkConflicts(ctx, sn)
 	e.Broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
 	return nil
 }

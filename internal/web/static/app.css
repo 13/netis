@@ -120,6 +120,8 @@ main { padding:20px; max-width:1080px; margin:0 auto; }
 .badge.device_new { color:var(--warn); background:var(--warn-soft); }
 .badge.scan_error { color:var(--bad); background:var(--bad-soft); }
 .badge.ip_changed { color:var(--accent); background:var(--accent-soft); }
+.badge.ip_conflict { color:var(--bad); background:var(--bad-soft); }
+.badge.sync_recovered { color:var(--ok); background:var(--ok-soft); }
 
 /* ---- buttons / inputs ---- */
 button, .btn { cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--fg);
