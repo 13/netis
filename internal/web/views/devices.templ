@@ -287,25 +287,34 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 			</p>
 		}
 		<div class="toolbar">
-			<input
-				class="grow" type="search" name="q" value={ q } placeholder="filter devices, IP, MAC, tag…"
-				hx-get="/devices" hx-trigger="input changed delay:300ms" hx-target="body" hx-push-url="true"
-				hx-vals={ fmt.Sprintf(`{"sort":%q,"dir":%q}`, sortKey, dir) }
-			/>
+			<form method="get" action="/devices" class="grow" role="search">
+				<input type="hidden" name="sort" value={ sortKey }/>
+				<input type="hidden" name="dir" value={ dir }/>
+				<input
+					type="search"
+					name="q"
+					value={ q }
+					placeholder="filter devices, IP, MAC, tag…"
+					aria-label="Filter devices"
+					hx-get="/devices"
+					hx-trigger="input changed delay:300ms"
+					hx-target="body"
+					hx-push-url="true"
+					hx-vals={ fmt.Sprintf(`{"sort":%q,"dir":%q}`, sortKey, dir) }
+				/>
+			</form>
 			<div class="seg" id="dev-view">
 				<button type="button" data-view="list">List</button>
 				<button type="button" data-view="grid">Grid</button>
 			</div>
 			if IsAdmin(ctx) {
-				<button type="button" class="primary" hx-get="/devices/new" hx-target="#modal">New device</button>
+				<a class="btn primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">New device</a>
 				<button type="button" class="ghost" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan all</button>
 			}
 		</div>
-
-		<div id="dev-list">
+		<div id="dev-list" class="table-wrap">
 			@deviceTable(rows, q, sortKey, dir, "/devices", true)
 		</div>
-
 		<div id="dev-grid" class="devgrid" style="display:none">
 			for _, row := range rows {
 				<a class="devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
@@ -356,35 +365,75 @@ func tagNamesJoin(tags []store.Tag) string {
 	return strings.Join(names, ", ")
 }
 
-// deviceFormInner is the shared header + form used by both the centered create
-// dialog and the right-side edit drawer.
-templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64, preIP string) {
+// DeviceForm is the view-model for the create/edit device form. On a failed
+// submit it carries what was typed back, with Error saying what was wrong.
+type DeviceForm struct {
+	Device     store.Device
+	Tags       []store.Tag
+	Subnets    []store.Subnet
+	AllDevices []store.DeviceRow
+	IsEdit     bool
+	SubnetID   int64 // preselected subnet for the first interface
+	IP         string
+	MAC        string
+	Error      string
+}
+
+func (f DeviceForm) title() string {
+	if f.IsEdit {
+		return "Edit device"
+	}
+	return "New device"
+}
+
+// action is where the form posts.
+func (f DeviceForm) action() string {
+	if f.IsEdit {
+		return fmt.Sprintf("/devices/%d", f.Device.ID)
+	}
+	return "/devices"
+}
+
+// cancelURL is where the full-page form's Cancel link goes.
+func (f DeviceForm) cancelURL() string {
+	if f.IsEdit {
+		return fmt.Sprintf("/devices/%d", f.Device.ID)
+	}
+	return "/devices"
+}
+
+// deviceFormInner is the shared header + form used by the centered create
+// dialog, the right-side edit drawer and the full-page form served without
+// htmx. In a dialog the form posts through htmx, so an error comes back into
+// the dialog; on the page it is a plain post.
+templ deviceFormInner(f DeviceForm, modal bool) {
 	<div class="dh">
-		if isEdit {
-			<h3>Edit device</h3>
-		} else {
-			<h3>New device</h3>
+		<h3 id="dlg-title">{ f.title() }</h3>
+		if modal {
+			<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
 		}
-		<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
 	</div>
 	<form
 		method="post"
-		if isEdit {
-			action={ templ.URL(fmt.Sprintf("/devices/%d", d.ID)) }
-		} else {
-			action="/devices"
+		action={ templ.URL(f.action()) }
+		if modal {
+			hx-post={ f.action() }
+			hx-target="#modal"
 		}
 	>
 		<div class="db">
+			if f.Error != "" {
+				<p class="form-error" role="alert">{ f.Error }</p>
+			}
 			<label>
 				Name
-				<input type="text" name="name" value={ d.Name } required autofocus/>
+				<input type="text" name="name" value={ f.Device.Name } required autofocus/>
 			</label>
 			<label>
 				Kind
 				<select name="kind">
 					for _, k := range deviceKinds {
-						if k == d.Kind {
+						if k == f.Device.Kind {
 							<option value={ k } selected>{ k }</option>
 						} else {
 							<option value={ k }>{ k }</option>
@@ -394,36 +443,36 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 			</label>
 			<div>
 				<div class="fieldlabel">Icon</div>
-				<div class="iconpick" data-kind-default={ KindIcon(d.Kind) }>
+				<div class="iconpick" data-kind-default={ KindIcon(f.Device.Kind) }>
 					for _, ic := range IconChoices {
-						if ic == DeviceIcon(d.Icon, d.Kind) {
-							<button type="button" class="ic-swatch selected" data-icon={ ic }>{ ic }</button>
+						if ic == DeviceIcon(f.Device.Icon, f.Device.Kind) {
+							<button type="button" class="ic-swatch selected" data-icon={ ic } aria-label={ "Icon " + ic } aria-pressed="true">{ ic }</button>
 						} else {
-							<button type="button" class="ic-swatch" data-icon={ ic }>{ ic }</button>
+							<button type="button" class="ic-swatch" data-icon={ ic } aria-label={ "Icon " + ic } aria-pressed="false">{ ic }</button>
 						}
 					}
 				</div>
-				<input type="hidden" name="icon" value={ DeviceIcon(d.Icon, d.Kind) }/>
+				<input type="hidden" name="icon" value={ DeviceIcon(f.Device.Icon, f.Device.Kind) }/>
 			</div>
 			<label>
 				Vendor
-				<input type="text" name="vendor" value={ d.Vendor }/>
+				<input type="text" name="vendor" value={ f.Device.Vendor }/>
 			</label>
 			<label>
 				Model
-				<input type="text" name="model" value={ d.Model }/>
+				<input type="text" name="model" value={ f.Device.Model }/>
 			</label>
 			<label>
 				Function
-				<input type="text" name="function" value={ d.Function } placeholder="role, channel…"/>
+				<input type="text" name="function" value={ f.Device.Function } placeholder="role, channel…"/>
 			</label>
 			<label>
 				Parent device
 				<select name="parent_device_id">
 					<option value="">— none —</option>
-					for _, pd := range allDevices {
-						if pd.ID != d.ID {
-							if d.ParentDeviceID != nil && *d.ParentDeviceID == pd.ID {
+					for _, pd := range f.AllDevices {
+						if pd.ID != f.Device.ID {
+							if f.Device.ParentDeviceID != nil && *f.Device.ParentDeviceID == pd.ID {
 								<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
 							} else {
 								<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
@@ -434,29 +483,29 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 			</label>
 			<label>
 				Notes
-				<textarea name="notes">{ d.Notes }</textarea>
+				<textarea name="notes">{ f.Device.Notes }</textarea>
 			</label>
 			<label>
 				Tags
-				<input type="text" name="tags" value={ tagNamesJoin(tags) } placeholder="comma,separated"/>
+				<input type="text" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="comma,separated"/>
 			</label>
-			if !isEdit {
+			if !f.IsEdit {
 				<div class="ifgroup">
 					<div class="fieldlabel">First interface (optional)</div>
 					<label>
 						MAC
-						<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff"/>
+						<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff" value={ f.MAC }/>
 					</label>
 					<label>
 						IP
-						<input type="text" name="ip" placeholder="10.0.0.5" value={ preIP }/>
+						<input type="text" name="ip" placeholder="10.0.0.5" value={ f.IP }/>
 					</label>
 					<label>
 						Subnet
 						<select name="subnet_id">
 							<option value="">—</option>
-							for _, sn := range subnets {
-								if sn.ID == preselectSubnet {
+							for _, sn := range f.Subnets {
+								if sn.ID == f.SubnetID {
 									<option value={ fmt.Sprint(sn.ID) } selected>{ sn.Name } { sn.CIDR }</option>
 								} else {
 									<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
@@ -468,8 +517,12 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 			}
 		</div>
 		<div class="df">
-			<button type="button" class="theme-toggle" data-close>Cancel</button>
-			if isEdit {
+			if modal {
+				<button type="button" class="theme-toggle" data-close>Cancel</button>
+			} else {
+				<a class="btn" href={ templ.URL(f.cancelURL()) }>Cancel</a>
+			}
+			if f.IsEdit {
 				<button type="submit" class="primary">Save</button>
 			} else {
 				<button type="submit" class="primary">Create device</button>
@@ -478,22 +531,30 @@ templ deviceFormInner(d store.Device, tags []store.Tag, subnets []store.Subnet, 
 	</form>
 }
 
-// DeviceDialog is the centered modal used for creating a device.
-templ DeviceDialog(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, isEdit bool, preselectSubnet int64, preIP string) {
-	<div class="dialog-scrim">
-		<div class="dialog">
-			@deviceFormInner(d, tags, subnets, allDevices, isEdit, preselectSubnet, preIP)
-		</div>
-	</div>
+// DeviceDialog is the centered modal used for creating a device. dialog.js
+// opens it with showModal() once htmx has swapped it into #modal.
+templ DeviceDialog(f DeviceForm) {
+	<dialog class="dialog" aria-labelledby="dlg-title">
+		@deviceFormInner(f, true)
+	</dialog>
 }
 
 // DeviceDrawer is the right-side sliding panel used for editing a device.
-templ DeviceDrawer(d store.Device, tags []store.Tag, subnets []store.Subnet, allDevices []store.DeviceRow, preselectSubnet int64) {
-	<div class="dialog-scrim drawer-scrim">
-		<div class="dialog drawer">
-			@deviceFormInner(d, tags, subnets, allDevices, true, preselectSubnet, "")
-		</div>
-	</div>
+templ DeviceDrawer(f DeviceForm) {
+	<dialog class="dialog drawer" aria-labelledby="dlg-title">
+		@deviceFormInner(f, true)
+	</dialog>
+}
+
+// DeviceFormPage is the create/edit form as a page of its own, for a request
+// that did not come from htmx: the New and Edit links without JavaScript, and
+// a plain post that failed validation.
+templ DeviceFormPage(username string, f DeviceForm) {
+	@Layout(f.title(), username) {
+		<section class="dialog page-dialog" aria-labelledby="dlg-title">
+			@deviceFormInner(f, false)
+		</section>
+	}
 }
 
 // parentLabel formats a device as "name — ip" for the parent <select>,
@@ -548,7 +609,7 @@ templ DevicePage(username string, d DeviceDetail) {
 			</div>
 			if IsAdmin(ctx) {
 				<div class="dev-hero-actions">
-					<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
+					<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</a>
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
 						<button type="submit">Wake on LAN</button>
 					</form>
@@ -558,7 +619,6 @@ templ DevicePage(username string, d DeviceDetail) {
 				</div>
 			}
 		</div>
-
 		<div class="dev-cols">
 			<div class="dev-main">
 				<div class="card">
@@ -619,7 +679,6 @@ templ DevicePage(username string, d DeviceDetail) {
 					}
 				</div>
 			</div>
-
 			<div class="dev-aside">
 				<div class="card">
 					<h2>Tags</h2>
@@ -629,7 +688,6 @@ templ DevicePage(username string, d DeviceDetail) {
 						}
 					</p>
 				</div>
-
 				<div class="card">
 					<h2>Links</h2>
 					<ul class="linklist">
@@ -637,7 +695,7 @@ templ DevicePage(username string, d DeviceDetail) {
 							<li>
 								<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">{ l.Label }</a>
 								if IsAdmin(ctx) {
-									<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline">
+									<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Remove the link " + l.Label + "?" }>
 										<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
 										<button type="submit">remove</button>
 									</form>
@@ -653,7 +711,6 @@ templ DevicePage(username string, d DeviceDetail) {
 						</form>
 					}
 				</div>
-
 				<div class="card">
 					<h2>Custom fields</h2>
 					<table>
@@ -668,7 +725,7 @@ templ DevicePage(username string, d DeviceDetail) {
 								<td>{ f.Value }</td>
 								<td>
 									if IsAdmin(ctx) {
-										<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline">
+										<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Remove the field " + f.Key + "?" }>
 											<input type="hidden" name="key" value={ f.Key }/>
 											<button type="submit">remove</button>
 										</form>
@@ -685,7 +742,6 @@ templ DevicePage(username string, d DeviceDetail) {
 						</form>
 					}
 				</div>
-
 				<div class="card">
 					<h2>Parent / children</h2>
 					if d.Parent != nil {
@@ -702,7 +758,6 @@ templ DevicePage(username string, d DeviceDetail) {
 						<p class="muted">No parent or children.</p>
 					}
 				</div>
-
 				<div class="card">
 					<h2>Event history</h2>
 					<table>
@@ -715,11 +770,10 @@ templ DevicePage(username string, d DeviceDetail) {
 						}
 					</table>
 				</div>
-
 				if IsAdmin(ctx) {
 					<div class="card">
 						<h2>Danger zone</h2>
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) } data-confirm={ "Delete " + d.Device.Name + " and everything recorded about it?" }>
 							<button type="submit">Delete device</button>
 						</form>
 					</div>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"netis/internal/scan"
 	"netis/internal/store"
@@ -44,7 +45,10 @@ func (s *Server) gridCells(ctx context.Context, sn store.Subnet) ([]views.GridCe
 		if o, ok := occ[ip]; ok {
 			c.DeviceID = o.DeviceID
 			c.Kind = o.Kind
-			c.Title = fmt.Sprintf("%s — %s %s last seen %s", ip, o.DeviceName, o.MAC, o.LastSeen)
+			c.Title = strings.TrimSpace(fmt.Sprintf("%s — %s %s", ip, o.DeviceName, o.MAC))
+			if o.LastSeen != "" {
+				c.Title += " last seen " + o.LastSeen
+			}
 			switch {
 			case o.Count > 1:
 				c.State = "conflict"

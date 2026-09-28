@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -164,23 +166,75 @@ func sortDeviceRows(rows []store.DeviceRow, key, dir string) {
 	})
 }
 
+// isHTMX reports whether r came from htmx rather than a plain browser request.
+func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
+
+// deviceFormLists loads the subnets and devices the device form offers as
+// choices.
+func (s *Server) deviceFormLists(r *http.Request, f *views.DeviceForm) error {
+	var err error
+	if f.Subnets, err = s.store.ListSubnets(r.Context()); err != nil {
+		return err
+	}
+	f.AllDevices, err = s.store.ListDevices(r.Context())
+	return err
+}
+
+// renderDeviceForm answers with the device form: the dialog (or edit drawer)
+// alone for htmx, which swaps it into #modal, and a page of its own
+// otherwise, so the New and Edit links work without JavaScript and a plain
+// post that failed shows its error with the form. status is the code to
+// send, 200 for a fresh form.
+func (s *Server) renderDeviceForm(w http.ResponseWriter, r *http.Request, f views.DeviceForm, status int) {
+	if err := s.deviceFormLists(r, &f); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var c templ.Component
+	switch {
+	case !isHTMX(r):
+		u, _ := userFrom(r)
+		c = views.DeviceFormPage(u.Username, f)
+	case f.IsEdit:
+		c = views.DeviceDrawer(f)
+	default:
+		c = views.DeviceDialog(f)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	s.render(w, r, c)
+}
+
+// submittedDeviceForm is the form as the user filled it in, to send back
+// with an error.
+func submittedDeviceForm(r *http.Request, d store.Device, isEdit bool) views.DeviceForm {
+	f := views.DeviceForm{Device: d, IsEdit: isEdit,
+		MAC: r.FormValue("mac"), IP: r.FormValue("ip")}
+	f.SubnetID, _ = strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
+	for _, name := range parseTags(r.FormValue("tags")) {
+		f.Tags = append(f.Tags, store.Tag{Name: name})
+	}
+	return f
+}
+
+// redirectAfterForm sends the browser on to url once a form has saved. A
+// dialog posts through htmx, which would follow a plain redirect itself and
+// swap the next page into the dialog, so it is told to navigate instead.
+func redirectAfterForm(w http.ResponseWriter, r *http.Request, url string) {
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", url)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, url, http.StatusSeeOther)
+}
+
 func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
-	subnets, err := s.store.ListSubnets(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	all, err := s.store.ListDevices(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	var subnetID int64
+	f := views.DeviceForm{Device: store.Device{Kind: "computer"}, IP: r.URL.Query().Get("ip")}
 	if v := r.URL.Query().Get("subnet"); v != "" {
-		subnetID, _ = strconv.ParseInt(v, 10, 64)
+		f.SubnetID, _ = strconv.ParseInt(v, 10, 64)
 	}
-	preIP := r.URL.Query().Get("ip")
-	s.render(w, r, views.DeviceDialog(store.Device{Kind: "computer"}, nil, subnets, all, false, subnetID, preIP))
+	s.renderDeviceForm(w, r, f, http.StatusOK)
 }
 
 func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
@@ -203,30 +257,12 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	subnets, err := s.store.ListSubnets(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	all, err := s.store.ListDevices(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	s.render(w, r, views.DeviceDrawer(d, tags, subnets, all, 0))
+	s.renderDeviceForm(w, r, views.DeviceForm{Device: d, Tags: tags, IsEdit: true}, http.StatusOK)
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
-	kind := r.FormValue("kind")
-	if !validKinds[kind] {
-		http.Error(w, "bad kind", 400)
-		return
-	}
 	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
-		http.Error(w, "name required", 400)
-		return
-	}
+	kind := r.FormValue("kind")
 	dev := store.Device{
 		Name: name, Kind: kind, Notes: r.FormValue("notes"),
 		Icon: r.FormValue("icon"), Source: "manual",
@@ -237,11 +273,25 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 			dev.ParentDeviceID = &pid
 		}
 	}
+	// A refused form comes back filled in as submitted, with the reason.
+	refuse := func(status int, msg string) {
+		f := submittedDeviceForm(r, dev, false)
+		f.Error = msg
+		s.renderDeviceForm(w, r, f, status)
+	}
+	if !validKinds[kind] {
+		refuse(http.StatusBadRequest, "bad kind")
+		return
+	}
+	if name == "" {
+		refuse(http.StatusBadRequest, "name required")
+		return
+	}
 	var macP *string
 	if raw := strings.TrimSpace(r.FormValue("mac")); raw != "" {
 		mac, ok := normMAC(raw)
 		if !ok {
-			http.Error(w, "invalid MAC address", http.StatusBadRequest)
+			refuse(http.StatusBadRequest, "invalid MAC address")
 			return
 		}
 		macP = &mac
@@ -251,11 +301,16 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	if ip != "" {
 		addr, err := netip.ParseAddr(ip)
 		if err != nil {
-			http.Error(w, "invalid IP address", http.StatusBadRequest)
+			refuse(http.StatusBadRequest, "invalid IP address")
 			return
 		}
-		sn, ok := s.subnetForForm(w, r)
-		if !ok {
+		sn, msg, err := s.subnetForForm(r)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if msg != "" {
+			refuse(http.StatusBadRequest, msg)
 			return
 		}
 		prefix, err := netip.ParsePrefix(sn.CIDR)
@@ -264,41 +319,40 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !prefix.Contains(addr) {
-			http.Error(w, "IP "+addr.String()+" is not in subnet "+sn.CIDR, http.StatusBadRequest)
+			refuse(http.StatusBadRequest, "IP "+addr.String()+" is not in subnet "+sn.CIDR)
 			return
 		}
 		subnetID, ip = sn.ID, addr.String()
 	}
 	devID, err := s.store.CreateDeviceWithIface(r.Context(), dev, macP, subnetID, ip, "static")
 	if err != nil {
-		s.failWrite(w, r, err, "that MAC address already belongs to another device", "parent device does not exist")
+		if status, msg, ok := writeFailure(err, "that MAC address already belongs to another device", "parent device does not exist"); ok {
+			refuse(status, msg)
+			return
+		}
+		s.fail(w, r, err)
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), devID, parseTags(r.FormValue("tags"))); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/devices/"+strconv.FormatInt(devID, 10), http.StatusSeeOther)
+	redirectAfterForm(w, r, "/devices/"+strconv.FormatInt(devID, 10))
 }
 
-// subnetForForm loads the subnet named by the form's subnet_id, answering 400
-// when it is missing or names no subnet.
-func (s *Server) subnetForForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool) {
+// subnetForForm loads the subnet named by the form's subnet_id. msg says what
+// is wrong with the form when it is missing or names no subnet; err is a
+// failure to look it up.
+func (s *Server) subnetForForm(r *http.Request) (sn store.Subnet, msg string, err error) {
 	id, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
 	if err != nil {
-		http.Error(w, "choose the subnet the IP belongs to", http.StatusBadRequest)
-		return store.Subnet{}, false
+		return store.Subnet{}, "choose the subnet the IP belongs to", nil
 	}
-	sn, err := s.store.GetSubnet(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "unknown subnet", http.StatusBadRequest)
-			return store.Subnet{}, false
-		}
-		s.fail(w, r, err)
-		return store.Subnet{}, false
+	sn, err = s.store.GetSubnet(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.Subnet{}, "unknown subnet", nil
 	}
-	return sn, true
+	return sn, "", err
 }
 
 func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -335,14 +389,20 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
-		s.failWrite(w, r, err, "device conflicts with an existing one", "parent device does not exist")
+		if status, msg, ok := writeFailure(err, "device conflicts with an existing one", "parent device does not exist"); ok {
+			f := submittedDeviceForm(r, d, true)
+			f.Error = msg
+			s.renderDeviceForm(w, r, f, status)
+			return
+		}
+		s.fail(w, r, err)
 		return
 	}
 	if err := s.store.SetDeviceTags(r.Context(), d.ID, parseTags(r.FormValue("tags"))); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+	redirectAfterForm(w, r, "/devices/"+r.PathValue("id"))
 }
 
 func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {

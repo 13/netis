@@ -30,10 +30,48 @@ var settingsKeys = []string{
 }
 
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
-	subnets, err := s.store.ListSubnets(r.Context())
+	d, err := s.settingsData(r, r.URL.Query().Get("tab"))
 	if err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	u, _ := userFrom(r)
+	s.render(w, r, views.SettingsPage(u.Username, d))
+}
+
+// settingsError answers a settings form that could not be saved with the
+// settings page open on tab and msg shown above it, under status. The page
+// the form came from, rather than a bare text response the user has to go
+// back from.
+func (s *Server) settingsError(w http.ResponseWriter, r *http.Request, tab string, status int, msg string) {
+	d, err := s.settingsData(r, tab)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d.Error = msg
+	u, _ := userFrom(r)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	s.render(w, r, views.SettingsPage(u.Username, d))
+}
+
+// settingsWriteError answers a failed store write from a settings form: a
+// conflict or missing reference inline on tab, anything else as a failure.
+func (s *Server) settingsWriteError(w http.ResponseWriter, r *http.Request, tab string, err error, conflictMsg string) {
+	if status, msg, ok := writeFailure(err, conflictMsg, ""); ok {
+		s.settingsError(w, r, tab, status, msg)
+		return
+	}
+	s.fail(w, r, err)
+}
+
+// settingsData gathers what the settings page shows on tab for the user
+// making r.
+func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, error) {
+	subnets, err := s.store.ListSubnets(r.Context())
+	if err != nil {
+		return views.SettingsData{}, err
 	}
 	// Viewers get the page without the configuration behind it: no
 	// integration addresses, users or key paths, no user list, and none of
@@ -43,8 +81,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	if admin {
 		users, err = s.store.ListUsers(r.Context())
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return views.SettingsData{}, err
 		}
 	}
 	values := make(map[string]string)
@@ -55,15 +92,13 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return views.SettingsData{}, err
 		}
 		values[k] = v
 	}
 	offlineAfter, err := s.store.GetSetting(r.Context(), "offline_after")
 	if err != nil {
-		s.fail(w, r, err)
-		return
+		return views.SettingsData{}, err
 	}
 	values["offline_after"] = offlineAfter
 
@@ -71,8 +106,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		"event_retention_days", "availability_retention_days"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return views.SettingsData{}, err
 		}
 		values[k] = v
 	}
@@ -86,7 +120,6 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		values = map[string]string{}
 	}
 
-	tab := r.URL.Query().Get("tab")
 	switch tab {
 	case "subnets", "integrations", "users", "about":
 	case "general":
@@ -116,8 +149,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	if tab == "users" {
 		sessions, err = s.store.ListSessionsForUser(r.Context(), u.ID)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return views.SettingsData{}, err
 		}
 		if c, cerr := r.Cookie("netis_session"); cerr == nil {
 			currentSessionID = store.SessionID(c.Value)
@@ -128,8 +160,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	if tab == "integrations" {
 		list, err := s.store.ListIntegrationStatus(r.Context())
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return views.SettingsData{}, err
 		}
 		statuses = make(map[string]store.IntegrationStatus, len(list))
 		for _, it := range list {
@@ -137,7 +168,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.render(w, r, views.SettingsPage(u.Username, views.SettingsData{
+	return views.SettingsData{
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
@@ -147,16 +178,17 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 			Backend: string(s.store.Dialect()),
 			Now:     time.Now().UTC().Format(time.RFC3339),
 		},
-	}))
+	}, nil
 }
 
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
-	sn, ok := parseSubnetForm(w, r)
-	if !ok {
+	sn, msg := parseSubnetForm(r)
+	if msg != "" {
+		s.settingsError(w, r, "subnets", http.StatusBadRequest, msg)
 		return
 	}
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
-		s.failWrite(w, r, err, subnetExistsMsg, "")
+		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -176,13 +208,14 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	sn, ok := parseSubnetForm(w, r)
-	if !ok {
+	sn, msg := parseSubnetForm(r)
+	if msg != "" {
+		s.settingsError(w, r, "subnets", http.StatusBadRequest, msg)
 		return
 	}
 	sn.ID = id
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
-		s.failWrite(w, r, err, subnetExistsMsg, "")
+		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
@@ -191,27 +224,24 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 const subnetExistsMsg = "a subnet with that CIDR already exists"
 
 // parseSubnetForm validates and builds a store.Subnet from the request form,
-// writing a 400 response and returning ok=false on validation failure. The
+// returning what is wrong with it as msg on validation failure. The
 // CIDR is normalized to its masked form (e.g. "10.0.0.5/24" -> "10.0.0.0/24")
 // so stored subnets are always canonical regardless of what a user typed.
-func parseSubnetForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool) {
+func parseSubnetForm(r *http.Request) (sn store.Subnet, msg string) {
 	cidr := strings.TrimSpace(r.FormValue("cidr"))
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
-		http.Error(w, "invalid CIDR", 400)
-		return store.Subnet{}, false
+		return store.Subnet{}, "invalid CIDR"
 	}
 	// Every address in a subnet becomes a grid cell and a sweep target, so an
 	// over-wide prefix is refused here rather than discovered when the page is
 	// opened. The message names the limit and the prefix that would fit.
 	if err := scan.CheckSubnetSize(cidr); err != nil {
-		http.Error(w, err.Error(), 400)
-		return store.Subnet{}, false
+		return store.Subnet{}, err.Error()
 	}
 	kind := r.FormValue("kind")
 	if kind != "lan" && kind != "wireguard" && kind != "proxmox-bridge" {
-		http.Error(w, "bad kind", 400)
-		return store.Subnet{}, false
+		return store.Subnet{}, "bad kind"
 	}
 	interval, err := strconv.Atoi(r.FormValue("scan_interval_sec"))
 	if err != nil || interval < 30 {
@@ -220,7 +250,7 @@ func parseSubnetForm(w http.ResponseWriter, r *http.Request) (store.Subnet, bool
 	return store.Subnet{
 		CIDR: prefix.Masked().String(), Name: r.FormValue("name"), Kind: kind,
 		ScanEnabled: r.FormValue("scan_enabled") == "on", ScanIntervalSec: interval,
-	}, true
+	}, ""
 }
 
 func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +318,12 @@ func (s *Server) failSave(w http.ResponseWriter, r *http.Request, err error) {
 
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {
-		s.failSave(w, r, err)
+		var bad badInput
+		if errors.As(err, &bad) {
+			s.settingsError(w, r, "integrations", http.StatusBadRequest, bad.msg)
+			return
+		}
+		s.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=integrations", http.StatusSeeOther)
@@ -299,15 +334,15 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	role := r.FormValue("role")
 	if username == "" || len(password) < minPasswordLen {
-		http.Error(w, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars", 400)
+		s.settingsError(w, r, "users", http.StatusBadRequest, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars")
 		return
 	}
 	if len(password) > maxPasswordLen {
-		http.Error(w, passwordTooLongMsg, 400)
+		s.settingsError(w, r, "users", http.StatusBadRequest, passwordTooLongMsg)
 		return
 	}
 	if role != "admin" && role != "viewer" {
-		http.Error(w, "bad role", 400)
+		s.settingsError(w, r, "users", http.StatusBadRequest, "bad role")
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
@@ -316,7 +351,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.store.CreateUser(r.Context(), username, string(hash), role); err != nil {
-		s.failWrite(w, r, err, "a user named "+username+" already exists", "")
+		s.settingsWriteError(w, r, "users", err, "a user named "+username+" already exists")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
@@ -357,7 +392,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, "cannot delete the last admin", 400)
+		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot delete the last admin")
 		return
 	}
 	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
@@ -366,7 +401,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	n, err := strconv.Atoi(r.FormValue("offline_after"))
 	if err != nil || n < 1 || n > 10 {
-		http.Error(w, "offline_after must be an integer 1-10", 400)
+		s.settingsError(w, r, "general", http.StatusBadRequest, "offline_after must be an integer 1-10")
 		return
 	}
 	if err := s.store.SetSetting(r.Context(), "offline_after", strconv.Itoa(n)); err != nil {
@@ -376,7 +411,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	if v := r.FormValue("default_scan_interval_sec"); v != "" {
 		iv, err := strconv.Atoi(v)
 		if err != nil || iv < 30 {
-			http.Error(w, "default scan interval must be an integer >= 30", 400)
+			s.settingsError(w, r, "general", http.StatusBadRequest, "default scan interval must be an integer >= 30")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
@@ -386,7 +421,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_subnet_kind"); v != "" {
 		if v != "lan" && v != "wireguard" && v != "proxmox-bridge" {
-			http.Error(w, "bad subnet kind", 400)
+			s.settingsError(w, r, "general", http.StatusBadRequest, "bad subnet kind")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_subnet_kind", v); err != nil {
@@ -396,7 +431,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_scan_enabled"); v != "" {
 		if v != "on" && v != "off" {
-			http.Error(w, "bad default scan enabled", 400)
+			s.settingsError(w, r, "general", http.StatusBadRequest, "bad default scan enabled")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
@@ -413,7 +448,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			http.Error(w, k+" must be a non-negative integer", 400)
+			s.settingsError(w, r, "general", http.StatusBadRequest, k+" must be a non-negative integer")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), k, strconv.Itoa(n)); err != nil {

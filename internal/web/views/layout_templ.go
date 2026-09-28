@@ -56,7 +56,12 @@ func footer() templ.Component {
 	})
 }
 
-func Layout(title string, username string) templ.Component {
+// themeBootstrap sets data-theme before first paint so the page never
+// flashes the wrong theme. A choice the user made with the toggle wins;
+// otherwise the OS preference decides, dark when it states none. theme.js
+// keeps following the OS after load. Without JavaScript no data-theme is set
+// and app.css follows prefers-color-scheme on its own.
+func themeBootstrap() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -77,41 +82,78 @@ func Layout(title string, username string) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<script>\n\t\t(function () {\n\t\t\tvar t = null;\n\t\t\ttry {\n\t\t\t\tt = localStorage.getItem(\"netis-theme\");\n\t\t\t} catch (e) {}\n\t\t\tif (t !== \"light\" && t !== \"dark\") {\n\t\t\t\tt =\n\t\t\t\t\twindow.matchMedia &&\n\t\t\t\t\twindow.matchMedia(\"(prefers-color-scheme: light)\").matches\n\t\t\t\t\t\t? \"light\"\n\t\t\t\t\t\t: \"dark\";\n\t\t\t}\n\t\t\tdocument.documentElement.setAttribute(\"data-theme\", t);\n\t\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var4 string
-		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(title)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 21, Col: 17}
+		return nil
+	})
+}
+
+func Layout(title string, username string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " — netis</title><script>\n\t\t\t\t// No-flash theme bootstrap: set data-theme before first paint.\n\t\t\t\t// Default dark unless a stored choice or an explicit OS light preference says otherwise.\n\t\t\t\t(function () {\n\t\t\t\t\ttry {\n\t\t\t\t\t\t// Default to dark unless the user has explicitly chosen a theme.\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', localStorage.getItem('netis-theme') || 'dark');\n\t\t\t\t\t} catch (e) {\n\t\t\t\t\t\tdocument.documentElement.setAttribute('data-theme', 'dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav class=\"top\"><a href=\"/\" class=\"brand\"><span class=\"dot\"></span> netis</a><div class=\"links\"><a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/subnets\">Subnets</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a></div><div class=\"right\"><span class=\"who\">")
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var4 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var4 == nil {
+			templ_7745c5c3_Var4 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(username)
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 49, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 45, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle theme\"><span class=\"tglabel\">Theme</span></button><form method=\"post\" action=\"/logout\" class=\"logout\"><button type=\"submit\">Logout</button></form></div></nav><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " — netis</title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ_7745c5c3_Var3.Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = themeBootstrap().Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body hx-ext=\"sse\" sse-connect=\"/events/stream\"><nav class=\"top\" aria-label=\"Main\"><a href=\"/\" class=\"brand\"><span class=\"dot\"></span> netis</a><div class=\"links\"><a href=\"/\">Dashboard</a> <a href=\"/devices\">Devices</a> <a href=\"/subnets\">Subnets</a> <a href=\"/events\">Events</a> <a href=\"/settings\">Settings</a></div><div class=\"right\"><span class=\"who\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var6 string
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(username)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 62, Col: 33}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle theme\"><span class=\"tglabel\">Theme</span></button><form method=\"post\" action=\"/logout\" class=\"logout\"><button type=\"submit\">Logout</button></form></div></nav><main>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ_7745c5c3_Var4.Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -119,7 +161,7 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div id=\"modal\"></div><div id=\"toasts\" class=\"toasts\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script><script src=\"/static/toasts.js\"></script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div id=\"modal\"></div><div id=\"toasts\" class=\"toasts\" role=\"status\" aria-live=\"polite\"></div><script src=\"/static/theme.js\"></script><script src=\"/static/dialog.js\"></script><script src=\"/static/toasts.js\"></script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
