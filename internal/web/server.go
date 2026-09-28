@@ -16,6 +16,7 @@ import (
 	"netis/internal/events"
 	"netis/internal/netdetect"
 	"netis/internal/store"
+	"netis/internal/web/views"
 )
 
 //go:embed static
@@ -261,7 +262,7 @@ func securityHeaders(next http.Handler) http.Handler {
 // client that hung up mid-page; discarding them entirely meant a genuine
 // template failure left no trace at all.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, c templ.Component) {
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(views.WithAdmin(r.Context(), isAdmin(r)), w); err != nil {
 		slog.Warn("rendering response failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	}
 }

@@ -234,7 +234,7 @@ templ deviceRow(row store.DeviceRow, depth int) {
 			}
 		</td>
 		<td>
-			if !row.Reviewed {
+			if !row.Reviewed && IsAdmin(ctx) {
 				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
 					<button type="submit">Approve</button>
 				</form>
@@ -296,8 +296,10 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 				<button type="button" data-view="list">List</button>
 				<button type="button" data-view="grid">Grid</button>
 			</div>
-			<button type="button" class="primary" hx-get="/devices/new" hx-target="#modal">New device</button>
-			<button type="button" class="ghost" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan all</button>
+			if IsAdmin(ctx) {
+				<button type="button" class="primary" hx-get="/devices/new" hx-target="#modal">New device</button>
+				<button type="button" class="ghost" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan all</button>
+			}
 		</div>
 
 		<div id="dev-list">
@@ -544,15 +546,17 @@ templ DevicePage(username string, d DeviceDetail) {
 					}
 				</div>
 			</div>
-			<div class="dev-hero-actions">
-				<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
-				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
-					<button type="submit">Wake on LAN</button>
-				</form>
-				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
-					<button type="submit">Scan ports</button>
-				</form>
-			</div>
+			if IsAdmin(ctx) {
+				<div class="dev-hero-actions">
+					<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</button>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline">
+						<button type="submit">Wake on LAN</button>
+					</form>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
+						<button type="submit">Scan ports</button>
+					</form>
+				</div>
+			}
 		</div>
 
 		<div class="dev-cols">
@@ -584,7 +588,7 @@ templ DevicePage(username string, d DeviceDetail) {
 									<tr>
 										<td class="mono">{ ip.IP }</td>
 										<td>
-											if ip.SubnetID != 0 {
+											if ip.SubnetID != 0 && IsAdmin(ctx) {
 												@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
 											} else {
 												<span class="chip">{ ip.Kind }</span>
@@ -632,18 +636,22 @@ templ DevicePage(username string, d DeviceDetail) {
 						for _, l := range d.Links {
 							<li>
 								<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">{ l.Label }</a>
-								<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline">
-									<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
-									<button type="submit">remove</button>
-								</form>
+								if IsAdmin(ctx) {
+									<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline">
+										<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
+										<button type="submit">remove</button>
+									</form>
+								}
 							</li>
 						}
 					</ul>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="rowform">
-						<input type="text" name="label" placeholder="label" required/>
-						<input type="text" name="url" placeholder="https://…" required/>
-						<button type="submit">Add link</button>
-					</form>
+					if IsAdmin(ctx) {
+						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="rowform">
+							<input type="text" name="label" placeholder="label" required/>
+							<input type="text" name="url" placeholder="https://…" required/>
+							<button type="submit">Add link</button>
+						</form>
+					}
 				</div>
 
 				<div class="card">
@@ -659,19 +667,23 @@ templ DevicePage(username string, d DeviceDetail) {
 								<td class="mono">{ f.Key }</td>
 								<td>{ f.Value }</td>
 								<td>
-									<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline">
-										<input type="hidden" name="key" value={ f.Key }/>
-										<button type="submit">remove</button>
-									</form>
+									if IsAdmin(ctx) {
+										<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline">
+											<input type="hidden" name="key" value={ f.Key }/>
+											<button type="submit">remove</button>
+										</form>
+									}
 								</td>
 							</tr>
 						}
 					</table>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="rowform">
-						<input type="text" name="key" placeholder="key" required/>
-						<input type="text" name="value" placeholder="value"/>
-						<button type="submit">Set field</button>
-					</form>
+					if IsAdmin(ctx) {
+						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="rowform">
+							<input type="text" name="key" placeholder="key" required/>
+							<input type="text" name="value" placeholder="value"/>
+							<button type="submit">Set field</button>
+						</form>
+					}
 				</div>
 
 				<div class="card">
@@ -704,12 +716,14 @@ templ DevicePage(username string, d DeviceDetail) {
 					</table>
 				</div>
 
-				<div class="card">
-					<h2>Danger zone</h2>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
-						<button type="submit">Delete device</button>
-					</form>
-				</div>
+				if IsAdmin(ctx) {
+					<div class="card">
+						<h2>Danger zone</h2>
+						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) }>
+							<button type="submit">Delete device</button>
+						</form>
+					</div>
+				}
 			</div>
 		</div>
 	}

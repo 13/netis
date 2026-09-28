@@ -319,10 +319,15 @@ func (s *Server) unavailable(w http.ResponseWriter, r *http.Request, err error) 
 	http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 }
 
+// isAdmin reports whether the request's signed-in user has the admin role.
+func isAdmin(r *http.Request) bool {
+	u, ok := userFrom(r)
+	return ok && u.Role == "admin"
+}
+
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u, ok := userFrom(r)
-		if !ok || u.Role != "admin" {
+		if !isAdmin(r) {
 			http.Error(w, "admin only", http.StatusForbidden)
 			return
 		}

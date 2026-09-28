@@ -35,10 +35,17 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	users, err := s.store.ListUsers(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
+	// Viewers get the page without the configuration behind it: no
+	// integration addresses, users or key paths, no user list, and none of
+	// the admin forms (the templates check the same flag).
+	admin := isAdmin(r)
+	var users []store.User
+	if admin {
+		users, err = s.store.ListUsers(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	values := make(map[string]string)
 	for _, k := range settingsKeys {
@@ -70,15 +77,28 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		values[k] = v
 	}
 
+	configured := map[string]bool{
+		"proxmox":   values["proxmox_url"] != "",
+		"wireguard": values["wg_ssh_addr"] != "",
+		"pihole":    values["pihole_url"] != "",
+	}
+	if !admin {
+		values = map[string]string{}
+	}
+
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "subnets", "integrations", "users", "general", "about":
+	case "subnets", "integrations", "users", "about":
+	case "general":
+		if !admin {
+			tab = "subnets"
+		}
 	default:
 		tab = "subnets"
 	}
 
 	var newDetected []netdetect.Detected
-	if detected, err := s.detect(); err == nil {
+	if detected, err := s.detect(); admin && err == nil {
 		have := make(map[string]bool, len(subnets))
 		for _, sn := range subnets {
 			have[sn.CIDR] = true
@@ -118,7 +138,7 @@ func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, r, views.SettingsPage(u.Username, views.SettingsData{
-		Subnets: subnets, Users: users, Values: values,
+		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
 		About: views.AboutData{

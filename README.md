@@ -55,6 +55,11 @@ for the background scan loop (every 120s by default).
   tab with the running version, build number, commit, database backend and
   dependency versions. Every page's footer shows the version and links there.
 
+Users are either `admin` or `viewer`. Viewers see the inventory, the subnets,
+events and each integration's status, and manage their own password and
+sessions; they do not see integration settings, the user list, or any of the
+edit, delete, scan, Wake-on-LAN and port-scan controls.
+
 ## Install
 
 Every `v*` tag publishes static Linux binaries (amd64 and arm64) to the GitHub
@@ -178,9 +183,12 @@ subnet you've configured in netis.
 
 Each configured integration (Proxmox, Pi-hole, WireGuard) syncs once a minute
 and on demand from Settings → Integrations → Run now. A run is cut off after
-30 seconds. Its result — connected with a count, or failing with the error — is
-shown on the settings page and in `/api/status`, and the first failure of an
-outage adds a `scan_error` event. Clicking Run now while that integration is
+30 seconds. Its result — connected with a count, or failing with a category
+(timeout, authentication failed, host key rejected, connection failed,
+configuration error, sync error) — is shown on the settings page, the dashboard
+and in `/api/status`, and the first failure of an outage adds a `scan_error`
+event. The full error, which can name key paths and internal addresses, goes
+only to the server log. Clicking Run now while that integration is
 already syncing reports "already running" instead of starting a second run.
 
 Syncs fill in devices but never overwrite your edits. A Proxmox guest or node

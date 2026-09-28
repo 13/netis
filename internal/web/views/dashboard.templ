@@ -110,7 +110,12 @@ templ DashboardBody(d DashboardData) {
 			}
 		</section>
 	</div>
-	<h2>Subnets <button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan all</button></h2>
+	<h2>
+		Subnets
+		if IsAdmin(ctx) {
+			<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan all</button>
+		}
+	</h2>
 	<div class="cards">
 		for _, r := range d.Rows {
 			@subnetCard(r)
@@ -133,7 +138,7 @@ templ subnetCard(r DashRow) {
 		<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
 			<h3><a href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a></h3>
 			<span class="mono muted">{ r.Subnet.CIDR }</span>
-			if r.Subnet.Kind != "wireguard" {
+			if r.Subnet.Kind != "wireguard" && IsAdmin(ctx) {
 				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan</button>
 			}
 		</div>
