@@ -7,8 +7,8 @@ of devices (computers, switches, phones, servers, IoT, VMs, LXCs, WireGuard
 peers), their IPs and MACs, live online/offline status with last-seen
 tracking, background network scanning, and a per-subnet grid overview
 showing which IPs are online, offline, reserved, free, or conflicting. It
-integrates with Proxmox (auto-import of VMs/LXCs) and WireGuard (peer
-status via SSH). It ships as a single static Go binary with an embedded
+integrates with Proxmox (auto-import of VMs/LXCs), Pi-hole (DHCP leases,
+reservations and local DNS names) and WireGuard (peer status via SSH). It ships as a single static Go binary with an embedded
 SQLite database — no external services required.
 
 ## Quick start
@@ -16,8 +16,11 @@ SQLite database — no external services required.
 Build:
 
 ```sh
-templ generate && CGO_ENABLED=0 go build -o netis ./cmd/netis
+go tool templ generate && CGO_ENABLED=0 go build -o netis ./cmd/netis
 ```
+
+(`make build` does the same; templ is pinned in `go.mod` as a tool, so nothing
+needs installing first.)
 
 Run:
 
@@ -31,6 +34,20 @@ setup, log in at `/login`, then go to **Settings** and add your LAN's
 subnet (e.g. `192.168.1.0/24`) so netis knows what to scan. Use the
 **Scan now** button on the subnet page to run an immediate sweep, or wait
 for the background scan loop (every 120s by default).
+
+## Make targets
+
+| Target | Does |
+| --- | --- |
+| `make generate` | `go tool templ generate` |
+| `make build` | generate, then build a static `./netis` |
+| `make run` | build and run it |
+| `make test` / `make race` | generate, then `go test ./...` (with `-race`) |
+| `make pg` / `make pg-stop` | start / remove a throwaway Postgres on port 55432 |
+| `make test-pg` | the tests against that Postgres as well as SQLite |
+| `make lint` | `go vet` and staticcheck |
+| `make vuln` | govulncheck |
+| `make docker` | `docker build -t netis .` |
 
 ## Views
 
@@ -102,9 +119,11 @@ netis on a bridged/NAT network will still ping and track online/offline
 state, but MAC address (and therefore vendor) discovery will not work for
 those subnets.
 
-To allow the unprivileged Go binary to send raw ICMP echo requests instead
-of the UDP-ICMP fallback, add `--cap-add=NET_RAW` and set
-`NETIS_PRIVILEGED_ICMP=1`.
+The image runs netis as root and sets `NETIS_PRIVILEGED_ICMP=1`, so it sends
+raw ICMP echo requests. Docker grants root in a container `CAP_NET_RAW` by
+default, so no `--cap-add` is needed. A runtime that drops it (Podman's
+defaults, `--cap-drop=ALL`, some hardened setups) needs `--cap-add=NET_RAW`;
+without it the sweeps fail and show up as scan errors.
 
 If most probes in a sweep cannot be sent at all (for example the process
 lacks permission to open ICMP sockets), the sweep is reported as a scan
@@ -123,6 +142,27 @@ The unit sets `AmbientCapabilities=CAP_NET_RAW` so netis can send
 privileged ICMP echo requests without running as root, and uses
 `StateDirectory=netis` so `/var/lib/netis` exists and is writable by the
 `netis` user for the SQLite database.
+
+Secrets such as `NETIS_SECRET_KEY` belong in `/etc/netis/env` (read through
+`EnvironmentFile=`, optional), not in the unit file, which any local user can
+read:
+
+```sh
+install -d -m 0755 /etc/netis
+install -m 0600 /dev/null /etc/netis/env
+echo "NETIS_SECRET_KEY=$(openssl rand -base64 32)" >> /etc/netis/env
+```
+
+The unit is sandboxed: the filesystem is read-only except `/var/lib/netis`,
+`/home` and `/root` are hidden, the capability set is limited to
+`CAP_NET_RAW`, and system calls, address families and namespaces are
+restricted (`systemd-analyze security netis` shows the details). Because of
+`ProtectHome=yes`, put the WireGuard SSH key and `known_hosts` file under
+`/etc/netis` or `/var/lib/netis`, readable by the `netis` user, and point the
+`wg_ssh_key_path` / `wg_ssh_known_hosts` settings there; a key in
+`/root/.ssh` is invisible to the service. If a key must stay where it is, add
+it with a drop-in (`systemctl edit netis`) containing
+`BindReadOnlyPaths=/home/you/.ssh/netis_wg:/etc/netis/wg_key`.
 
 Because the LXC shares the Proxmox host's bridge, it sees the same L2
 segment as everything else on the LAN, so ARP-based MAC discovery works
@@ -338,6 +378,64 @@ Use the built-in snapshot, which works against a live database:
 ```sh
 netis backup --to /backups/netis-$(date +%F).db
 ```
+
+The source is `--from`, or `NETIS_DB` when that is not given. It must be an
+existing database file: the backup opens it read-only, so it never creates a
+database, and never migrates one — running a newer netis binary's `backup`
+leaves the live schema alone. An existing destination file is refused rather
+than overwritten.
+
+In Docker, run the binary inside the container; `NETIS_DB` already points at
+`/data/netis.db` there, so the backup lands in the same volume:
+
+```sh
+docker exec netis /netis backup --to /data/backup-$(date +%F).db
+```
+
+To take one nightly, a cron entry (note the escaped `%`):
+
+```
+15 3 * * * docker exec netis /netis backup --to /data/backup-$(date +\%F).db
+```
+
+or a systemd timer on a native install:
+
+```ini
+# /etc/systemd/system/netis-backup.service
+[Service]
+Type=oneshot
+User=netis
+ExecStart=/bin/sh -c '/opt/netis/netis backup --from /var/lib/netis/netis.db --to /var/lib/netis/backup-$(date +%%F).db'
+
+# /etc/systemd/system/netis-backup.timer
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable it with `systemctl enable --now netis-backup.timer`. Neither prunes old
+backups; delete them on whatever schedule suits you, and copy them off the
+machine.
+
+To restore a SQLite backup:
+
+1. Stop netis (`systemctl stop netis`, or `docker stop netis`).
+2. Copy the backup over the database file, e.g.
+   `cp backup-2026-01-01.db /var/lib/netis/netis.db` (keep the owner the
+   netis user). The image has no shell, so with Docker do steps 2 and 3
+   from a throwaway container on the same volume:
+   `docker run --rm -v netis-data:/data alpine sh -c 'cp /data/backup-2026-01-01.db /data/netis.db && rm -f /data/netis.db-wal /data/netis.db-shm'`.
+3. Delete the `netis.db-wal` and `netis.db-shm` files next to it if present:
+   they belong to the old database, and SQLite would replay the old WAL on top
+   of the restored one.
+4. Start netis again and check the dashboard and device list. If
+   `NETIS_SECRET_KEY` was set when the backup was taken, the same key must be
+   set now (see [Encrypting stored credentials](#encrypting-stored-credentials)).
+
+A backup from an older release is fine: netis migrates it forward on start.
 
 Postgres: use `pg_dump`, which already handles this properly.
 
