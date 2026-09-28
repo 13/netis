@@ -19,6 +19,11 @@ const maxPasswordLen = 72
 
 const passwordTooLongMsg = "password must be at most 72 bytes (fewer characters if it uses non-ASCII letters)"
 
+// bcryptCost is the work factor for every password hash netis creates. It is
+// a variable only so the package's tests can drop it to bcrypt.MinCost: at the
+// default, hashing under the race detector made the web tests take minutes.
+var bcryptCost = bcrypt.DefaultCost
+
 // handlePasswordChange changes the signed-in user's own password. It is not
 // admin-gated: a viewer must be able to rotate their own credential without
 // asking an admin to delete and recreate the account, which was the only way
@@ -111,7 +116,7 @@ func (s *Server) validNewPassword(w http.ResponseWriter, r *http.Request) (strin
 // when an admin resets someone else's, that user has no session to keep and
 // all of theirs go.
 func (s *Server) setPassword(w http.ResponseWriter, r *http.Request, userID int64, password string) bool {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		s.fail(w, r, err)
 		return false

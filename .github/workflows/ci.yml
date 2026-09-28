@@ -43,8 +43,30 @@ jobs:
       - name: staticcheck
         run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
 
-      - name: tests (race)
-        run: go test -race ./...
+      # shell: bash turns on pipefail, so a failing test still fails the step
+      # through the tee.
+      - name: tests (race, coverage)
+        shell: bash
+        run: go test -race -coverprofile=cover.out ./... | tee test-output.txt
+
+      # Coverage goes to the job summary; nothing is uploaded anywhere. The
+      # generated templ views are mostly markup that tests assert on as HTML
+      # rather than cover line by line, so a second total leaves them out.
+      - name: coverage summary
+        if: always() && hashFiles('cover.out') != ''
+        shell: bash
+        run: |
+          grep -v '_templ.go:' cover.out > cover.app.out
+          {
+            echo '### Coverage'
+            echo
+            echo '```'
+            echo "total:                   $(go tool cover -func=cover.out | tail -1 | awk '{print $NF}')"
+            echo "total (excluding templ): $(go tool cover -func=cover.app.out | tail -1 | awk '{print $NF}')"
+            echo
+            grep 'coverage:' test-output.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...

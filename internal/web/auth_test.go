@@ -27,7 +27,7 @@ func testServer(t *testing.T) (*Server, *store.Store) {
 
 func addAdmin(t *testing.T, st *store.Store) {
 	t.Helper()
-	h, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
+	h, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcryptCost)
 	if _, err := st.CreateUser(t.Context(), "ben", string(h), "admin"); err != nil {
 		t.Fatal(err)
 	}

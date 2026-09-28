@@ -232,16 +232,17 @@ func newToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// dummyHash is a precomputed bcrypt hash compared against when a login
-// username is unknown, so unknown-user requests cost roughly the same as
-// known-user requests and don't leak timing information.
-var dummyHash = func() []byte {
-	h, err := bcrypt.GenerateFromPassword([]byte("netis-dummy-password"), bcrypt.DefaultCost)
+// dummyHash returns a bcrypt hash compared against when a login username is
+// unknown, so unknown-user requests cost roughly the same as known-user
+// requests and don't leak timing information. It is made on first use, at
+// bcryptCost, so it costs what a real account's hash costs.
+var dummyHash = sync.OnceValue(func() []byte {
+	h, err := bcrypt.GenerateFromPassword([]byte("netis-dummy-password"), bcryptCost)
 	if err != nil {
 		panic(err)
 	}
 	return h
-}()
+})
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -368,7 +369,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// Run a bcrypt compare against a dummy hash even when the user is
 		// unknown, so this path costs about the same as the known-user
 		// path and doesn't leak username validity via timing.
-		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		_ = bcrypt.CompareHashAndPassword(dummyHash(), []byte(password))
 	}
 	if err == nil && ok && match {
 		failed = false
@@ -444,7 +445,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, views.SetupPage(passwordTooLongMsg))
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		s.fail(w, r, err)
 		return
