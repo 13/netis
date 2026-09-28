@@ -20,6 +20,10 @@ type Device struct {
 	Reviewed       bool
 	Model          string
 	Function       string
+	// UpstreamMissingSince is when the integration that created the device
+	// (Proxmox, WireGuard) stopped listing it; nil while it is listed. Only
+	// ReconcileUpstream writes it, so the edit form cannot clear it.
+	UpstreamMissingSince *string
 }
 
 type Iface struct {
@@ -34,6 +38,9 @@ type IPRow struct {
 	IP       string
 	SubnetID int64
 	Kind     string
+	// Source is the integration that created the assignment and may remove
+	// it again, or "" for the user's own (see SyncIntegrationIPs).
+	Source string
 }
 
 type IPInfo struct {
@@ -50,12 +57,12 @@ type DeviceRow struct {
 	TagNames []string
 }
 
-const deviceCols = `id,name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function`
+const deviceCols = `id,name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function,upstream_missing_since`
 
 func scanDevice(row interface{ Scan(...any) error }) (Device, error) {
 	var d Device
 	err := row.Scan(&d.ID, &d.Name, &d.Kind, &d.Notes, &d.Vendor, &d.Source,
-		&d.ParentDeviceID, &d.ProxmoxVMID, &d.WGPubKey, &d.Icon, &d.Reviewed, &d.Model, &d.Function)
+		&d.ParentDeviceID, &d.ProxmoxVMID, &d.WGPubKey, &d.Icon, &d.Reviewed, &d.Model, &d.Function, &d.UpstreamMissingSince)
 	return d, err
 }
 
@@ -318,7 +325,7 @@ func (s *Store) SetIfaceHostnameIfEmpty(ctx context.Context, ifaceID int64, host
 }
 
 func (s *Store) ListIPs(ctx context.Context, ifaceID int64) ([]IPRow, error) {
-	rows, err := s.query(ctx, `SELECT id,ip,subnet_id,kind FROM ip_assignment WHERE iface_id=?`, ifaceID)
+	rows, err := s.query(ctx, `SELECT id,ip,subnet_id,kind,source FROM ip_assignment WHERE iface_id=?`, ifaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +333,7 @@ func (s *Store) ListIPs(ctx context.Context, ifaceID int64) ([]IPRow, error) {
 	var out []IPRow
 	for rows.Next() {
 		var r IPRow
-		if err := rows.Scan(&r.ID, &r.IP, &r.SubnetID, &r.Kind); err != nil {
+		if err := rows.Scan(&r.ID, &r.IP, &r.SubnetID, &r.Kind, &r.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

@@ -40,16 +40,19 @@ type typeInfo struct {
 }
 
 var types = map[string]typeInfo{
-	"device_new":     {"New device", "new", 3, "new device", "new devices"},
-	"offline":        {"Device offline", "red_circle", 4, "went offline", "went offline"},
-	"online":         {"Device online", "green_circle", 3, "came online", "came online"},
-	"ip_conflict":    {"IP conflict", "warning", 4, "IP conflict", "IP conflicts"},
-	"scan_error":     {"Scan or sync failing", "rotating_light", 4, "error", "errors"},
-	"sync_recovered": {"Integration recovered", "white_check_mark", 2, "recovery", "recoveries"},
+	"device_new":      {"New device", "new", 3, "new device", "new devices"},
+	"offline":         {"Device offline", "red_circle", 4, "went offline", "went offline"},
+	"online":          {"Device online", "green_circle", 3, "came online", "came online"},
+	"ip_conflict":     {"IP conflict", "warning", 4, "IP conflict", "IP conflicts"},
+	"scan_error":      {"Scan or sync failing", "rotating_light", 4, "error", "errors"},
+	"sync_recovered":  {"Integration recovered", "white_check_mark", 2, "recovery", "recoveries"},
+	"device_missing":  {"Device missing upstream", "ghost", 3, "missing upstream", "missing upstream"},
+	"device_returned": {"Device back upstream", "leftwards_arrow_with_hook", 2, "back upstream", "back upstream"},
 }
 
 // summaryOrder is the order counts appear in a batch's summary line.
-var summaryOrder = []string{"device_new", "offline", "online", "ip_conflict", "scan_error", "sync_recovered"}
+var summaryOrder = []string{"device_new", "offline", "online", "ip_conflict", "scan_error", "sync_recovered",
+	"device_missing", "device_returned"}
 
 // buildMessage turns a batch into one message: a single event is sent as
 // itself, several as a summary with one line each.

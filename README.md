@@ -63,9 +63,15 @@ for the background scan loop (every 120s by default).
 - **Device page** — full device detail: interfaces, IPs, open ports,
   uptime, links, tags, custom fields, parent/child devices (e.g. a
   Proxmox host and its guests), event history, and buttons to send a
-  Wake-on-LAN packet or run an on-demand TCP port scan.
+  Wake-on-LAN packet or run an on-demand TCP port scan. The magic packet goes
+  to the directed broadcast of every subnet the device's interface has an
+  address in (e.g. `10.0.20.255`), so hosts on other VLANs can be woken, and to
+  `255.255.255.255` as before; the toast lists the addresses used. A directed
+  broadcast into a subnet netis is not attached to only arrives if the router
+  forwards it, which many do not by default.
 - **Events** — a filterable log of device-new/online/offline/ip-changed/
-  scan-error events.
+  scan-error events, and device-missing/device-returned for integration
+  devices that leave or come back upstream.
 - **Settings** — subnet CRUD, scan interval, offline threshold, Proxmox
   and WireGuard integration credentials, user management (add, delete,
   change your own password, reset someone else's — passwords are 8 to 72
@@ -268,7 +274,7 @@ database's key/value settings table:
 | `notify_webhook_url`, `notify_ntfy_url` | Notification channels; blank disables one. See [Notifications](#notifications). |
 | `notify_webhook_auth`, `notify_ntfy_token` | Webhook `Authorization` header value and ntfy access token. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
 | `notify_base_url` | netis's own URL, used to link messages to a device or the event log. |
-| `notify_device_new`, `notify_offline`, `notify_ip_conflict`, `notify_sync` | `0` switches that kind of notification off (default on). |
+| `notify_device_new`, `notify_offline`, `notify_ip_conflict`, `notify_sync`, `notify_upstream` | `0` switches that kind of notification off (default on). |
 
 ### Pi-hole (v6)
 
@@ -307,6 +313,24 @@ When the scanner found a guest first, the guest takes over that device's
 interface (and its IPs) as long as you have not reviewed the discovered device;
 the discovered device is deleted if nothing else is left on it. A reviewed
 device keeps its interface.
+
+A WireGuard peer's AllowedIPs are followed on every sync: addresses inside a
+WireGuard subnet are added, and ones the sync added that the server no longer
+allows are removed. Addresses you recorded yourself are never removed, and
+changing an address's lease kind on the subnet grid makes it yours. (When
+upgrading, static addresses already on WireGuard peers inside WireGuard subnets
+are taken to be the sync's, since that is what it always created.)
+
+A Proxmox guest deleted in Proxmox, or a peer removed from the WireGuard
+server, is **not** deleted from netis: it gets a red **missing upstream** badge
+on its page and in the device list, and one `device_missing` event. If it comes
+back (same VMID or public key) the badge clears with a `device_returned` event.
+Delete the device yourself once you know it is gone. A device is only marked
+after a sync that succeeded and returned a non-empty list: a failed call marks
+nothing, and neither does an empty list, since a Proxmox token that lost its
+permissions sees no guests at all. The flip side is that removing the very last
+guest or peer is not flagged until another one exists. Proxmox nodes are never
+marked, because netis only learns of nodes through their guests.
 
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
@@ -412,6 +436,7 @@ a generic webhook, an [ntfy](https://ntfy.sh) topic, or both:
 | Offline / online | A device goes offline or comes back — **only** for devices you mark with **Alert when offline** on their page. The mark is off for every device by default, so phones and laptops coming and going stay quiet. |
 | IP conflicts | After a subnet sweep, an address is newly claimed by more than one interface. Announced once per conflict; one still present after a restart is announced again. |
 | Scan and integration errors | A subnet sweep fails (the same error at most once an hour), an integration starts failing (once per outage), and when it works again. |
+| Missing upstream | A Proxmox guest or WireGuard peer is no longer listed by its integration, and when it comes back. |
 
 Each kind can be switched off. Events are collected for 30 seconds and sent
 together, so a scan that turns up fifty devices sends one summary instead of

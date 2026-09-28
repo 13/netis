@@ -633,7 +633,11 @@ func (s *Server) handleFieldDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleWOL sends a Wake-on-LAN magic packet to the MAC of the device's
-// first interface that has one, then redirects back to the device page.
+// first interface that has one. It goes to the directed broadcast of every
+// subnet that interface has an address in, so a host on another VLAN is
+// reached, and to 255.255.255.255 as well. An htmx request is answered with a
+// toast naming the addresses used; a plain form post redirects back to the
+// device page.
 func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -654,16 +658,48 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, f := range ifaces {
-		if f.MAC != nil {
-			if err := wol.Send(*f.MAC); err != nil {
-				s.fail(w, r, err)
-				return
-			}
-			http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+		if f.MAC == nil {
+			continue
+		}
+		targets, err := s.wolTargets(r.Context(), f.ID)
+		if err != nil {
+			s.fail(w, r, err)
 			return
 		}
+		sent, err := wol.SendAll(*f.MAC, targets, s.wolSend)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if isHTMX(r) {
+			s.render(w, r, views.ScanToast("Magic packet for "+*f.MAC+" sent to "+wol.HostsOf(sent)))
+			return
+		}
+		http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+		return
 	}
 	http.Error(w, "device has no MAC", 400)
+}
+
+// wolTargets returns where a magic packet for an interface goes: the directed
+// broadcast of the subnet of each of its IPs (the subnet's prefix defines the
+// broadcast, not the address), then the limited broadcast.
+func (s *Server) wolTargets(ctx context.Context, ifaceID int64) ([]string, error) {
+	ips, err := s.store.ListIPs(ctx, ifaceID)
+	if err != nil {
+		return nil, err
+	}
+	var prefixes []netip.Prefix
+	for _, ip := range ips {
+		sn, err := s.store.GetSubnet(ctx, ip.SubnetID)
+		if err != nil {
+			return nil, err
+		}
+		if p, err := netip.ParsePrefix(sn.CIDR); err == nil {
+			prefixes = append(prefixes, p)
+		}
+	}
+	return wol.Targets(prefixes), nil
 }
 
 // handlePortScan runs an on-demand TCP port scan against the first IP of
