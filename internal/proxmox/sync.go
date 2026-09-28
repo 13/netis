@@ -103,10 +103,41 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 		return err
 	}
 	for _, mac := range macs {
-		if _, ok, _ := s.store.FindIfaceByMAC(ctx, mac); !ok {
-			m := mac
-			s.store.AddIface(ctx, devID, &m, nil)
+		if err := s.attachMAC(ctx, devID, g, mac); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// attachMAC gives the guest an interface for mac. When the MAC is already
+// known, the scan or Pi-hole most likely found the guest first and made a
+// device for it; that interface is moved to the guest (and the discovered
+// device dropped if nothing else is on it) unless the user has reviewed the
+// device, in which case it is theirs and is left alone.
+func (s *Sync) attachMAC(ctx context.Context, devID int64, g Guest, mac string) error {
+	iface, found, err := s.store.FindIfaceByMAC(ctx, mac)
+	if err != nil {
+		return err
+	}
+	if !found {
+		m := mac
+		_, err := s.store.AddIface(ctx, devID, &m, nil)
+		return err
+	}
+	if iface.DeviceID == devID {
+		return nil
+	}
+	moved, removed, err := s.store.AdoptDiscoveredIface(ctx, iface.ID, devID)
+	if err != nil {
+		return err
+	}
+	if !moved {
+		slog.Info("proxmox guest MAC belongs to a reviewed device; leaving it there",
+			"vmid", g.VMID, "mac", mac, "device", iface.DeviceID)
+		return nil
+	}
+	slog.Info("proxmox guest adopted discovered interface",
+		"vmid", g.VMID, "mac", mac, "from_device", iface.DeviceID, "from_device_deleted", removed)
 	return nil
 }

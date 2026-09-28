@@ -176,6 +176,62 @@ func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, er
 	return i, true, nil
 }
 
+// AdoptDiscoveredIface moves an interface to toDeviceID when the device that
+// holds it was created by discovery (scan or Pi-hole) and the user has not
+// reviewed it. An integration that knows better what the interface belongs to
+// (a Proxmox guest recognised by its MAC) uses this to merge the two devices.
+//
+// moved is false, and nothing changes, when the owner does not qualify: a
+// reviewed device is the user's, and the sync must not take from it. When the
+// move leaves the old device with no interface and nothing the user added (no
+// notes, tags, links, custom fields or children), that device is deleted and
+// removed reports it; its events are re-pointed at toDeviceID first, since
+// they were about the interface that just moved. It all runs in one
+// transaction.
+func (s *Store) AdoptDiscoveredIface(ctx context.Context, ifaceID, toDeviceID int64) (moved, removed bool, err error) {
+	err = s.withTx(ctx, func(c conn) error {
+		var fromID int64
+		if err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT device_id FROM iface WHERE id=?`),
+			ifaceID).Scan(&fromID); err != nil {
+			return err
+		}
+		res, err := s.execOn(ctx, c, `UPDATE iface SET device_id=? WHERE id=? AND device_id IN
+			(SELECT id FROM device WHERE id=? AND source IN ('scan','pihole') AND reviewed=FALSE)`,
+			toDeviceID, ifaceID, fromID)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		moved = true
+		const empty = `id=? AND notes='' AND reviewed=FALSE
+			AND NOT EXISTS (SELECT 1 FROM iface WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device_tag WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device_link WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM custom_field WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device ch WHERE ch.parent_device_id=device.id)`
+		if _, err := s.execOn(ctx, c, `UPDATE event SET device_id=? WHERE device_id=?
+			AND EXISTS (SELECT 1 FROM device WHERE `+empty+`)`, toDeviceID, fromID, fromID); err != nil {
+			return err
+		}
+		res, err = s.execOn(ctx, c, `DELETE FROM device WHERE `+empty, fromID)
+		if err != nil {
+			return err
+		}
+		if n, err = res.RowsAffected(); err != nil {
+			return err
+		}
+		removed = n > 0
+		return nil
+	})
+	return moved, removed, err
+}
+
 func (s *Store) FindIfaceByIP(ctx context.Context, subnetID int64, ip string) (Iface, bool, error) {
 	var i Iface
 	err := s.queryRow(ctx, `SELECT f.id,f.device_id,f.mac,f.hostname FROM iface f
@@ -204,6 +260,26 @@ func (s *Store) RemoveIfaceIPsInSubnetExcept(ctx context.Context, ifaceID, subne
 	_, err := s.exec(ctx, `DELETE FROM ip_assignment WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
 		ifaceID, subnetID, keepIP)
 	return err
+}
+
+// ClaimDHCPLease records that a DHCP server has leased ip to ifaceID, which
+// makes every other DHCP claim involving either side stale: the iface's other
+// DHCP addresses in the subnet (it moved) and other ifaces' DHCP assignments
+// of the same address (it was handed on). Both are deleted in one transaction
+// so the address never ends up claimed twice. Static rows are user or
+// reservation decisions and are left alone.
+func (s *Store) ClaimDHCPLease(ctx context.Context, ifaceID, subnetID int64, ip string) error {
+	return s.withTx(ctx, func(c conn) error {
+		if _, err := s.execOn(ctx, c, `DELETE FROM ip_assignment
+			WHERE iface_id=? AND subnet_id=? AND ip<>? AND kind='dhcp'`,
+			ifaceID, subnetID, ip); err != nil {
+			return err
+		}
+		_, err := s.execOn(ctx, c, `DELETE FROM ip_assignment
+			WHERE iface_id<>? AND subnet_id=? AND ip=? AND kind='dhcp'`,
+			ifaceID, subnetID, ip)
+		return err
+	})
 }
 
 // UpsertIPAssignment assigns ip to (ifaceID, subnetID) idempotently: it
@@ -516,14 +592,8 @@ func (s *Store) deviceTagNames(ctx context.Context, deviceID int64) ([]string, e
 // not.
 func (s *Store) CreateDiscoveredDevice(ctx context.Context, d Device, mac, hostname *string,
 	subnetID int64, ip, kind string) (deviceID, ifaceID int64, err error) {
-	// Scan-discovered devices start unreviewed, matching CreateDevice.
-	reviewed := d.Source != "scan"
 	err = s.withTx(ctx, func(c conn) error {
-		devID, err := s.insertReturningIDOn(ctx, c,
-			`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-			d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID,
-			d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
+		devID, err := s.insertDeviceOn(ctx, c, d)
 		if err != nil {
 			return err
 		}
@@ -544,4 +614,52 @@ func (s *Store) CreateDiscoveredDevice(ctx context.Context, d Device, mac, hostn
 		return 0, 0, err
 	}
 	return deviceID, ifaceID, nil
+}
+
+// insertDeviceOn inserts d on an explicit connection, for the functions that
+// create a device together with its interface in one transaction.
+func (s *Store) insertDeviceOn(ctx context.Context, c conn, d Device) (int64, error) {
+	// Scan-discovered devices start unreviewed, matching CreateDevice.
+	reviewed := d.Source != "scan"
+	return s.insertReturningIDOn(ctx, c,
+		`INSERT INTO device (name,kind,notes,vendor,source,parent_device_id,proxmox_vmid,wg_pubkey,icon,reviewed,model,function)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		d.Name, d.Kind, d.Notes, d.Vendor, d.Source, d.ParentDeviceID, d.ProxmoxVMID,
+		d.WGPubKey, d.Icon, reviewed, d.Model, d.Function)
+}
+
+// CreateDeviceWithIface creates a device and, when a MAC or an IP is given,
+// its interface and that IP's assignment, all in one transaction. It backs the
+// manual create form: a duplicate MAC or a bad parent id fails the whole
+// create (see IsUniqueViolation, IsForeignKeyViolation) rather than leaving a
+// device without the interface the user asked for.
+func (s *Store) CreateDeviceWithIface(ctx context.Context, d Device, mac *string,
+	subnetID int64, ip, kind string) (int64, error) {
+	var deviceID int64
+	err := s.withTx(ctx, func(c conn) error {
+		devID, err := s.insertDeviceOn(ctx, c, d)
+		if err != nil {
+			return err
+		}
+		deviceID = devID
+		if mac == nil && ip == "" {
+			return nil
+		}
+		ifID, err := s.insertReturningIDOn(ctx, c,
+			`INSERT INTO iface (device_id,mac,hostname) VALUES (?,?,?)`, devID, mac, nil)
+		if err != nil {
+			return err
+		}
+		if ip == "" {
+			return nil
+		}
+		_, err = s.insertReturningIDOn(ctx, c,
+			`INSERT INTO ip_assignment (iface_id,subnet_id,ip,kind) VALUES (?,?,?,?)`,
+			ifID, subnetID, ip, kind)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return deviceID, nil
 }

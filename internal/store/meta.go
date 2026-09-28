@@ -207,6 +207,34 @@ func (s *Store) UpsertOpenPort(ctx context.Context, ifaceID int64, port int, pro
 	return err
 }
 
+// ReplaceOpenPorts makes the iface's recorded open ports for proto exactly the
+// given set, as found by a port scan at seenAt: ports still open keep their
+// first_seen, new ones are added, and ports no longer open are deleted. It all
+// happens in one transaction, so a failure never leaves half a result.
+func (s *Store) ReplaceOpenPorts(ctx context.Context, ifaceID int64, proto string, ports []OpenPort, seenAt string) error {
+	return s.withTx(ctx, func(c conn) error {
+		keep := make([]string, 0, len(ports))
+		args := []any{ifaceID, proto}
+		for _, p := range ports {
+			if _, err := s.execOn(ctx, c, `INSERT INTO open_port (iface_id,port,proto,service_guess,first_seen,last_seen)
+				VALUES (?,?,?,?,?,?)
+				ON CONFLICT(iface_id,port,proto) DO UPDATE SET
+					last_seen=excluded.last_seen, service_guess=excluded.service_guess`,
+				ifaceID, p.Port, proto, p.ServiceGuess, seenAt, seenAt); err != nil {
+				return err
+			}
+			keep = append(keep, "?")
+			args = append(args, p.Port)
+		}
+		q := `DELETE FROM open_port WHERE iface_id=? AND proto=?`
+		if len(keep) > 0 {
+			q += ` AND port NOT IN (` + strings.Join(keep, ",") + `)`
+		}
+		_, err := s.execOn(ctx, c, q, args...)
+		return err
+	})
+}
+
 func (s *Store) ListOpenPorts(ctx context.Context, ifaceID int64) ([]OpenPort, error) {
 	rows, err := s.query(ctx, `SELECT port,proto,service_guess,first_seen,last_seen
 		FROM open_port WHERE iface_id=? ORDER BY port`, ifaceID)

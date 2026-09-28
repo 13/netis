@@ -188,3 +188,94 @@ func testSyncKeepsRenamedNode(t *testing.T, st *store.Store) {
 		t.Fatalf("vm parent=%v, want renamed node %d", vm.ParentDeviceID, nodeID)
 	}
 }
+
+// A guest whose MAC was already discovered by the scan (or Pi-hole) takes that
+// interface over, with its IPs, instead of leaving two unmerged devices; the
+// discovered device goes away when nothing else is on it. A device the user
+// has reviewed keeps its interface.
+func TestSyncAdoptsDiscoveredGuestIface(t *testing.T) {
+	storetest.EachDialect(t, testSyncAdoptsDiscoveredGuestIface)
+}
+
+func testSyncAdoptsDiscoveredGuestIface(t *testing.T, st *store.Store) {
+	ctx := t.Context()
+	snID, err := st.CreateSubnet(ctx, store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vmMAC, lxcMAC := "bc:24:11:aa:00:01", "bc:24:11:aa:00:02"
+	// nas-vm's MAC: an unreviewed scan device with nothing else on it.
+	scanID, _, err := st.CreateDiscoveredDevice(ctx, store.Device{Name: "unknown-1", Kind: "other", Source: "scan"},
+		&vmMAC, nil, snID, "10.0.0.5", "dhcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// pihole lxc's MAC: a scan device the user has reviewed.
+	keptID, _, err := st.CreateDiscoveredDevice(ctx, store.Device{Name: "mine", Kind: "other", Source: "scan"},
+		&lxcMAC, nil, snID, "10.0.0.6", "dhcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDeviceReviewed(ctx, keptID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := fixtureServer(t)
+	sync := NewSync(st, NewClient(srv.URL, "root@pam!netis", "s3cret", false), events.NewService(st, events.NewBroker()))
+	if _, err := sync.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	vmID, ok, err := st.FindProxmoxGuest(ctx, 100)
+	if err != nil || !ok {
+		t.Fatalf("guest 100: ok=%v err=%v", ok, err)
+	}
+	iface, ok, err := st.FindIfaceByMAC(ctx, vmMAC)
+	if err != nil || !ok || iface.DeviceID != vmID {
+		t.Fatalf("vm MAC iface = %+v ok=%v err=%v, want it on guest %d", iface, ok, err, vmID)
+	}
+	if ips, _ := st.ListIPs(ctx, iface.ID); len(ips) != 1 || ips[0].IP != "10.0.0.5" {
+		t.Errorf("adopted iface IPs = %+v, want 10.0.0.5", ips)
+	}
+	if _, err := st.GetDevice(ctx, scanID); err == nil {
+		t.Error("the emptied scan device should have been deleted")
+	}
+
+	kept, ok, err := st.FindIfaceByMAC(ctx, lxcMAC)
+	if err != nil || !ok || kept.DeviceID != keptID {
+		t.Fatalf("reviewed device's iface = %+v ok=%v err=%v, want it left on %d", kept, ok, err, keptID)
+	}
+}
+
+// A discovered device carrying something the user added keeps existing after
+// its interface moves to the guest.
+func TestSyncAdoptKeepsDeviceWithUserData(t *testing.T) {
+	storetest.EachDialect(t, testSyncAdoptKeepsDeviceWithUserData)
+}
+
+func testSyncAdoptKeepsDeviceWithUserData(t *testing.T, st *store.Store) {
+	ctx := t.Context()
+	vmMAC := "bc:24:11:aa:00:01"
+	scanID, err := st.CreateDevice(ctx, store.Device{Name: "unknown-1", Kind: "other", Source: "scan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddIface(ctx, scanID, &vmMAC, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddLink(ctx, scanID, "admin", "http://10.0.0.5"); err != nil {
+		t.Fatal(err)
+	}
+	srv := fixtureServer(t)
+	sync := NewSync(st, NewClient(srv.URL, "root@pam!netis", "s3cret", false), events.NewService(st, events.NewBroker()))
+	if _, err := sync.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	vmID, _, _ := st.FindProxmoxGuest(ctx, 100)
+	if iface, _, _ := st.FindIfaceByMAC(ctx, vmMAC); iface.DeviceID != vmID {
+		t.Fatalf("iface on %d, want guest %d", iface.DeviceID, vmID)
+	}
+	if _, err := st.GetDevice(ctx, scanID); err != nil {
+		t.Errorf("device with a user link must survive: %v", err)
+	}
+}

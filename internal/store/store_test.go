@@ -174,3 +174,43 @@ func TestMigrationPreservesChildRows(t *testing.T) {
 		t.Fatalf("foreign_keys should be ON at runtime, got %d", fk)
 	}
 }
+
+// TestSQLitePragmasApplyToEveryConnection opens a second pooled connection and
+// checks it came up with the same pragmas as the first. They used to be set
+// through db.Exec, which reaches only the connection that runs it, so a
+// connection database/sql opened later had foreign keys off.
+func TestSQLitePragmasApplyToEveryConnection(t *testing.T) {
+	s, err := Open(t.TempDir() + "/pragmas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := t.Context()
+	s.DB.SetMaxOpenConns(2)
+	first, err := s.DB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := s.DB.Conn(ctx) // the first is held, so this is a new connection
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+
+	var fk, busy int
+	var journal string
+	if err := second.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&fk); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&busy); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&journal); err != nil {
+		t.Fatal(err)
+	}
+	if fk != 1 || busy != 5000 || journal != "wal" {
+		t.Errorf("second connection: foreign_keys=%d busy_timeout=%d journal_mode=%q, want 1, 5000, wal",
+			fk, busy, journal)
+	}
+}
