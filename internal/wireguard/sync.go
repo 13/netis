@@ -81,8 +81,8 @@ func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, n
 	var ifaceID int64
 	devID, found, err := s.store.FindDeviceByWGPubKey(ctx, p.PubKey)
 	// PROJECT DECISION: distinguish a missing peer from real errors.
-	// device has no unique constraint on wg_pubkey, so falling through to
-	// CreateDevice on a transient error would create a duplicate peer.
+	// Falling through to CreateDevice on a transient error would try to
+	// create a duplicate peer (which the unique index on wg_pubkey refuses).
 	if err != nil {
 		return err
 	}
