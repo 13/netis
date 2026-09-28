@@ -111,6 +111,10 @@ var selfService = map[string]bool{
 	"POST /settings/password":               true,
 	"POST /settings/sessions/{id}/delete":   true,
 	"POST /settings/sessions/revoke-others": true,
+	// API tokens are per-account like sessions; the revoke handler scopes a
+	// non-admin to their own tokens (TestTokenRevokeScopedToOwner).
+	"POST /settings/tokens":             true,
+	"POST /settings/tokens/{id}/delete": true,
 }
 
 func isMutating(method string) bool {
@@ -164,12 +168,17 @@ func viewerSession(t *testing.T, st *store.Store) *http.Cookie {
 	return &http.Cookie{Name: "netis_session", Value: "viewertok"}
 }
 
-// A viewer posting to any admin route gets 403 — the handler never runs — and
-// an anonymous client is sent to the login page before it gets that far.
+// A viewer posting to any admin route gets 403 — the handler never runs —
+// whether it signs in with a cookie or an API token, and an anonymous client
+// is sent to the login page (or, on the API, told 401) before it gets that far.
 func TestAdminRoutesRefuseViewersAndAnonymous(t *testing.T) {
 	srv, st := testServer(t)
 	cookie := viewerSession(t, st)
 	devID, snID := seedInventory(t, st)
+	eve, _, _ := st.GetUserByName(t.Context(), "eve")
+	if _, err := st.CreateAPIToken(t.Context(), eve.ID, "eve", "netis_viewer", "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, r := range registeredRoutes(t) {
 		if !r.admin {
@@ -186,9 +195,26 @@ func TestAdminRoutesRefuseViewersAndAnonymous(t *testing.T) {
 				t.Errorf("viewer: code=%d, want 403", rec.Code)
 			}
 
+			if forMachines(path) {
+				req = httptest.NewRequest(r.method, path, strings.NewReader(`{"name":"x","kind":"other"}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", "Bearer netis_viewer")
+				rec = httptest.NewRecorder()
+				srv.Handler().ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden {
+					t.Errorf("viewer token: code=%d, want 403", rec.Code)
+				}
+			}
+
 			req = httptest.NewRequest(r.method, path, nil)
 			rec = httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
+			if forMachines(path) {
+				if rec.Code != http.StatusUnauthorized {
+					t.Errorf("anonymous: code=%d, want 401", rec.Code)
+				}
+				return
+			}
 			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
 				t.Errorf("anonymous: code=%d location=%q, want 303 to /login",
 					rec.Code, rec.Header().Get("Location"))

@@ -11,14 +11,14 @@ import (
 	"netis/internal/store"
 )
 
-// The JSON API is read-only on purpose. Everything that changes state is a
-// form POST from the UI, guarded by role checks and cross-origin protection;
-// exposing writes here would mean a second surface to keep in step with those.
-// Reading is what a script actually wants: a dashboard, a backup of the
-// inventory, a check that a host came back.
+// The JSON API is mostly reads (a dashboard, a backup of the inventory, a
+// check that a host came back) plus admin-only device writes in apiwrite.go,
+// which share their validation with the UI forms.
 //
-// Authentication is the same session cookie the pages use, so `curl -b` with a
-// browser cookie works and there is no second credential to leak.
+// Authentication is the session cookie the pages use, so `curl -b` with a
+// browser cookie works, or a personal API token sent as
+// `Authorization: Bearer netis_...` (apitokens.go), which acts with its
+// owner's role.
 
 // apiDevice is the device shape the API returns. It is written out by hand
 // rather than marshalling store.DeviceRow so a schema change cannot silently
@@ -122,6 +122,15 @@ func (s *Server) writeJSON(w http.ResponseWriter, r *http.Request, v any) {
 	}
 }
 
+// apiError answers an API request with {"error": msg} under status.
+func (s *Server) apiError(w http.ResponseWriter, r *http.Request, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+		slog.Error("writing json error", "path", r.URL.Path, "err", err)
+	}
+}
+
 func (s *Server) handleAPIDevices(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.ListDevices(r.Context())
 	if err != nil {
@@ -141,20 +150,16 @@ func (s *Server) handleAPIDevice(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// ListDevices is the only read that assembles a whole device row with its
-	// IPs, MACs and tags, and it costs a fixed five queries regardless of size.
-	rows, err := s.store.ListDevices(r.Context())
+	d, ok, err := s.apiDeviceByID(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	for _, row := range rows {
-		if row.ID == id {
-			s.writeJSON(w, r, toAPIDevice(row))
-			return
-		}
+	if !ok {
+		http.NotFound(w, r)
+		return
 	}
-	http.NotFound(w, r)
+	s.writeJSON(w, r, d)
 }
 
 func (s *Server) handleAPISubnets(w http.ResponseWriter, r *http.Request) {

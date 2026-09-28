@@ -118,6 +118,9 @@ func TestMigrateDB(t *testing.T) {
 	if _, ok, err := dst.GetSession(ctx, "root-session"); err != nil || !ok {
 		t.Errorf("session did not survive: ok=%v err=%v", ok, err)
 	}
+	if _, ok, err := dst.GetUserByAPIToken(ctx, "netis_root", time.Now()); err != nil || !ok {
+		t.Errorf("api token did not survive: ok=%v err=%v", ok, err)
+	}
 
 	// The identity sequences must be past the imported ids, or the next insert
 	// collides with an existing row.
@@ -198,6 +201,9 @@ func seedForMigration(t *testing.T, s *store.Store) {
 		t.Fatal(err)
 	}
 	if err := s.CreateSession(ctx, "root-session", rootID, "2999-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAPIToken(ctx, rootID, "script", "netis_root", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSetting(ctx, "offline_after", "3"); err != nil {

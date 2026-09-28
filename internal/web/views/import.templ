@@ -1,0 +1,120 @@
+package views
+
+import "fmt"
+
+// ImportView is the CSV import page: empty for the upload form, a preview
+// after a dry run (CSV carries the file for the commit), or the outcome once
+// Committed.
+type ImportView struct {
+	CSV       string
+	Rows      []ImportRow
+	Committed bool
+	Error     string
+	Creates   int
+	Updates   int
+	Unchanged int
+	Errors    int
+}
+
+// ImportRow is one line of the file and what the import does with it.
+type ImportRow struct {
+	Line     int
+	MAC      string
+	Name     string
+	Action   string // create, update, unchanged, error
+	DeviceID int64
+	Detail   string
+}
+
+func importBadge(action string) string {
+	switch action {
+	case "create":
+		return "badge online"
+	case "update":
+		return "badge ip_changed"
+	case "error":
+		return "badge offline"
+	}
+	return "badge"
+}
+
+templ importSummary(v ImportView) {
+	<p>
+		if v.Committed {
+			Imported:
+		} else {
+			Dry run — nothing has been written yet:
+		}
+		<strong>{ fmt.Sprint(v.Creates) }</strong> to create,
+		<strong>{ fmt.Sprint(v.Updates) }</strong> to update,
+		<strong>{ fmt.Sprint(v.Unchanged) }</strong> unchanged,
+		<strong>{ fmt.Sprint(v.Errors) }</strong> with errors (skipped).
+	</p>
+}
+
+templ importTable(v ImportView) {
+	<div class="table-wrap">
+		<table>
+			<tr><th>Line</th><th>MAC</th><th>Device</th><th>Action</th><th>Details</th></tr>
+			for _, row := range v.Rows {
+				<tr>
+					<td class="mono">{ fmt.Sprint(row.Line) }</td>
+					<td class="mono">{ row.MAC }</td>
+					<td>
+						if row.DeviceID != 0 {
+							<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.DeviceID)) }>{ row.Name }</a>
+						} else {
+							{ row.Name }
+						}
+					</td>
+					<td><span class={ importBadge(row.Action) }>{ row.Action }</span></td>
+					<td>{ row.Detail }</td>
+				</tr>
+			}
+		</table>
+	</div>
+}
+
+templ ImportPage(username string, v ImportView) {
+	@Layout("Import devices", username) {
+		<h1>Import devices</h1>
+		if v.Error != "" {
+			<p class="form-error" role="alert">{ v.Error }</p>
+		}
+		if !IsAdmin(ctx) {
+			<p class="muted">Importing devices needs the admin role. You can still <a href="/api/export/devices.csv">export the inventory as CSV</a>.</p>
+		} else if v.Committed {
+			@importSummary(v)
+			@importTable(v)
+			<p><a class="btn primary" href="/devices">Back to devices</a></p>
+		} else if len(v.Rows) > 0 {
+			@importSummary(v)
+			@importTable(v)
+			<form method="post" action="/devices/import" enctype="multipart/form-data" class="inline">
+				<input type="hidden" name="csv" value={ v.CSV }/>
+				<input type="hidden" name="commit" value="1"/>
+				<button type="submit" class="primary" disabled?={ v.Creates+v.Updates == 0 }>Import</button>
+			</form>
+			<a class="btn ghost" href="/devices/import">Choose another file</a>
+		} else {
+			<div class="setting-card">
+				<form method="post" action="/devices/import" enctype="multipart/form-data">
+					<label>CSV file <input type="file" name="file" accept=".csv,text/csv" required/></label>
+					<p class="muted" style="margin:6px 0 4px">
+						Devices are matched by MAC address. The first row names the columns:
+						<span class="mono">mac</span> (required), and any of
+						<span class="mono">name, kind, ip, tags, notes, vendor, model, function</span>.
+						An <a href="/api/export/devices.csv">export</a> can be edited and imported as it is.
+					</p>
+					<p class="muted" style="margin:6px 0 4px">
+						A new MAC creates a manual device (it needs a name; an IP must fall in a configured
+						subnet). A known MAC only fills in what the device is missing: notes, vendor, model
+						and function where empty, and tags are added. Names and kinds change only on
+						unreviewed scan discoveries; devices from integrations and reviewed devices keep theirs.
+					</p>
+					<button type="submit" class="primary">Preview import</button>
+				</form>
+			</div>
+		}
+	}
+}

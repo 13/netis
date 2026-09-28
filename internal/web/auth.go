@@ -260,6 +260,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 				return
 			}
 		}
+		// A personal API token stands in for a session on /api/, and when one
+		// is presented it is the only credential considered.
+		if tok, ok := apiBearer(r); ok {
+			s.serveBearer(w, r, next, tok)
+			return
+		}
 		if c, err := r.Cookie("netis_session"); err == nil {
 			u, ok, err := s.store.GetSession(r.Context(), c.Value)
 			if err != nil {
@@ -329,6 +335,10 @@ func isAdmin(r *http.Request) bool {
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !isAdmin(r) {
+			if forMachines(r.URL.Path) {
+				s.apiError(w, r, http.StatusForbidden, "admin only")
+				return
+			}
 			http.Error(w, "admin only", http.StatusForbidden)
 			return
 		}
