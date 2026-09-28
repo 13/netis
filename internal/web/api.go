@@ -42,8 +42,8 @@ type apiDevice struct {
 	// address, typically a phone's per-network private Wi-Fi address.
 	PrivateMAC bool     `json:"private_mac"`
 	Tags       []string `json:"tags"`
-	ParentID *int64   `json:"parent_device_id,omitempty"`
-	VMID     *int64   `json:"proxmox_vmid,omitempty"`
+	ParentID   *int64   `json:"parent_device_id,omitempty"`
+	VMID       *int64   `json:"proxmox_vmid,omitempty"`
 }
 
 type apiIP struct {

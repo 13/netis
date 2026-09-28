@@ -362,7 +362,10 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	// A preview changes nothing but is still a post; say which this was.
+	auditNote(r).Detail = "preview, " + strconv.Itoa(len(plans)) + " rows"
 	if r.FormValue("commit") == "1" {
+		auditNote(r).Detail = "applied " + strconv.Itoa(len(plans)) + " rows"
 		if err := s.applyImport(r.Context(), plans); err != nil {
 			s.fail(w, r, err)
 			return

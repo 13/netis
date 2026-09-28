@@ -117,10 +117,6 @@ var selfService = map[string]bool{
 	"POST /settings/tokens/{id}/delete": true,
 }
 
-func isMutating(method string) bool {
-	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
-}
-
 // The parse must agree with the mux: every route it found must resolve to
 // exactly that pattern, or the walk below would be testing the wrong thing.
 func TestRegisteredRoutesMatchMux(t *testing.T) {

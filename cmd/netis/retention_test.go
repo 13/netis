@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"netis/internal/store"
 )
@@ -52,4 +53,35 @@ func TestRunRetentionOnBrokenStore(t *testing.T) {
 	}
 	st.Close()
 	runRetention(context.Background(), st) // logs, does not panic
+}
+
+// The sweep ages out audit entries past audit_retention_days (default 180),
+// and keeps them all when it is 0.
+func TestRunRetentionPrunesAudit(t *testing.T) {
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	now := time.Now()
+	for _, age := range []int{1, 179, 181, 400} {
+		if err := st.AddAudit(ctx, store.AuditEntry{At: now.AddDate(0, 0, -age), Action: "login", Status: 303}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.SetSetting(ctx, "audit_retention_days", "0"); err != nil {
+		t.Fatal(err)
+	}
+	runRetention(ctx, st)
+	if got, _, _ := st.ListAudit(ctx, store.AuditFilter{Limit: 10}); len(got) != 4 {
+		t.Fatalf("retention 0 kept %d, want 4", len(got))
+	}
+	if err := st.SetSetting(ctx, "audit_retention_days", ""); err != nil {
+		t.Fatal(err)
+	}
+	runRetention(ctx, st)
+	if got, _, _ := st.ListAudit(ctx, store.AuditFilter{Limit: 10}); len(got) != 2 {
+		t.Fatalf("default retention kept %d, want 2", len(got))
+	}
 }

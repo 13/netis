@@ -129,6 +129,27 @@ func (s *Store) DeleteUserGuarded(ctx context.Context, id int64) (deleted bool, 
 	return n == 1, nil
 }
 
+// SetUserRoleGuarded sets a user's role, refusing to demote the last remaining
+// admin. As with DeleteUserGuarded, the admin count and the update are one
+// statement, so two admins demoting each other at once cannot both succeed.
+// It reports whether a row was updated: false means no such user, or a
+// refused demotion.
+func (s *Store) SetUserRoleGuarded(ctx context.Context, id int64, role string) (bool, error) {
+	q := `UPDATE "user" SET role=? WHERE id=?`
+	if role != "admin" {
+		q += ` AND (role<>'admin' OR (SELECT COUNT(*) FROM "user" WHERE role='admin') > 1)`
+	}
+	res, err := s.exec(ctx, q, role, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
 // SessionMeta records where a session came from, so its owner can recognise it
 // in a list of their sessions and revoke the one they don't know. Every field is
 // optional; sessions created before this was recorded simply have none of it.
