@@ -48,8 +48,8 @@ for the background scan loop (every 120s by default).
   scan-error events.
 - **Settings** — subnet CRUD, scan interval, offline threshold, Proxmox
   and WireGuard integration credentials, user management (add, delete,
-  change your own password, reset someone else's — passwords are at least 8
-  characters, and changing one signs that account's other sessions out), your
+  change your own password, reset someone else's — passwords are 8 to 72
+  bytes long, and changing one signs that account's other sessions out), your
   own session list with per-session revoke and a sign-out-everywhere-else
   button, and an **About**
   tab with the running version, build number, commit, database backend and
@@ -274,6 +274,13 @@ carry the `Secure` flag when TLS terminates at the proxy.
 
 A malformed entry is a startup error rather than a warning: a list that quietly
 parsed to nothing would leave the limiter mis-keyed with no sign of it.
+
+The per-address limiter keys IPv6 clients by their /64. Separately, each
+account allows 10 wrong passwords per 15 minutes, whatever address they come
+from, so rotating addresses does not buy unlimited guesses, and the
+current-password check when changing your own password has the same limit. It is a
+sliding window, not a lockout: the account opens up again once old failures age
+out.
 
 ## Database backends
 

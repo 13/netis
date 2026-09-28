@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSecurityHeadersSet(t *testing.T) {
@@ -88,20 +90,45 @@ func TestSessionCookieSecureBehindTLSProxy(t *testing.T) {
 }
 
 func TestRateLimiterPrunesStaleIPs(t *testing.T) {
-	rl := newRateLimiter()
-	rl.fail("10.0.0.1")
-	if !rl.allow("10.0.0.1") {
+	rl := newRateLimiter(5, time.Minute)
+	rl.reserve("10.0.0.1")
+	rl.done("10.0.0.1", true)
+	if !rl.reserve("10.0.0.1") {
 		t.Fatal("one failure should still allow")
 	}
-	// age out the entry, then allow must delete the key entirely
+	rl.done("10.0.0.1", false)
+	// age out the failure; the next settled attempt must drop the key entirely
 	rl.mu.Lock()
-	rl.attempts["10.0.0.1"] = nil
+	rl.buckets["10.0.0.1"].fails[0] = time.Now().Add(-2 * time.Minute)
 	rl.mu.Unlock()
-	rl.allow("10.0.0.1")
+	rl.reserve("10.0.0.1")
+	rl.done("10.0.0.1", false)
 	rl.mu.Lock()
-	_, exists := rl.attempts["10.0.0.1"]
+	_, exists := rl.buckets["10.0.0.1"]
 	rl.mu.Unlock()
 	if exists {
 		t.Error("stale IP entry not pruned")
+	}
+}
+
+// Keys that fail once and never return are swept once the map grows large.
+func TestRateLimiterSweepsAbandonedKeys(t *testing.T) {
+	rl := newRateLimiter(5, time.Minute)
+	for i := range 1100 {
+		k := strconv.Itoa(i)
+		rl.reserve(k)
+		rl.done(k, true)
+	}
+	rl.mu.Lock()
+	for _, b := range rl.buckets {
+		b.fails[0] = time.Now().Add(-2 * time.Minute)
+	}
+	rl.mu.Unlock()
+	rl.reserve("fresh")
+	rl.mu.Lock()
+	n := len(rl.buckets)
+	rl.mu.Unlock()
+	if n != 1 {
+		t.Errorf("%d buckets left after sweep, want 1", n)
 	}
 }

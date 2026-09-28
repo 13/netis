@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -54,8 +55,11 @@ type Server struct {
 	broker  *events.Broker
 	trigger ScanTrigger
 	runner  IntegrationRunner
-	limiter *rateLimiter
-	detect  func() ([]netdetect.Detected, error)
+	limiter *rateLimiter // login attempts per client address
+	// userLimiter bounds password guesses per account: logins by username
+	// and current-password checks by user id.
+	userLimiter *rateLimiter
+	detect      func() ([]netdetect.Detected, error)
 
 	trustedProxies []netip.Prefix
 	metricsToken   string
@@ -68,7 +72,8 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	}
 	s := &Server{
 		mux: http.NewServeMux(), store: st, broker: broker,
-		trigger: trigger, runner: runner, limiter: newRateLimiter(),
+		trigger: trigger, runner: runner, limiter: newRateLimiter(loginIPMax, loginIPWindow),
+		userLimiter:    newRateLimiter(loginUserMax, loginUserWindow),
 		detect:         netdetect.DetectSubnets,
 		trustedProxies: o.TrustedProxies,
 		metricsToken:   o.MetricsToken,
@@ -140,7 +145,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
-	return securityHeaders(checkOrigin(cop.Handler(s.requireAuth(s.mux))))
+	return securityHeaders(checkOrigin(cop.Handler(s.requireAuth(limitBody(s.mux)))))
 }
 
 // handleHealthz reports whether netis can actually serve: the process being up
@@ -187,6 +192,46 @@ func checkOrigin(next http.Handler) http.Handler {
 				http.Error(w, "cross-origin request rejected", http.StatusForbidden)
 				return
 			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// maxBodyBytes caps a request body. Every form netis serves is a handful of
+// short fields; nothing uploads a file.
+const maxBodyBytes = 1 << 20
+
+// limitBody caps request bodies and parses forms up front, so an oversized
+// body is answered with 413 instead of reaching a handler.
+//
+// Handlers read fields with r.FormValue, which parses a multipart body with a
+// 32 MB in-memory allowance and spills file parts beyond it to temp files, and
+// throws any parse error away. /login and /setup do that before anyone has
+// authenticated, so a client could make netis buffer and write out bodies of
+// any size. Parsing here, under the cap, means the form is already in place
+// when a handler asks for it and a truncated one never looks like empty
+// fields.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		var err error
+		mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		switch mt {
+		case "application/x-www-form-urlencoded":
+			err = r.ParseForm()
+		case "multipart/form-data":
+			// The whole body fits in memory under the cap, so no part is
+			// ever written to disk.
+			err = r.ParseMultipartForm(maxBodyBytes)
+		}
+		if err != nil {
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			http.Error(w, "malformed form", http.StatusBadRequest)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
