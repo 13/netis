@@ -84,7 +84,7 @@ unique per issuer.
 
 - Linked user found → sign in as it.
 - Not found, auto-create on → create a user named after `preferred_username`,
-  falling back to `email`, then `sub`. If a local user already has that name the
+  falling back to `email` only when `email_verified` is true (an unverified address could be anyone's, and would squat the name), then `sub`. If a local user already has that name the
   login is refused. It is never silently attached to the existing account: a
   user who can set their own `preferred_username` at the IdP (Authentik and
   Keycloak allow it by default) could otherwise name themselves `admin` and

@@ -522,7 +522,7 @@ first SSO login and is retried until it works.
 The login page gets a **Sign in with SSO** button. An SSO user is matched by
 the provider's issuer and subject (`sub`) — never by username. The first
 login of an unknown identity creates a user named after its
-`preferred_username` (or email). If a local account already has that name the
+`preferred_username` (or its email, if the provider marks it verified; otherwise its subject). If a local account already has that name the
 login is refused rather than attached to it: many providers let users choose
 their own username, and matching on it would let someone call themselves
 `admin` and take over that account. To use SSO with an existing account, sign

@@ -233,6 +233,18 @@ func (s *Server) handleOIDCLink(w http.ResponseWriter, r *http.Request) {
 type oidcClaims struct {
 	PreferredUsername string `json:"preferred_username"`
 	Email             string `json:"email"`
+	// EmailVerified gates the email as a username: an address the provider
+	// has not verified is whatever the user typed at sign-up.
+	EmailVerified claimBool `json:"email_verified"`
+}
+
+// claimBool reads a boolean claim that some providers send as the string
+// "true" instead of a JSON boolean. Anything else is false.
+type claimBool bool
+
+func (b *claimBool) UnmarshalJSON(data []byte) error {
+	*b = claimBool(string(data) == "true" || string(data) == `"true"`)
+	return nil
 }
 
 func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
@@ -486,10 +498,12 @@ func (s *Server) recordAudit(r *http.Request, action string, status int, note *a
 }
 
 // ssoUsername picks the name for a user created from an SSO login:
-// preferred_username, then email, then the subject.
+// preferred_username, then a verified email, then the subject. An unverified
+// email is skipped: anyone can sign up at the provider with an address that is
+// not theirs, and would otherwise squat the username it maps to.
 func ssoUsername(c oidcClaims, subject string) string {
 	name := strings.TrimSpace(c.PreferredUsername)
-	if name == "" {
+	if name == "" && c.EmailVerified {
 		name = strings.TrimSpace(c.Email)
 	}
 	if name == "" {

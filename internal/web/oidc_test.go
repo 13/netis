@@ -524,3 +524,27 @@ func TestOIDCLoginsAreAudited(t *testing.T) {
 		}
 	}
 }
+
+// The email names a new user only when the provider has verified it; an
+// unverified address could be anyone's.
+func TestSSOUsernameUsesOnlyVerifiedEmail(t *testing.T) {
+	parse := func(raw string) oidcClaims {
+		var c oidcClaims
+		if err := json.Unmarshal([]byte(raw), &c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	cases := []struct{ claims, want string }{
+		{`{"preferred_username":"alice","email":"a@x","email_verified":true}`, "alice"},
+		{`{"email":"a@x","email_verified":true}`, "a@x"},
+		{`{"email":"a@x","email_verified":"true"}`, "a@x"},
+		{`{"email":"a@x","email_verified":false}`, "sub-1"},
+		{`{"email":"a@x"}`, "sub-1"},
+	}
+	for _, tc := range cases {
+		if got := ssoUsername(parse(tc.claims), "sub-1"); got != tc.want {
+			t.Errorf("%s: username %q, want %q", tc.claims, got, tc.want)
+		}
+	}
+}
