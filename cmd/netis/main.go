@@ -329,7 +329,12 @@ func main() {
 			MetricsToken:   cfg.MetricsToken,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       2 * time.Minute,
+		// ReadTimeout bounds reading the whole request, so a client cannot
+		// trickle a body in forever. It covers only the request: SSE streams
+		// are bodiless GETs and keep writing long after it. WriteTimeout is
+		// left unset on purpose, since it would cut every SSE stream off.
+		ReadTimeout: 30 * time.Second,
+		IdleTimeout: 2 * time.Minute,
 		// Request contexts derive from ctx so open SSE streams end on
 		// SIGTERM and Shutdown can drain instead of hanging on them.
 		BaseContext: func(net.Listener) context.Context { return ctx },

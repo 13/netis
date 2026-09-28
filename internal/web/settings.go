@@ -254,6 +254,10 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars", 400)
 		return
 	}
+	if len(password) > maxPasswordLen {
+		http.Error(w, passwordTooLongMsg, 400)
+		return
+	}
 	if role != "admin" && role != "viewer" {
 		http.Error(w, "bad role", 400)
 		return

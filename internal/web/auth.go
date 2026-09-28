@@ -29,55 +29,110 @@ func userFrom(r *http.Request) (store.User, bool) {
 	return u, ok
 }
 
+// Login limits. The per-address bucket slows one client down; the
+// per-username bucket stops a client that rotates addresses from guessing at
+// one account indefinitely. The per-username window is deliberately bounded
+// rather than a lockout: an attacker can keep an account throttled only for as
+// long as they keep guessing, and the owner gets back in once the window
+// passes.
+const (
+	loginIPMax      = 5
+	loginIPWindow   = time.Minute
+	loginUserMax    = 10
+	loginUserWindow = 15 * time.Minute
+)
+
+// maxUsernameKeyLen caps how much of a submitted username goes into a limiter
+// key, so an unauthenticated client cannot park large strings in the map.
+const maxUsernameKeyLen = 128
+
+// rateLimiter counts failed attempts per key over a sliding window.
+//
+// An attempt is reserved before the expensive check and settled after it.
+// Checking first and recording the failure only once bcrypt had answered let
+// a burst of guesses sent together all pass the check before any of them was
+// counted; counting in-flight attempts against the limit closes that.
 type rateLimiter struct {
-	mu       sync.Mutex
-	attempts map[string][]time.Time
+	mu      sync.Mutex
+	limit   int
+	window  time.Duration
+	buckets map[string]*limitBucket
 }
 
-func newRateLimiter() *rateLimiter {
-	return &rateLimiter{attempts: make(map[string][]time.Time)}
+type limitBucket struct {
+	fails   []time.Time
+	pending int
 }
 
-// allow reports whether ip may attempt a login (max 5 failures/minute).
-func (rl *rateLimiter) allow(ip string) bool {
+func newRateLimiter(limit int, window time.Duration) *rateLimiter {
+	return &rateLimiter{limit: limit, window: window, buckets: make(map[string]*limitBucket)}
+}
+
+// reserve claims an attempt for key, reporting false when the key has used up
+// its failures (counting attempts still in flight) for the window. Every true
+// must be followed by exactly one done.
+func (rl *rateLimiter) reserve(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	cutoff := time.Now().Add(-time.Minute)
-	kept := rl.attempts[ip][:0]
-	for _, t := range rl.attempts[ip] {
+	now := time.Now()
+	// Bound the map: a key that is never tried again is never visited by the
+	// per-key pruning below, so sweep stale keys once the map grows large.
+	if len(rl.buckets) > 1024 {
+		for k, b := range rl.buckets {
+			if b.prune(now.Add(-rl.window)); len(b.fails) == 0 && b.pending == 0 {
+				delete(rl.buckets, k)
+			}
+		}
+	}
+	b := rl.buckets[key]
+	if b == nil {
+		b = &limitBucket{}
+		rl.buckets[key] = b
+	}
+	b.prune(now.Add(-rl.window))
+	if len(b.fails)+b.pending >= rl.limit {
+		return false
+	}
+	b.pending++
+	return true
+}
+
+// done settles an attempt reserve granted, charging it as a failure or not.
+func (rl *rateLimiter) done(key string, failed bool) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	b := rl.buckets[key]
+	if b == nil {
+		return
+	}
+	b.pending--
+	if failed {
+		b.fails = append(b.fails, time.Now())
+	}
+	if len(b.fails) == 0 && b.pending <= 0 {
+		delete(rl.buckets, key)
+	}
+}
+
+func (b *limitBucket) prune(cutoff time.Time) {
+	kept := b.fails[:0]
+	for _, t := range b.fails {
 		if t.After(cutoff) {
 			kept = append(kept, t)
 		}
 	}
-	if len(kept) == 0 {
-		delete(rl.attempts, ip)
-		return true
-	}
-	rl.attempts[ip] = kept
-	return len(kept) < 5
+	b.fails = kept
 }
 
-func (rl *rateLimiter) fail(ip string) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	// Bound the map: an IP that only ever fails is never visited by allow's
-	// per-key pruning, so sweep stale keys once the map grows large.
-	if len(rl.attempts) > 1024 {
-		cutoff := time.Now().Add(-time.Minute)
-		for k, ts := range rl.attempts {
-			live := false
-			for _, t := range ts {
-				if t.After(cutoff) {
-					live = true
-					break
-				}
-			}
-			if !live {
-				delete(rl.attempts, k)
-			}
-		}
+// limitKey is the rate-limit bucket for a client address. An IPv6 client is
+// keyed by its /64: a single host is routinely handed a whole /64, and keying
+// on the full address would give it 2^64 fresh buckets to rotate through.
+func limitKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil || !addr.Is6() || addr.Is4In6() {
+		return ip
 	}
-	rl.attempts[ip] = append(rl.attempts[ip], time.Now())
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
 // secureRequest reports whether the request arrived over TLS, directly or via
@@ -261,15 +316,29 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
-	if !s.limiter.allow(ip) {
+	username, password := r.FormValue("username"), r.FormValue("password")
+	// Both buckets are reserved before bcrypt runs and settled once it has
+	// answered, so parallel guesses count against the limit while in flight.
+	ipKey, userKey := limitKey(s.clientIP(r)), "login:"+truncate(username, maxUsernameKeyLen)
+	if !s.limiter.reserve(ipKey) {
 		http.Error(w, "too many attempts, wait a minute", http.StatusTooManyRequests)
 		return
 	}
-	username, password := r.FormValue("username"), r.FormValue("password")
+	if !s.userLimiter.reserve(userKey) {
+		s.limiter.done(ipKey, false)
+		http.Error(w, "too many attempts for this account, try again later", http.StatusTooManyRequests)
+		return
+	}
+	failed := true
+	defer func() {
+		s.limiter.done(ipKey, failed)
+		s.userLimiter.done(userKey, failed)
+	}()
 	u, ok, err := s.store.GetUserByName(r.Context(), username)
 	var match bool
-	if err == nil && ok {
+	// bcrypt ignores everything past 72 bytes, so a longer password can
+	// never be the one that was set; it just fails like any wrong password.
+	if err == nil && ok && len(password) <= maxPasswordLen {
 		match = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) == nil
 	} else {
 		// Run a bcrypt compare against a dummy hash even when the user is
@@ -278,6 +347,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 	}
 	if err == nil && ok && match {
+		failed = false
 		token, terr := newToken()
 		if terr != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -305,7 +375,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.limiter.fail(ip)
 	w.WriteHeader(http.StatusUnauthorized)
 	s.render(w, r, views.LoginPage("wrong username or password"))
 }
@@ -344,6 +413,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if username == "" || len(password) < minPasswordLen {
 		w.WriteHeader(http.StatusBadRequest)
 		s.render(w, r, views.SetupPage("username required, password min "+strconv.Itoa(minPasswordLen)+" chars"))
+		return
+	}
+	if len(password) > maxPasswordLen {
+		w.WriteHeader(http.StatusBadRequest)
+		s.render(w, r, views.SetupPage(passwordTooLongMsg))
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

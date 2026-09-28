@@ -13,6 +13,12 @@ import (
 // account on the system was whichever one an admin created later.
 const minPasswordLen = 8
 
+// maxPasswordLen is the longest password netis accepts, in bytes: bcrypt
+// refuses anything longer, and that refusal used to surface as a 500.
+const maxPasswordLen = 72
+
+const passwordTooLongMsg = "password must be at most 72 bytes (fewer characters if it uses non-ASCII letters)"
+
 // handlePasswordChange changes the signed-in user's own password. It is not
 // admin-gated: a viewer must be able to rotate their own credential without
 // asking an admin to delete and recreate the account, which was the only way
@@ -26,7 +32,17 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// The current password is required even though the session already proves
 	// who this is: it stops a stolen or borrowed session from locking the real
 	// owner out of their own account.
-	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(r.FormValue("current_password"))) != nil {
+	//
+	// That makes this check a password oracle for whoever holds the session,
+	// so guesses are limited per account the same way logins are.
+	key := "change:" + strconv.FormatInt(u.ID, 10)
+	if !s.userLimiter.reserve(key) {
+		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
+		return
+	}
+	wrong := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(r.FormValue("current_password"))) != nil
+	s.userLimiter.done(key, wrong)
+	if wrong {
 		http.Error(w, "current password is wrong", http.StatusForbidden)
 		return
 	}
@@ -76,6 +92,10 @@ func (s *Server) validNewPassword(w http.ResponseWriter, r *http.Request) (strin
 	if len(next) < minPasswordLen {
 		http.Error(w, "password must be at least "+strconv.Itoa(minPasswordLen)+" characters",
 			http.StatusBadRequest)
+		return "", false
+	}
+	if len(next) > maxPasswordLen {
+		http.Error(w, passwordTooLongMsg, http.StatusBadRequest)
 		return "", false
 	}
 	return next, true
