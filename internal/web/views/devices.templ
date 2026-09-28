@@ -37,6 +37,9 @@ type DeviceDetail struct {
 	Children []store.Device
 	Parent   *store.Device
 	Events   []store.Event
+	// AlertOffline is whether the device's offline and online events are
+	// sent as notifications.
+	AlertOffline bool
 }
 
 // lowestIPStr returns the numerically-lowest parseable IP among ips (the
@@ -598,6 +601,9 @@ templ DevicePage(username string, d DeviceDetail) {
 						} else {
 							<span class="pill offline"><span class="d"></span>offline</span>
 						}
+						if d.AlertOffline {
+							<span class="badge" title="Offline and online changes are sent as notifications">offline alerts on</span>
+						}
 					</h1>
 					if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
 						<p class="muted">{ joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) }</p>
@@ -615,6 +621,15 @@ templ DevicePage(username string, d DeviceDetail) {
 					</form>
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
 						<button type="submit">Scan ports</button>
+					</form>
+					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/alert", d.Device.ID)) } class="inline">
+						if d.AlertOffline {
+							<input type="hidden" name="alert_offline" value="0"/>
+							<button type="submit">Stop offline alerts</button>
+						} else {
+							<input type="hidden" name="alert_offline" value="1"/>
+							<button type="submit" title="Send a notification when this device goes offline or comes back">Alert when offline</button>
+						}
 					</form>
 				</div>
 			}

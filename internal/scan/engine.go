@@ -19,6 +19,8 @@ type Engine struct {
 	Sweeper Sweeper
 	ARP     func() (map[string]string, error)
 	Resolve func(context.Context, string) string
+
+	conflicts conflictTracker
 }
 
 // defaultOfflineAfter is the consecutive-miss threshold used when the
@@ -135,6 +137,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 		}
 	}
 
+	e.checkConflicts(ctx, sn)
 	e.Broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
 	return nil
 }

@@ -118,6 +118,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /devices/{id}/wol", s.requireAdmin(s.handleWOL))
 	s.mux.HandleFunc("POST /devices/{id}/portscan", s.requireAdmin(s.handlePortScan))
 	s.mux.HandleFunc("POST /devices/{id}/ip/kind", s.requireAdmin(s.handleDeviceIPKind))
+	s.mux.HandleFunc("POST /devices/{id}/alert", s.requireAdmin(s.handleDeviceAlert))
 	s.mux.HandleFunc("GET /events", s.handleEventsPage)
 	// Read-only JSON for scripts, and Prometheus metrics. Both authenticate with
 	// the session cookie; /metrics also takes a scrape token.
@@ -143,6 +144,8 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /settings/sessions/revoke-others", s.handleSessionRevokeOthers)
 	s.mux.HandleFunc("POST /settings/users/{id}/password", s.requireAdmin(s.handleUserPasswordReset))
 	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
+	s.mux.HandleFunc("POST /settings/notifications", s.requireAdmin(s.handleNotificationsSave))
+	s.mux.HandleFunc("POST /settings/notifications/test", s.requireAdmin(s.handleNotificationsTest))
 	return s
 }
 

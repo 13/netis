@@ -134,6 +134,14 @@ func TestIntegrationRunnerRecordsStatus(t *testing.T) {
 	if s := statusOf(t, st, "x"); s == nil || !s.OK {
 		t.Fatalf("recovered status = %+v", s)
 	}
+	// The end of an outage is announced once; a first success is not.
+	if n := countEvents(t, st, "sync_recovered"); n != 1 {
+		t.Fatalf("sync_recovered events = %d, want 1", n)
+	}
+	runner.Run(t.Context(), "x")
+	if n := countEvents(t, st, "sync_recovered"); n != 1 {
+		t.Fatalf("sync_recovered events after a second success = %d, want 1", n)
+	}
 	fail.Store(true)
 	runner.Run(t.Context(), "x")
 	if n := countEvents(t, st, "scan_error"); n != 2 {

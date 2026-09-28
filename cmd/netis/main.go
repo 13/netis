@@ -18,6 +18,7 @@ import (
 	"netis/internal/buildinfo"
 	"netis/internal/config"
 	"netis/internal/events"
+	"netis/internal/notify"
 	"netis/internal/pihole"
 	"netis/internal/proxmox"
 	"netis/internal/scan"
@@ -93,7 +94,8 @@ func (r *integrationRunner) Run(ctx context.Context, name string) error {
 }
 
 // recordStatus writes the integration_status row and raises one scan_error
-// event per outage. The caller holds in.mu.
+// event per outage, and a sync_recovered event when it ends. The caller holds
+// in.mu.
 func (r *integrationRunner) recordStatus(ctx context.Context, name string, in *integration, count int, detail string, err error) {
 	st := store.IntegrationStatus{Name: name, LastRun: time.Now().UTC().Format(time.RFC3339)}
 	if err != nil {
@@ -108,6 +110,9 @@ func (r *integrationRunner) recordStatus(ctx context.Context, name string, in *i
 		}
 		st.Detail = category
 	} else {
+		if in.failing {
+			r.evs.Emit(ctx, "sync_recovered", nil, name+" sync working again")
+		}
 		in.failing = false
 		st.OK = true
 		st.ItemCount = count
@@ -324,6 +329,11 @@ func main() {
 
 	broker := events.NewBroker()
 	evs := events.NewService(st, broker)
+	// Notifications hang off the events service, fed through a bounded queue
+	// so a slow webhook never holds up a scan. Subscribed before anything can
+	// emit; events queued before Run starts wait for it.
+	notifier := notify.New(st)
+	evs.SetSubscriber(notifier)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -351,6 +361,7 @@ func main() {
 	// Background loops that write to the store; shutdown waits on bg before
 	// the deferred st.Close().
 	var bg sync.WaitGroup
+	bg.Go(func() { notifier.Run(ctx) })
 	runNow := newIntegrationRunner(st, evs)
 	startIntegrationSyncs(ctx, &bg, runNow, time.Minute)
 	startRetention(ctx, &bg, st, retentionInterval)

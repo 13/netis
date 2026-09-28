@@ -15,9 +15,9 @@ import (
 )
 
 // eventPageTypes is the fixed set of event types accepted by the schema's
-// CHECK constraint (see internal/store/migrations/0001_init.sql), in the
+// CHECK constraint (see internal/store/migrations/*/0010_alerts.sql), in the
 // order shown in the filter <select>.
-var eventPageTypes = []string{"device_new", "online", "offline", "ip_changed", "scan_error"}
+var eventPageTypes = []string{"device_new", "online", "offline", "ip_changed", "ip_conflict", "scan_error", "sync_recovered"}
 
 func EventsPage(username string, evs []store.Event, typeFilter string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

@@ -28,6 +28,8 @@ type SettingsData struct {
 	Detected   []netdetect.Detected
 	Statuses   map[string]store.IntegrationStatus
 	About      AboutData
+	// Notify is the Notifications tab, filled for admins on that tab only.
+	Notify NotifyData
 	// Error is why the form just submitted on ActiveTab was refused, shown
 	// above the tab.
 	Error string
@@ -512,6 +514,7 @@ templ SettingsPage(username string, d SettingsData) {
 			if IsAdmin(ctx) {
 				@tabLink(d.ActiveTab, "users", "Users")
 				@tabLink(d.ActiveTab, "general", "General")
+				@tabLink(d.ActiveTab, "notifications", "Notifications")
 			} else {
 				@tabLink(d.ActiveTab, "users", "Account")
 			}
@@ -539,6 +542,8 @@ templ SettingsPage(username string, d SettingsData) {
 			@usersTab(d)
 		} else if d.ActiveTab == "general" {
 			@generalTab(d)
+		} else if d.ActiveTab == "notifications" {
+			@notificationsTab(d.Notify)
 		} else if d.ActiveTab == "about" {
 			@aboutTab(d.About)
 		}

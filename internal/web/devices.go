@@ -528,11 +528,41 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_, alert, err := s.store.DeviceAlert(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
 	u, _ := userFrom(r)
 	s.render(w, r, views.DevicePage(u.Username, views.DeviceDetail{
 		Device: d, Ifaces: ifaceDetails, Tags: tags,
 		Fields: fields, Links: links, Children: children, Parent: parent, Events: evs,
+		AlertOffline: alert,
 	}))
+}
+
+// handleDeviceAlert switches the device's offline/online notifications on
+// (alert_offline=1) or off.
+func (s *Server) handleDeviceAlert(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, _, err := s.store.DeviceAlert(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.store.SetDeviceAlertOffline(r.Context(), id, r.FormValue("alert_offline") == "1"); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
 func (s *Server) handleLinkAdd(w http.ResponseWriter, r *http.Request) {
