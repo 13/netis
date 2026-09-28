@@ -71,7 +71,9 @@ type Server struct {
 	// userLimiter bounds password guesses per account: logins by username
 	// and current-password checks by user id.
 	userLimiter *rateLimiter
-	detect      func() ([]netdetect.Detected, error)
+	// tokenLimiter bounds failed API-token lookups per client address.
+	tokenLimiter *rateLimiter
+	detect       func() ([]netdetect.Detected, error)
 
 	trustedProxies []netip.Prefix
 	metricsToken   string
@@ -87,6 +89,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		mux: http.NewServeMux(), store: st, broker: broker,
 		trigger: trigger, runner: runner, limiter: newRateLimiter(loginIPMax, loginIPWindow),
 		userLimiter:    newRateLimiter(loginUserMax, loginUserWindow),
+		tokenLimiter:   newRateLimiter(apiTokenFailMax, apiTokenFailWindow),
 		detect:         netdetect.DetectSubnets,
 		trustedProxies: o.TrustedProxies,
 		metricsToken:   o.MetricsToken,
@@ -117,6 +120,8 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("GET /devices", s.handleDeviceList)
 	s.mux.HandleFunc("GET /devices/new", s.handleDeviceForm)
 	s.mux.HandleFunc("GET /devices/{id}/edit", s.handleDeviceEditForm)
+	s.mux.HandleFunc("GET /devices/import", s.handleImportPage)
+	s.mux.HandleFunc("POST /devices/import", s.requireAdmin(s.handleImport))
 	s.mux.HandleFunc("POST /devices", s.requireAdmin(s.handleDeviceCreate))
 	s.mux.HandleFunc("GET /devices/{id}", s.handleDevicePage)
 	s.mux.HandleFunc("POST /devices/{id}", s.requireAdmin(s.handleDeviceUpdate))
@@ -131,10 +136,16 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /devices/{id}/ip/kind", s.requireAdmin(s.handleDeviceIPKind))
 	s.mux.HandleFunc("POST /devices/{id}/alert", s.requireAdmin(s.handleDeviceAlert))
 	s.mux.HandleFunc("GET /events", s.handleEventsPage)
-	// Read-only JSON for scripts, and Prometheus metrics. Both authenticate with
-	// the session cookie; /metrics also takes a scrape token.
+	// JSON for scripts, and Prometheus metrics. /api/ authenticates with the
+	// session cookie or a personal API token; /metrics with the cookie or its
+	// own scrape token. Reads are open to every role, writes are admin-only.
 	s.mux.HandleFunc("GET /api/devices", s.handleAPIDevices)
 	s.mux.HandleFunc("GET /api/devices/{id}", s.handleAPIDevice)
+	s.mux.HandleFunc("POST /api/devices", s.requireAdmin(s.handleAPIDeviceCreate))
+	s.mux.HandleFunc("PATCH /api/devices/{id}", s.requireAdmin(s.handleAPIDeviceUpdate))
+	s.mux.HandleFunc("DELETE /api/devices/{id}", s.requireAdmin(s.handleAPIDeviceDelete))
+	s.mux.HandleFunc("GET /api/export/devices.csv", s.handleExportCSV)
+	s.mux.HandleFunc("GET /api/export/devices.json", s.handleExportJSON)
 	s.mux.HandleFunc("GET /api/subnets", s.handleAPISubnets)
 	s.mux.HandleFunc("GET /api/events", s.handleAPIEvents)
 	s.mux.HandleFunc("GET /api/status", s.handleAPIStatus)
@@ -153,6 +164,10 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	// Session management is likewise per-account, not admin business.
 	s.mux.HandleFunc("POST /settings/sessions/{id}/delete", s.handleSessionRevoke)
 	s.mux.HandleFunc("POST /settings/sessions/revoke-others", s.handleSessionRevokeOthers)
+	// So is holding API tokens: each user issues and revokes their own, and
+	// the revoke handler lets an admin reach everyone's.
+	s.mux.HandleFunc("POST /settings/tokens", s.handleTokenCreate)
+	s.mux.HandleFunc("POST /settings/tokens/{id}/delete", s.handleTokenRevoke)
 	s.mux.HandleFunc("POST /settings/users/{id}/password", s.requireAdmin(s.handleUserPasswordReset))
 	s.mux.HandleFunc("POST /settings/general", s.requireAdmin(s.handleGeneralSave))
 	s.mux.HandleFunc("POST /settings/notifications", s.requireAdmin(s.handleNotificationsSave))
@@ -162,7 +177,21 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
-	return securityHeaders(checkOrigin(cop.Handler(s.requireAuth(limitBody(s.mux)))))
+	app := s.requireAuth(limitBody(s.mux))
+	browser := checkOrigin(cop.Handler(app))
+	return securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// An API request carrying a bearer token skips the cross-origin
+		// checks. Those exist because a browser attaches the session cookie to
+		// a forged request on its own; a bearer token is never attached
+		// ambiently, requireAuth authenticates such a request by the token
+		// alone (never the cookie), and a page on another origin cannot set an
+		// Authorization header without a CORS preflight netis never grants.
+		if _, ok := apiBearer(r); ok {
+			app.ServeHTTP(w, r)
+			return
+		}
+		browser.ServeHTTP(w, r)
+	}))
 }
 
 // handleHealthz reports whether netis can actually serve: the process being up
@@ -215,8 +244,21 @@ func checkOrigin(next http.Handler) http.Handler {
 }
 
 // maxBodyBytes caps a request body. Every form netis serves is a handful of
-// short fields; nothing uploads a file.
+// short fields; the one upload, the CSV import, gets maxImportBytes instead.
 const maxBodyBytes = 1 << 20
+
+// maxImportBytes caps the CSV import upload: tens of thousands of device rows,
+// far more than any network netis is for, and still a bounded buffer.
+const maxImportBytes = 5 << 20
+
+// bodyLimit is the body cap for a request: maxImportBytes for the import
+// route alone, maxBodyBytes for everything else.
+func bodyLimit(r *http.Request) int64 {
+	if r.Method == http.MethodPost && r.URL.Path == "/devices/import" {
+		return maxImportBytes
+	}
+	return maxBodyBytes
+}
 
 // limitBody caps request bodies and parses forms up front, so an oversized
 // body is answered with 413 instead of reaching a handler.
@@ -230,7 +272,8 @@ const maxBodyBytes = 1 << 20
 // fields.
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		limit := bodyLimit(r)
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		var err error
 		mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		switch mt {
@@ -239,7 +282,7 @@ func limitBody(next http.Handler) http.Handler {
 		case "multipart/form-data":
 			// The whole body fits in memory under the cap, so no part is
 			// ever written to disk.
-			err = r.ParseMultipartForm(maxBodyBytes)
+			err = r.ParseMultipartForm(limit)
 		}
 		if err != nil {
 			var tooBig *http.MaxBytesError

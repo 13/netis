@@ -121,7 +121,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	}
 
 	switch tab {
-	case "subnets", "integrations", "users", "about":
+	case "subnets", "integrations", "users", "tokens", "about":
 	case "general", "notifications":
 		if !admin {
 			tab = "subnets"
@@ -156,6 +156,18 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 	}
 
+	var tokens []store.APIToken
+	if tab == "tokens" {
+		// An admin manages everyone's tokens; anyone else sees their own.
+		owner := u.ID
+		if admin {
+			owner = 0
+		}
+		if tokens, err = s.store.ListAPITokens(r.Context(), owner); err != nil {
+			return views.SettingsData{}, err
+		}
+	}
+
 	var statuses map[string]store.IntegrationStatus
 	if tab == "integrations" {
 		list, err := s.store.ListIntegrationStatus(r.Context())
@@ -179,7 +191,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		Notify:  notifyData,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID,
-		ActiveTab: tab, Detected: newDetected, Statuses: statuses,
+		ActiveTab: tab, Detected: newDetected, Statuses: statuses, Tokens: tokens,
 		About: views.AboutData{
 			Info:    buildinfo.Get(),
 			Uptime:  buildinfo.Uptime().String(),

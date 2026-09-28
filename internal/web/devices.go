@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net"
@@ -261,10 +262,8 @@ func (s *Server) handleDeviceEditForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(r.FormValue("name"))
-	kind := r.FormValue("kind")
 	dev := store.Device{
-		Name: name, Kind: kind, Notes: r.FormValue("notes"),
+		Name: r.FormValue("name"), Kind: r.FormValue("kind"), Notes: r.FormValue("notes"),
 		Icon: r.FormValue("icon"), Source: "manual",
 		Vendor: r.FormValue("vendor"), Model: r.FormValue("model"), Function: r.FormValue("function"),
 	}
@@ -279,54 +278,20 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		f.Error = msg
 		s.renderDeviceForm(w, r, f, status)
 	}
-	if !validKinds[kind] {
-		refuse(http.StatusBadRequest, "bad kind")
-		return
-	}
-	if name == "" {
-		refuse(http.StatusBadRequest, "name required")
-		return
-	}
-	var macP *string
-	if raw := strings.TrimSpace(r.FormValue("mac")); raw != "" {
-		mac, ok := normMAC(raw)
-		if !ok {
-			refuse(http.StatusBadRequest, "invalid MAC address")
-			return
-		}
-		macP = &mac
-	}
-	var subnetID int64
-	ip := strings.TrimSpace(r.FormValue("ip"))
-	if ip != "" {
-		addr, err := netip.ParseAddr(ip)
-		if err != nil {
-			refuse(http.StatusBadRequest, "invalid IP address")
-			return
-		}
-		sn, msg, err := s.subnetForForm(r)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		if msg != "" {
-			refuse(http.StatusBadRequest, msg)
-			return
-		}
-		prefix, err := netip.ParsePrefix(sn.CIDR)
-		if err != nil {
-			s.fail(w, r, err)
-			return
-		}
-		if !prefix.Contains(addr) {
-			refuse(http.StatusBadRequest, "IP "+addr.String()+" is not in subnet "+sn.CIDR)
-			return
-		}
-		subnetID, ip = sn.ID, addr.String()
-	}
-	devID, err := s.store.CreateDeviceWithIface(r.Context(), dev, macP, subnetID, ip, "static")
+	// A subnet_id that is missing or not a number is "not chosen" (zero).
+	subnetID, _ := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
+	nd, msg, err := s.checkNewDevice(r.Context(), dev, r.FormValue("mac"), r.FormValue("ip"), subnetID)
 	if err != nil {
-		if status, msg, ok := writeFailure(err, "that MAC address already belongs to another device", "parent device does not exist"); ok {
+		s.fail(w, r, err)
+		return
+	}
+	if msg != "" {
+		refuse(http.StatusBadRequest, msg)
+		return
+	}
+	devID, err := s.store.CreateDeviceWithIface(r.Context(), nd.dev, nd.mac, nd.subnetID, nd.ip, "static")
+	if err != nil {
+		if status, msg, ok := writeFailure(err, macTakenMsg, parentMissingMsg); ok {
 			refuse(status, msg)
 			return
 		}
@@ -340,19 +305,68 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 	redirectAfterForm(w, r, "/devices/"+strconv.FormatInt(devID, 10))
 }
 
-// subnetForForm loads the subnet named by the form's subnet_id. msg says what
-// is wrong with the form when it is missing or names no subnet; err is a
-// failure to look it up.
-func (s *Server) subnetForForm(r *http.Request) (sn store.Subnet, msg string, err error) {
-	id, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
+const (
+	macTakenMsg      = "that MAC address already belongs to another device"
+	parentMissingMsg = "parent device does not exist"
+	chooseSubnetMsg  = "choose the subnet the IP belongs to"
+)
+
+// newDevice is a validated create request, ready for CreateDeviceWithIface.
+type newDevice struct {
+	dev      store.Device
+	mac      *string
+	subnetID int64
+	ip       string
+}
+
+// checkNewDevice validates a device create request, from the HTML form or the
+// JSON API, so both refuse the same things with the same words. mac and ip
+// are as submitted (blank for none); subnetID is zero when none was chosen.
+// msg says what is wrong with the request; err is a failure to look the
+// subnet up.
+func (s *Server) checkNewDevice(ctx context.Context, dev store.Device, mac, ip string, subnetID int64) (nd newDevice, msg string, err error) {
+	dev.Name = strings.TrimSpace(dev.Name)
+	if !validKinds[dev.Kind] {
+		return nd, "bad kind", nil
+	}
+	if dev.Name == "" {
+		return nd, "name required", nil
+	}
+	nd.dev = dev
+	if raw := strings.TrimSpace(mac); raw != "" {
+		m, ok := normMAC(raw)
+		if !ok {
+			return nd, "invalid MAC address", nil
+		}
+		nd.mac = &m
+	}
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return nd, "", nil
+	}
+	addr, err := netip.ParseAddr(ip)
 	if err != nil {
-		return store.Subnet{}, "choose the subnet the IP belongs to", nil
+		return nd, "invalid IP address", nil
 	}
-	sn, err = s.store.GetSubnet(r.Context(), id)
+	if subnetID == 0 {
+		return nd, chooseSubnetMsg, nil
+	}
+	sn, err := s.store.GetSubnet(ctx, subnetID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return store.Subnet{}, "unknown subnet", nil
+		return nd, "unknown subnet", nil
 	}
-	return sn, "", err
+	if err != nil {
+		return nd, "", err
+	}
+	prefix, err := netip.ParsePrefix(sn.CIDR)
+	if err != nil {
+		return nd, "", err
+	}
+	if !prefix.Contains(addr) {
+		return nd, "IP " + addr.String() + " is not in subnet " + sn.CIDR, nil
+	}
+	nd.subnetID, nd.ip = sn.ID, addr.String()
+	return nd, "", nil
 }
 
 func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -389,7 +403,7 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		d.ParentDeviceID = nil
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
-		if status, msg, ok := writeFailure(err, "device conflicts with an existing one", "parent device does not exist"); ok {
+		if status, msg, ok := writeFailure(err, "device conflicts with an existing one", parentMissingMsg); ok {
 			f := submittedDeviceForm(r, d, true)
 			f.Error = msg
 			s.renderDeviceForm(w, r, f, status)

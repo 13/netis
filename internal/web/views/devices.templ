@@ -321,7 +321,10 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 			if IsAdmin(ctx) {
 				<a class="btn primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">New device</a>
 				<button type="button" class="ghost" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan all</button>
+				<a class="btn ghost" href="/devices/import">Import CSV</a>
 			}
+			<a class="btn ghost" href="/api/export/devices.csv" download>Export CSV</a>
+			<a class="btn ghost" href="/api/export/devices.json" download>JSON</a>
 		</div>
 		<div id="dev-list" class="table-wrap">
 			@deviceTable(rows, q, sortKey, dir, "/devices", true)

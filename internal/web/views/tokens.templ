@@ -1,0 +1,87 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+// tokenExpiry describes when a token stops working.
+func tokenExpiry(t store.APIToken) string {
+	if t.ExpiresAt == nil || *t.ExpiresAt == "" {
+		return "never"
+	}
+	return *t.ExpiresAt
+}
+
+// tokenLastUsed says when a token was last presented, to the minute.
+func tokenLastUsed(t store.APIToken) string {
+	if t.LastUsedAt == nil || *t.LastUsedAt == "" {
+		return "never"
+	}
+	return relTime(*t.LastUsedAt)
+}
+
+// tokensTab is the API tokens tab. Every role manages its own tokens here; an
+// admin's list also carries everyone else's, with the owner shown.
+templ tokensTab(d SettingsData) {
+	<h2>API tokens</h2>
+	<p class="muted">
+		A token lets a script use the JSON API as you, with your role:
+		<span class="mono">curl -H "Authorization: Bearer netis_…" /api/devices</span>.
+		Treat it like a password.
+	</p>
+	if d.NewToken != "" {
+		<div class="setting-card" role="status">
+			<div class="sc-head"><h3>New token</h3></div>
+			<p>Copy it now. It is not stored and will not be shown again.</p>
+			<input type="text" class="mono" readonly value={ d.NewToken } aria-label="New API token" onclick="this.select()" style="width:100%"/>
+		</div>
+	}
+	<div class="setting-card">
+		<div class="table-wrap">
+			<table>
+				<tr>
+					<th>Name</th>
+					if IsAdmin(ctx) {
+						<th>Owner</th>
+					}
+					<th>Created</th>
+					<th>Last used</th>
+					<th>Expires</th>
+					<th></th>
+				</tr>
+				for _, t := range d.Tokens {
+					<tr>
+						<td>{ t.Name }</td>
+						if IsAdmin(ctx) {
+							<td>{ t.Username }</td>
+						}
+						<td>{ relTime(t.CreatedAt) }</td>
+						<td>{ tokenLastUsed(t) }</td>
+						<td>{ tokenExpiry(t) }</td>
+						<td>
+							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tokens/%d/delete", t.ID)) } class="inline" data-confirm={ "Revoke the token " + t.Name + "? Scripts using it stop working." }>
+								<button type="submit" class="ghost">revoke</button>
+							</form>
+						</td>
+					</tr>
+				}
+			</table>
+		</div>
+		if len(d.Tokens) == 0 {
+			<p class="muted">No tokens yet.</p>
+		}
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>Create a token</h3></div>
+		<form method="post" action="/settings/tokens">
+			<div class="field-grid">
+				<label>Name <input type="text" name="name" maxlength="100" placeholder="backup script" required/></label>
+				<label>Expires after (days) <input type="number" name="expires_days" min="0" max="3650" value="90"/></label>
+			</div>
+			<p class="muted" style="margin:6px 0 4px">0 means the token never expires.</p>
+			<button type="submit" class="primary">Create token</button>
+		</form>
+	</div>
+}

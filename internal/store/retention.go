@@ -9,12 +9,13 @@ import (
 // RetentionResult counts what one retention sweep removed.
 type RetentionResult struct {
 	Sessions     int64
+	APITokens    int64
 	Events       int64
 	Availability int64
 }
 
 // Total is the number of rows the sweep deleted.
-func (r RetentionResult) Total() int64 { return r.Sessions + r.Events + r.Availability }
+func (r RetentionResult) Total() int64 { return r.Sessions + r.APITokens + r.Events + r.Availability }
 
 // PruneExpiredSessions deletes sessions whose expiry has passed. Expired
 // sessions are already refused at login, so this only stops the table growing
@@ -58,6 +59,9 @@ func (s *Store) Prune(ctx context.Context, now time.Time, eventDays, availabilit
 	var err error
 	if r.Sessions, err = s.PruneExpiredSessions(ctx, now); err != nil {
 		return r, fmt.Errorf("prune sessions: %w", err)
+	}
+	if r.APITokens, err = s.PruneExpiredAPITokens(ctx, now); err != nil {
+		return r, fmt.Errorf("prune api tokens: %w", err)
 	}
 	if eventDays > 0 {
 		if r.Events, err = s.PruneEvents(ctx, now.AddDate(0, 0, -eventDays)); err != nil {

@@ -30,6 +30,7 @@ var copyOrder = []string{
 	"device_link",
 	"event",
 	"session",
+	"api_token",
 	"setting",
 	"integration_status",
 }
@@ -51,6 +52,7 @@ var boolColumns = map[string]map[string]bool{
 var identityTables = []string{
 	"subnet", "device", "iface", "ip_assignment", "availability_history",
 	"open_port", "tag", "custom_field", "device_link", "event", `"user"`,
+	"api_token",
 }
 
 // runMigrateDB copies a SQLite database into an empty Postgres database. It is

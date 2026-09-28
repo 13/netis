@@ -53,7 +53,7 @@ func runRetention(ctx context.Context, st *store.Store) {
 		return
 	}
 	if r.Total() > 0 {
-		slog.Info("retention sweep", "sessions", r.Sessions,
+		slog.Info("retention sweep", "sessions", r.Sessions, "api_tokens", r.APITokens,
 			"events", r.Events, "availability", r.Availability)
 	}
 }

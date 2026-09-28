@@ -33,6 +33,11 @@ type SettingsData struct {
 	// Error is why the form just submitted on ActiveTab was refused, shown
 	// above the tab.
 	Error string
+	// Tokens are the API tokens on the tokens tab: the user's own, or every
+	// user's for an admin. NewToken is the plaintext of one just created,
+	// shown this once.
+	Tokens   []store.APIToken
+	NewToken string
 }
 
 // AboutData is what the About tab reports: the build the binary came from plus
@@ -532,12 +537,15 @@ templ SettingsPage(username string, d SettingsData) {
 			} else {
 				@tabLink(d.ActiveTab, "users", "Account")
 			}
+			@tabLink(d.ActiveTab, "tokens", "API tokens")
 			@tabLink(d.ActiveTab, "about", "About")
 		</nav>
 		if d.Error != "" {
 			<p class="form-error" role="alert">{ d.Error }</p>
 		}
-		if !IsAdmin(ctx) {
+		if d.ActiveTab == "tokens" {
+			@tokensTab(d)
+		} else if !IsAdmin(ctx) {
 			if d.ActiveTab == "subnets" {
 				@subnetsListTab(d)
 			} else if d.ActiveTab == "integrations" {
