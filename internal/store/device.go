@@ -128,15 +128,34 @@ func (s *Store) findDeviceID(ctx context.Context, q string, args ...any) (int64,
 }
 
 // FindProxmoxNode finds the device the Proxmox sync created for a cluster
-// node, which it tells apart from guests by the absent VMID.
+// node, which it tells apart from guests by the absent VMID. The sync records
+// the node's Proxmox name in the proxmox_node custom field so the user can
+// rename the device; a node without that field (created before it existed)
+// is matched by its device name.
 func (s *Store) FindProxmoxNode(ctx context.Context, name string) (int64, bool, error) {
-	return s.findDeviceID(ctx,
-		`SELECT id FROM device WHERE name=? AND source='proxmox' AND proxmox_vmid IS NULL`, name)
+	return s.findDeviceID(ctx, `SELECT id FROM device d
+		WHERE source='proxmox' AND proxmox_vmid IS NULL AND (
+			EXISTS (SELECT 1 FROM custom_field cf WHERE cf.device_id=d.id AND cf.key='proxmox_node' AND cf.value=?)
+			OR (name=? AND NOT EXISTS (SELECT 1 FROM custom_field cf WHERE cf.device_id=d.id AND cf.key='proxmox_node')))
+		ORDER BY id LIMIT 1`, name, name)
 }
 
 // FindProxmoxGuest finds the device the Proxmox sync created for a guest.
 func (s *Store) FindProxmoxGuest(ctx context.Context, vmid int64) (int64, bool, error) {
 	return s.findDeviceID(ctx, `SELECT id FROM device WHERE proxmox_vmid=? AND source='proxmox'`, vmid)
+}
+
+// SetProxmoxGuestParent points a guest at the node it runs on, but only when
+// the guest has no parent or its parent is a Proxmox node device (so a guest
+// migrated between nodes follows it). A parent the user picked outside the
+// Proxmox nodes is left alone. Unlike UpdateDevice it touches no other column
+// and does not mark the device reviewed.
+func (s *Store) SetProxmoxGuestParent(ctx context.Context, guestID, nodeID int64) error {
+	_, err := s.exec(ctx, `UPDATE device SET parent_device_id=?
+		WHERE id=? AND (parent_device_id IS NULL OR parent_device_id IN
+			(SELECT id FROM device WHERE source='proxmox' AND proxmox_vmid IS NULL))`,
+		nodeID, guestID)
+	return err
 }
 
 // FindDeviceByWGPubKey finds the device carrying a WireGuard public key.
