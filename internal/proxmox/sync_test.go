@@ -6,12 +6,15 @@ import (
 
 	"netis/internal/events"
 	"netis/internal/store"
+	"netis/internal/store/storetest"
 )
 
 func TestSyncUpsertsGuestsIdempotently(t *testing.T) {
+	storetest.EachDialect(t, testSyncUpsertsGuestsIdempotently)
+}
+
+func testSyncUpsertsGuestsIdempotently(t *testing.T, st *store.Store) {
 	srv := fixtureServer(t)
-	st, _ := store.Open(":memory:")
-	defer st.Close()
 	c := NewClient(srv.URL, "root@pam!netis", "s3cret", false)
 	sync := NewSync(st, c, events.NewService(st, events.NewBroker()))
 

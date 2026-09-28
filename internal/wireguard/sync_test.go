@@ -8,6 +8,7 @@ import (
 
 	"netis/internal/events"
 	"netis/internal/store"
+	"netis/internal/store/storetest"
 )
 
 type fakeRunner struct{ out []byte }
@@ -15,8 +16,10 @@ type fakeRunner struct{ out []byte }
 func (f *fakeRunner) Run(ctx context.Context, cmd string) ([]byte, error) { return f.out, nil }
 
 func TestSyncCreatesPeersAndStatus(t *testing.T) {
-	st, _ := store.Open(":memory:")
-	defer st.Close()
+	storetest.EachDialect(t, testSyncCreatesPeersAndStatus)
+}
+
+func testSyncCreatesPeersAndStatus(t *testing.T, st *store.Store) {
 	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 120})
 
 	fresh := time.Now().Unix()
