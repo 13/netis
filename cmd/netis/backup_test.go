@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -86,6 +88,91 @@ func TestBackupRefusesToOverwrite(t *testing.T) {
 	b, _ := os.ReadFile(dest)
 	if string(b) != "precious" {
 		t.Error("the existing file was overwritten")
+	}
+}
+
+// A typo in -from used to go through store.Open, which creates a missing file
+// and migrates it: the "backup" was a fresh empty database, reported as success.
+func TestBackupMissingSourceCreatesNothing(t *testing.T) {
+	dir := t.TempDir()
+	src := dir + "/typo.db"
+	dest := dir + "/backup.db"
+	if err := runBackup(context.Background(), []string{"-from", src, "-to", dest}); err == nil {
+		t.Fatal("backing up a missing database succeeded")
+	}
+	for _, p := range []string{src, src + "-wal", src + "-shm", dest} {
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s exists after a failed backup (stat err %v)", p, err)
+		}
+	}
+}
+
+func TestBackupRefusesADirectorySource(t *testing.T) {
+	dir := t.TempDir()
+	if err := runBackup(context.Background(), []string{"-from", dir, "-to", dir + "/b.db"}); err == nil {
+		t.Fatal("backing up a directory succeeded")
+	}
+}
+
+// Backing up must only read the source. Opening it through store.Open ran
+// migrations, so a newer binary taking a backup upgraded the live schema
+// underneath the netis that owns it.
+func TestBackupDoesNotMigrateTheSource(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	src := dir + "/old.db"
+
+	// A database without netis's schema stands in for one from an older
+	// release: any migration run against it would add tables.
+	db, err := sql.Open("sqlite", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL; CREATE TABLE legacy (id INTEGER PRIMARY KEY, v TEXT);
+		INSERT INTO legacy (v) VALUES ('keep')`); err != nil {
+		t.Fatal(err)
+	}
+	schema := func() string {
+		var out []string
+		rows, err := db.Query(`SELECT name FROM sqlite_master ORDER BY name`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var n string
+			if err := rows.Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, n)
+		}
+		return strings.Join(out, ",")
+	}
+	before := schema()
+	db.Close()
+
+	dest := dir + "/backup.db"
+	if err := runBackup(ctx, []string{"-from", src, "-to", dest}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = sql.Open("sqlite", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if after := schema(); after != before {
+		t.Errorf("source schema changed: before %q, after %q", before, after)
+	}
+
+	bk, err := sql.Open("sqlite", dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bk.Close()
+	var v string
+	if err := bk.QueryRow(`SELECT v FROM legacy`).Scan(&v); err != nil || v != "keep" {
+		t.Errorf("backup row = %q, %v", v, err)
 	}
 }
 
