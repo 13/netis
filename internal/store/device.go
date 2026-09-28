@@ -176,6 +176,62 @@ func (s *Store) FindIfaceByMAC(ctx context.Context, mac string) (Iface, bool, er
 	return i, true, nil
 }
 
+// AdoptDiscoveredIface moves an interface to toDeviceID when the device that
+// holds it was created by discovery (scan or Pi-hole) and the user has not
+// reviewed it. An integration that knows better what the interface belongs to
+// (a Proxmox guest recognised by its MAC) uses this to merge the two devices.
+//
+// moved is false, and nothing changes, when the owner does not qualify: a
+// reviewed device is the user's, and the sync must not take from it. When the
+// move leaves the old device with no interface and nothing the user added (no
+// notes, tags, links, custom fields or children), that device is deleted and
+// removed reports it; its events are re-pointed at toDeviceID first, since
+// they were about the interface that just moved. It all runs in one
+// transaction.
+func (s *Store) AdoptDiscoveredIface(ctx context.Context, ifaceID, toDeviceID int64) (moved, removed bool, err error) {
+	err = s.withTx(ctx, func(c conn) error {
+		var fromID int64
+		if err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT device_id FROM iface WHERE id=?`),
+			ifaceID).Scan(&fromID); err != nil {
+			return err
+		}
+		res, err := s.execOn(ctx, c, `UPDATE iface SET device_id=? WHERE id=? AND device_id IN
+			(SELECT id FROM device WHERE id=? AND source IN ('scan','pihole') AND reviewed=FALSE)`,
+			toDeviceID, ifaceID, fromID)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+		moved = true
+		const empty = `id=? AND notes='' AND reviewed=FALSE
+			AND NOT EXISTS (SELECT 1 FROM iface WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device_tag WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device_link WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM custom_field WHERE device_id=device.id)
+			AND NOT EXISTS (SELECT 1 FROM device ch WHERE ch.parent_device_id=device.id)`
+		if _, err := s.execOn(ctx, c, `UPDATE event SET device_id=? WHERE device_id=?
+			AND EXISTS (SELECT 1 FROM device WHERE `+empty+`)`, toDeviceID, fromID, fromID); err != nil {
+			return err
+		}
+		res, err = s.execOn(ctx, c, `DELETE FROM device WHERE `+empty, fromID)
+		if err != nil {
+			return err
+		}
+		if n, err = res.RowsAffected(); err != nil {
+			return err
+		}
+		removed = n > 0
+		return nil
+	})
+	return moved, removed, err
+}
+
 func (s *Store) FindIfaceByIP(ctx context.Context, subnetID int64, ip string) (Iface, bool, error) {
 	var i Iface
 	err := s.queryRow(ctx, `SELECT f.id,f.device_id,f.mac,f.hostname FROM iface f
