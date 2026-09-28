@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -54,14 +56,33 @@ func runBackup(ctx context.Context, args []string) error {
 		return err
 	}
 
-	st, err := store.Open(dsn)
+	// The source is opened directly rather than through store.Open, which
+	// would create a missing file (so a typo in -from backed up an empty
+	// database) and run migrations (so a newer binary upgraded the live schema
+	// under the netis that owns it). A backup only reads.
+	src, err := filepath.Abs(dsn)
+	if err != nil {
+		return err
+	}
+	fi, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("source: %w", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("source %s is not a regular file", src)
+	}
+	// mode=ro makes SQLite refuse to create or write the file. The URL form
+	// escapes any ? or # in the path, which SQLite would otherwise read as the
+	// start of the query string.
+	uri := (&url.URL{Scheme: "file", Path: src, RawQuery: "mode=ro"}).String()
+	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
 	}
-	defer st.Close()
+	defer db.Close()
 
 	// The destination is a literal in SQLite's syntax, not a bound parameter.
-	if _, err := st.DB.ExecContext(ctx, `VACUUM INTO ?`, dest); err != nil {
+	if _, err := db.ExecContext(ctx, `VACUUM INTO ?`, dest); err != nil {
 		return fmt.Errorf("vacuum into %s: %w", dest, err)
 	}
 	info, err := os.Stat(dest)
