@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"netis/internal/store"
@@ -71,7 +72,7 @@ func runMigrateDB(ctx context.Context, args []string) error {
 		return fmt.Errorf("-from must be a SQLite path, got a Postgres URL")
 	}
 	if !store.IsPostgresDSN(*to) {
-		return fmt.Errorf("-to must be a Postgres URL (postgres://…), got %q", *to)
+		return fmt.Errorf("-to must be a Postgres URL (postgres://…), got %q", redactDSN(*to))
 	}
 
 	// Opening each store runs its own migrations, so the source is brought up
@@ -255,16 +256,20 @@ func toBool(v any) any {
 	}
 }
 
-// redactDSN strips the password from a Postgres URL so it can be logged.
+// redactDSN strips the password from a Postgres URL so it can be logged: the
+// userinfo password and a password query parameter, which pgx also accepts.
+// Anything that does not parse as a URL is withheld entirely rather than
+// echoed back on the chance that it holds a secret.
 func redactDSN(dsn string) string {
-	at := strings.LastIndex(dsn, "@")
-	slashes := strings.Index(dsn, "//")
-	if at < 0 || slashes < 0 || at < slashes {
-		return dsn
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "<unparseable database URL>"
 	}
-	userinfo := dsn[slashes+2 : at]
-	if i := strings.Index(userinfo, ":"); i >= 0 {
-		userinfo = userinfo[:i] + ":***"
+	if q := u.Query(); q.Has("password") {
+		q.Set("password", "redacted")
+		u.RawQuery = q.Encode()
 	}
-	return dsn[:slashes+2] + userinfo + dsn[at:]
+	// Redacted masks the userinfo password as "xxxxx"; the ":***" form is what
+	// this command has always printed.
+	return strings.Replace(u.Redacted(), ":xxxxx@", ":***@", 1)
 }

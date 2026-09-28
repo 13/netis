@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -115,7 +119,7 @@ func TestIntegrationRunnerRecordsStatus(t *testing.T) {
 			t.Fatal("want error")
 		}
 	}
-	if s := statusOf(t, st, "x"); s == nil || s.OK || s.Detail != "boom" {
+	if s := statusOf(t, st, "x"); s == nil || s.OK || s.Detail != "sync error" {
 		t.Fatalf("failure status = %+v", s)
 	}
 	if n := countEvents(t, st, "scan_error"); n != 1 {
@@ -151,8 +155,8 @@ func TestIntegrationRunnerDeadline(t *testing.T) {
 	if err := runner.Run(t.Context(), "x"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("got %v, want deadline exceeded", err)
 	}
-	if s := statusOf(t, st, "x"); s == nil || s.OK {
-		t.Fatalf("status = %+v, want a failing row", s)
+	if s := statusOf(t, st, "x"); s == nil || s.OK || s.Detail != "timeout" {
+		t.Fatalf("status = %+v, want a failing row saying timeout", s)
 	}
 	if n := countEvents(t, st, "scan_error"); n != 1 {
 		t.Fatalf("scan_error events = %d, want 1", n)
@@ -323,5 +327,56 @@ func TestPiholeRunLogsOut(t *testing.T) {
 	}
 	if li, lo := logins.Load(), logouts.Load(); li != 2 || lo != 2 {
 		t.Fatalf("after failure: logins=%d logouts=%d, want 2/2", li, lo)
+	}
+}
+
+// The raw error of a failed sync names key paths, internal addresses and URLs,
+// and the status row and "sync failing" event are shown to every viewer. Only a
+// category may leave the log.
+func TestIntegrationFailureDetailIsGeneric(t *testing.T) {
+	st := openTestStore(t)
+	secret := errors.New("read ssh key: open /root/.ssh/id_netis: no such file or directory")
+	runner := newRunner(st, events.NewService(st, events.NewBroker()), time.Minute,
+		map[string]integrationFunc{
+			"x": func(context.Context) (int, string, error) { return 0, "", secret },
+		})
+	if err := runner.Run(t.Context(), "x"); err == nil {
+		t.Fatal("want error")
+	}
+	s := statusOf(t, st, "x")
+	if s == nil || strings.Contains(s.Detail, "/root") || s.Detail == "" {
+		t.Fatalf("status detail = %+v, want a generic category", s)
+	}
+	evs, err := st.ListEvents(t.Context(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range evs {
+		if strings.Contains(e.Details, "/root") {
+			t.Fatalf("event leaks the raw error: %q", e.Details)
+		}
+	}
+}
+
+func TestFailureCategory(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{context.DeadlineExceeded, "timeout"},
+		{fmt.Errorf("proxmox sync: %w", context.DeadlineExceeded), "timeout"},
+		{errors.New("pihole auth: HTTP 401"), "authentication failed"},
+		{errors.New("proxmox /nodes: HTTP 401"), "authentication failed"},
+		{errors.New("ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey]"), "authentication failed"},
+		{errors.New("ssh: handshake failed: knownhosts: key mismatch"), "host key rejected"},
+		{&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, "connection failed"},
+		{fmt.Errorf("get: %w", &net.DNSError{Err: "no such host", Name: "pve.lan"}), "connection failed"},
+		{fmt.Errorf("read ssh key: %w", &fs.PathError{Op: "open", Path: "/root/k", Err: fs.ErrNotExist}), "configuration error"},
+		{errors.New("proxmox /nodes: HTTP 500"), "sync error"},
+		{errors.New("boom"), "sync error"},
+	} {
+		if got := failureCategory(tc.err); got != tc.want {
+			t.Errorf("failureCategory(%v) = %q, want %q", tc.err, got, tc.want)
+		}
 	}
 }

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -95,11 +97,16 @@ func (r *integrationRunner) Run(ctx context.Context, name string) error {
 func (r *integrationRunner) recordStatus(ctx context.Context, name string, in *integration, count int, detail string, err error) {
 	st := store.IntegrationStatus{Name: name, LastRun: time.Now().UTC().Format(time.RFC3339)}
 	if err != nil {
+		// The status row and the event are read by every viewer, and the raw
+		// error names key paths, internal addresses and URLs. They get a
+		// category; the full error goes to the log for the administrator.
+		category := failureCategory(err)
+		slog.Warn("integration sync failed", "name", name, "category", category, "err", err)
 		if !in.failing {
 			in.failing = true
-			r.evs.Emit(ctx, "scan_error", nil, name+" sync failing: "+err.Error())
+			r.evs.Emit(ctx, "scan_error", nil, name+" sync failing: "+category)
 		}
-		st.Detail = err.Error()
+		st.Detail = category
 	} else {
 		in.failing = false
 		st.OK = true
@@ -110,6 +117,32 @@ func (r *integrationRunner) recordStatus(ctx context.Context, name string, in *i
 		slog.Error("integration status write", "name", name, "err", serr)
 	}
 	r.evs.Broker().Publish("dashboard", "refresh")
+}
+
+// failureCategory sorts a failed integration run into a few generic kinds
+// that are safe to show to any signed-in user.
+func failureCategory(err error) string {
+	msg := strings.ToLower(err.Error())
+	var netErr net.Error
+	var opErr *net.OpError
+	var dnsErr *net.DNSError
+	var pathErr *fs.PathError
+	switch {
+	case errors.Is(err, context.DeadlineExceeded),
+		errors.As(err, &netErr) && netErr.Timeout():
+		return "timeout"
+	case strings.Contains(msg, "http 401"), strings.Contains(msg, "http 403"),
+		strings.Contains(msg, "unable to authenticate"), strings.Contains(msg, "auth:"):
+		return "authentication failed"
+	case strings.Contains(msg, "knownhosts"):
+		return "host key rejected"
+	case errors.As(err, &opErr), errors.As(err, &dnsErr),
+		strings.Contains(msg, "x509:"), strings.Contains(msg, "tls:"):
+		return "connection failed"
+	case errors.As(err, &pathErr):
+		return "configuration error"
+	}
+	return "sync error"
 }
 
 var errNotConfigured = errors.New("not configured")

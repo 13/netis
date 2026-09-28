@@ -213,6 +213,40 @@ func TestMetricsWithSession(t *testing.T) {
 	}
 }
 
+// Label values used to be written with %q, whose Go escapes (\t, \x.., \u..)
+// are not valid in the Prometheus text format, so one odd subnet name made the
+// whole scrape fail. Only backslash, double quote and newline are escaped there;
+// everything else, non-ASCII included, is written as-is.
+func TestMetricsLabelEscaping(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	if _, err := st.CreateSubnet(t.Context(), store.Subnet{
+		CIDR: "10.0.0.0/24", Name: "a\tb \"q\" c\\d\ne Zürich ☃", Kind: "lan", ScanIntervalSec: 120,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := authedGet(t, srv, st, "/metrics").Body.String()
+	want := `netis_subnet_scan_enabled{cidr="10.0.0.0/24",name="a` + "\t" + `b \"q\" c\\d\ne Zürich ☃",kind="lan"} 0`
+	if !strings.Contains(body, want) {
+		t.Fatalf("metrics missing %q\n%s", want, body)
+	}
+}
+
+func TestPromLabelValue(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain":     "plain",
+		`a"b`:       `a\"b`,
+		`a\b`:       `a\\b`,
+		"a\nb":      `a\nb`,
+		"tab\there": "tab\there",
+		"ünï":       "ünï",
+	} {
+		if got := promLabelValue(in); got != want {
+			t.Errorf("promLabelValue(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestMetricsScrapeToken(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {

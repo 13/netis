@@ -51,7 +51,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	info := buildinfo.Get()
 	writeMetric(&b, "netis_build_info",
 		"Build identity of the running binary; always 1.", "gauge",
-		fmt.Sprintf(`{version=%q,commit=%q,build=%q}`, info.Version, info.Commit, info.Build), 1)
+		fmt.Sprintf(`{version="%s",commit="%s",build="%s"}`,
+			promLabelValue(info.Version), promLabelValue(info.Commit), promLabelValue(info.Build)), 1)
 	writeMetric(&b, "netis_start_time_seconds",
 		"Unix time the process started.", "gauge", "", float64(buildinfo.StartTime().Unix()))
 	writeMetric(&b, "netis_devices",
@@ -68,8 +69,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		if sn.ScanEnabled {
 			enabled = 1
 		}
-		fmt.Fprintf(&b, "netis_subnet_scan_enabled{cidr=%q,name=%q,kind=%q} %s\n",
-			sn.CIDR, sn.Name, sn.Kind, formatFloat(enabled))
+		fmt.Fprintf(&b, "netis_subnet_scan_enabled{cidr=\"%s\",name=\"%s\",kind=\"%s\"} %s\n",
+			promLabelValue(sn.CIDR), promLabelValue(sn.Name), promLabelValue(sn.Kind), formatFloat(enabled))
 	}
 
 	b.WriteString("# HELP netis_integration_last_run_seconds Unix time an integration or the scanner last ran.\n")
@@ -79,8 +80,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(&b, "netis_integration_last_run_seconds{name=%q} %s\n",
-			it.Name, formatFloat(float64(ts.Unix())))
+		fmt.Fprintf(&b, "netis_integration_last_run_seconds{name=\"%s\"} %s\n",
+			promLabelValue(it.Name), formatFloat(float64(ts.Unix())))
 	}
 	b.WriteString("# HELP netis_integration_last_ok Whether an integration's last run succeeded.\n")
 	b.WriteString("# TYPE netis_integration_last_ok gauge\n")
@@ -89,7 +90,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		if it.OK {
 			ok = 1
 		}
-		fmt.Fprintf(&b, "netis_integration_last_ok{name=%q} %s\n", it.Name, formatFloat(ok))
+		fmt.Fprintf(&b, "netis_integration_last_ok{name=\"%s\"} %s\n", promLabelValue(it.Name), formatFloat(ok))
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -126,6 +127,16 @@ func tokenFromRequest(r *http.Request) string {
 func writeMetric(b *strings.Builder, name, help, typ, labels string, value float64) {
 	fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s %s\n%s%s %s\n",
 		name, help, name, typ, name, labels, formatFloat(value))
+}
+
+// promLabelEscaper escapes a label value for the Prometheus text format, which
+// knows exactly three escapes. Go's %q is not a substitute: it also writes \t,
+// \x.. and \u.. sequences, which the format rejects, failing the whole scrape.
+var promLabelEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
+
+// promLabelValue returns v escaped for use between a label's double quotes.
+func promLabelValue(v string) string {
+	return promLabelEscaper.Replace(v)
 }
 
 func formatFloat(f float64) string {

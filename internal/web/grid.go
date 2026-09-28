@@ -153,8 +153,9 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, views.ScanToast(sn.CIDR+" is WireGuard — not scannable"))
 		return
 	}
-	if s.trigger != nil {
-		s.trigger.Trigger(sn.ID)
+	if s.trigger != nil && !s.trigger.Trigger(sn.ID) {
+		s.render(w, r, views.ScanToast("Scan of "+sn.CIDR+" already queued or running"))
+		return
 	}
 	s.render(w, r, views.ScanToast("Scanning "+sn.CIDR+"…"))
 }
@@ -200,12 +201,25 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	queued, skipped := 0, 0
 	if s.trigger != nil {
 		for _, sn := range subnets {
-			if sn.Kind != "wireguard" {
-				s.trigger.Trigger(sn.ID)
+			if sn.Kind == "wireguard" {
+				continue
+			}
+			if s.trigger.Trigger(sn.ID) {
+				queued++
+			} else {
+				skipped++
 			}
 		}
 	}
-	s.render(w, r, views.ScanToast("Scanning all subnets…"))
+	switch {
+	case skipped == 0:
+		s.render(w, r, views.ScanToast("Scanning all subnets…"))
+	case queued == 0:
+		s.render(w, r, views.ScanToast("Scans already queued or running"))
+	default:
+		s.render(w, r, views.ScanToast(fmt.Sprintf("Scanning %d subnet(s); %d already queued or running", queued, skipped)))
+	}
 }

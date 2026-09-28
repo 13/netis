@@ -21,6 +21,9 @@ type SettingsData struct {
 	Sessions         []store.Session
 	CurrentSessionID string
 	Values    map[string]string
+	// Configured says which integrations have settings, by name. Viewers get
+	// this and not Values, which is left empty for them.
+	Configured map[string]bool
 	ActiveTab string
 	Detected  []netdetect.Detected
 	Statuses  map[string]store.IntegrationStatus
@@ -108,6 +111,21 @@ templ integrationStatus(name string, configured bool, statuses map[string]store.
 	}
 }
 
+// integrationsStatusTab is what a viewer sees of the integrations: whether each
+// one works and when it last ran, without its configuration or the controls.
+templ integrationsStatusTab(d SettingsData) {
+	<h2>Integrations</h2>
+	<div class="setting-card">
+		<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Configured["proxmox"], d.Statuses)</div>
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Configured["wireguard"], d.Statuses)</div>
+	</div>
+	<div class="setting-card">
+		<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)</div>
+	</div>
+}
+
 templ integrationsTab(d SettingsData) {
 	<h2>Integrations</h2>
 	<p class="muted">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p>
@@ -126,6 +144,28 @@ templ integrationsTab(d SettingsData) {
 		</div>
 		<button type="submit" class="primary">Save integrations</button>
 	</form>
+}
+
+// subnetsListTab is the read-only subnet list a viewer sees.
+templ subnetsListTab(d SettingsData) {
+	<h2>Subnets</h2>
+	if len(d.Subnets) == 0 {
+		<p class="muted">No subnets configured.</p>
+	}
+	for _, sn := range d.Subnets {
+		<div class="setting-card">
+			<div class="sc-head">
+				<h3>{ sn.Name }</h3>
+				<span class="mono muted">{ sn.CIDR }</span>
+				<span class="badge">{ sn.Kind }</span>
+				if sn.ScanEnabled {
+					<span class="badge online">auto-scan on</span>
+				} else {
+					<span class="badge">auto-scan off</span>
+				}
+			</div>
+		</div>
+	}
 }
 
 templ subnetsTab(d SettingsData) {
@@ -238,6 +278,28 @@ templ usersTab(d SettingsData) {
 			}
 		</table>
 	</div>
+	@myAccount(d)
+	<div class="setting-card">
+		<div class="sc-head"><h3>Add user</h3></div>
+		<form method="post" action="/settings/users">
+			<div class="field-grid">
+				<label>Username <input type="text" name="username" required/></label>
+				<label>Password <input type="password" name="password" minlength="8" required/></label>
+				<label>Role
+					<select name="role">
+						<option value="viewer">viewer</option>
+						<option value="admin">admin</option>
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="primary">Add user</button>
+		</form>
+	</div>
+}
+
+// myAccount is the part of the users tab about the signed-in user's own
+// account: sessions and password, which every role manages for itself.
+templ myAccount(d SettingsData) {
 	<div class="setting-card">
 		<div class="sc-head"><h3>My sessions</h3></div>
 		<table>
@@ -275,22 +337,6 @@ templ usersTab(d SettingsData) {
 			</div>
 			<p class="muted" style="margin:6px 0 4px">Your other sessions are signed out when the password changes.</p>
 			<button type="submit" class="primary">Change password</button>
-		</form>
-	</div>
-	<div class="setting-card">
-		<div class="sc-head"><h3>Add user</h3></div>
-		<form method="post" action="/settings/users">
-			<div class="field-grid">
-				<label>Username <input type="text" name="username" required/></label>
-				<label>Password <input type="password" name="password" minlength="8" required/></label>
-				<label>Role
-					<select name="role">
-						<option value="viewer">viewer</option>
-						<option value="admin">admin</option>
-					</select>
-				</label>
-			</div>
-			<button type="submit" class="primary">Add user</button>
 		</form>
 	</div>
 }
@@ -423,12 +469,27 @@ templ SettingsPage(username string, d SettingsData) {
 		<nav class="tabs">
 			@tabLink(d.ActiveTab, "subnets", "Subnets")
 			@tabLink(d.ActiveTab, "integrations", "Integrations")
-			@tabLink(d.ActiveTab, "users", "Users")
-			@tabLink(d.ActiveTab, "general", "General")
+			if IsAdmin(ctx) {
+				@tabLink(d.ActiveTab, "users", "Users")
+				@tabLink(d.ActiveTab, "general", "General")
+			} else {
+				@tabLink(d.ActiveTab, "users", "Account")
+			}
 			@tabLink(d.ActiveTab, "about", "About")
 		</nav>
 
-		if d.ActiveTab == "subnets" {
+		if !IsAdmin(ctx) {
+			if d.ActiveTab == "subnets" {
+				@subnetsListTab(d)
+			} else if d.ActiveTab == "integrations" {
+				@integrationsStatusTab(d)
+			} else if d.ActiveTab == "users" {
+				<h2>Account</h2>
+				@myAccount(d)
+			} else if d.ActiveTab == "about" {
+				@aboutTab(d.About)
+			}
+		} else if d.ActiveTab == "subnets" {
 			@subnetsTab(d)
 		} else if d.ActiveTab == "integrations" {
 			@integrationsTab(d)

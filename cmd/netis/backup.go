@@ -39,7 +39,7 @@ func runBackup(ctx context.Context, args []string) error {
 		dsn = config.Load().DSN
 	}
 	if store.IsPostgresDSN(dsn) {
-		return fmt.Errorf("backing up Postgres is pg_dump's job: pg_dump %q > backup.sql", dsn)
+		return fmt.Errorf("backing up Postgres is pg_dump's job: pg_dump %q > backup.sql", redactDSN(dsn))
 	}
 
 	dest, err := filepath.Abs(*to)

@@ -13,14 +13,16 @@ import (
 )
 
 type recordingTrigger struct {
-	mu  sync.Mutex
-	ids []int64
+	mu     sync.Mutex
+	ids    []int64
+	refuse bool // answer every trigger as not queued
 }
 
-func (r *recordingTrigger) Trigger(id int64) {
+func (r *recordingTrigger) Trigger(id int64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.ids = append(r.ids, id)
+	return !r.refuse
 }
 
 func (r *recordingTrigger) got() []int64 {
@@ -57,6 +59,22 @@ func TestScanNowLanTriggersAndToasts(t *testing.T) {
 	}
 	if ids := trig.got(); len(ids) != 1 || ids[0] != 1 {
 		t.Fatalf("trigger ids=%v, want [1]", ids)
+	}
+}
+
+// A trigger that was not queued used to toast "Scanning…" all the same.
+func TestScanNowSaysWhenNotQueued(t *testing.T) {
+	srv, st, trig := testServerTrig(t)
+	trig.refuse = true
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+	body := authedPost(t, srv, st, "/subnets/1/scan", url.Values{}).Body.String()
+	if strings.Contains(body, "Scanning") || !strings.Contains(body, "already queued") {
+		t.Fatalf("scan-now toast = %s, want it to say the scan is already queued", body)
+	}
+	body = authedPost(t, srv, st, "/scan", url.Values{}).Body.String()
+	if strings.Contains(body, "Scanning") || !strings.Contains(body, "already queued") {
+		t.Fatalf("scan-all toast = %s, want it to say the scans are already queued", body)
 	}
 }
 

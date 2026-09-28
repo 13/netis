@@ -16,13 +16,16 @@ import (
 	"netis/internal/events"
 	"netis/internal/netdetect"
 	"netis/internal/store"
+	"netis/internal/web/views"
 )
 
 //go:embed static
 var staticFS embed.FS
 
+// ScanTrigger queues a manual scan and reports whether it was queued; it is
+// not when that subnet is already waiting or being scanned, or the queue is full.
 type ScanTrigger interface {
-	Trigger(subnetID int64)
+	Trigger(subnetID int64) bool
 }
 
 // IntegrationRunner triggers a single on-demand run of a named integration.
@@ -259,7 +262,7 @@ func securityHeaders(next http.Handler) http.Handler {
 // client that hung up mid-page; discarding them entirely meant a genuine
 // template failure left no trace at all.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, c templ.Component) {
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(views.WithAdmin(r.Context(), isAdmin(r)), w); err != nil {
 		slog.Warn("rendering response failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	}
 }

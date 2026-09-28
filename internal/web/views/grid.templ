@@ -17,7 +17,7 @@ type GridCell struct {
 templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow, sortKey, dir string) {
 	@Layout(sn.Name, username) {
 		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
-		if sn.Kind != "wireguard" {
+		if sn.Kind != "wireguard" && IsAdmin(ctx) {
 			<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan now</button>
 		}
 		<div
@@ -42,7 +42,9 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		</p>
 		<h2>
 			{ "Devices in this subnet (" + fmt.Sprint(len(devices)) + ")" }
-			<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</button>
+			if IsAdmin(ctx) {
+				<button type="button" class="primary" hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</button>
+			}
 		</h2>
 		if len(devices) == 0 {
 			<p class="muted">No devices with an IP in this subnet yet.</p>
@@ -63,7 +65,7 @@ templ GridFrag(sn store.Subnet, cells []GridCell) {
 					hx-target="#modal"
 					title={ c.Title }
 				></button>
-			} else if c.State == "free" {
+			} else if c.State == "free" && IsAdmin(ctx) {
 				<button
 					type="button"
 					class={ "sq", c.State }
@@ -105,9 +107,11 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 			if o.DeviceID > 0 {
 				<div class="df">
 					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
-					<button type="button" hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</button>
-					@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
-					@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
+					if IsAdmin(ctx) {
+						<button type="button" hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</button>
+						@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
+						@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
+					}
 				</div>
 			}
 		</div>

@@ -260,7 +260,14 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			}
 		}
 		if c, err := r.Cookie("netis_session"); err == nil {
-			if u, ok, _ := s.store.GetSession(r.Context(), c.Value); ok {
+			u, ok, err := s.store.GetSession(r.Context(), c.Value)
+			if err != nil {
+				// The session may well be valid; the database could not say.
+				// A login redirect here would look like being signed out.
+				s.unavailable(w, r, err)
+				return
+			}
+			if ok {
 				// The onboarding wizard is a browser flow; bouncing a script or
 				// a scraper into it would answer a data request with a page.
 				if !onboardingAllowed(r.URL.Path) && !forMachines(r.URL.Path) {
@@ -278,7 +285,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if n, _ := s.store.CountUsers(r.Context()); n == 0 {
+		n, err := s.store.CountUsers(r.Context())
+		if err != nil {
+			s.unavailable(w, r, err)
+			return
+		}
+		if n == 0 {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
@@ -300,10 +312,22 @@ func onboardingAllowed(path string) bool {
 		path == "/logout" || path == "/events/stream"
 }
 
+// unavailable answers a request that could not be authenticated because the
+// store failed, logging the real error.
+func (s *Server) unavailable(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("authenticating request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+}
+
+// isAdmin reports whether the request's signed-in user has the admin role.
+func isAdmin(r *http.Request) bool {
+	u, ok := userFrom(r)
+	return ok && u.Role == "admin"
+}
+
 func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u, ok := userFrom(r)
-		if !ok || u.Role != "admin" {
+		if !isAdmin(r) {
 			http.Error(w, "admin only", http.StatusForbidden)
 			return
 		}
