@@ -21,8 +21,10 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+// ScanTrigger queues a manual scan and reports whether it was queued; it is
+// not when that subnet is already waiting or being scanned, or the queue is full.
 type ScanTrigger interface {
-	Trigger(subnetID int64)
+	Trigger(subnetID int64) bool
 }
 
 // IntegrationRunner triggers a single on-demand run of a named integration.

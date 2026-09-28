@@ -23,6 +23,9 @@ type Scheduler struct {
 	// running holds the subnets with a scan in flight, so a second scan of the
 	// same subnet is skipped rather than queued behind the first.
 	running map[int64]bool
+	// queued holds the subnets waiting in trigger, so a repeat click does not
+	// fill the queue with copies of the same request.
+	queued  map[int64]bool
 	sem     chan struct{}
 	wg      sync.WaitGroup
 	trigger chan int64
@@ -36,15 +39,27 @@ func NewScheduler(e *Engine, st *store.Store) *Scheduler {
 		engine: e, store: st,
 		lastRun: make(map[int64]time.Time),
 		running: make(map[int64]bool),
+		queued:  make(map[int64]bool),
 		sem:     make(chan struct{}, maxParallelScans),
 		trigger: make(chan int64, 256),
 	}
 }
 
-func (s *Scheduler) Trigger(subnetID int64) {
+// Trigger asks for a manual scan of a subnet without waiting for it, and
+// reports whether the request was queued. It is not when that subnet is
+// already queued or being scanned, or when the queue is full.
+func (s *Scheduler) Trigger(subnetID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.queued[subnetID] || s.running[subnetID] {
+		return false
+	}
 	select {
 	case s.trigger <- subnetID:
+		s.queued[subnetID] = true
+		return true
 	default:
+		return false
 	}
 }
 
@@ -56,6 +71,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case id := <-s.trigger:
+			s.mu.Lock()
+			delete(s.queued, id)
+			s.mu.Unlock()
 			if sn, err := s.store.GetSubnet(ctx, id); err == nil {
 				s.start(ctx, sn, true)
 			}

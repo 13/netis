@@ -143,6 +143,39 @@ func TestSubnetNotScannedTwiceAtOnce(t *testing.T) {
 	sched.Wait()
 }
 
+// Trigger used to drop a request silently when the queue was full, and the
+// button that called it still said "Scanning…". It now says whether the scan
+// was queued; a subnet already waiting or already being swept is not queued a
+// second time.
+func TestTriggerReportsWhetherItQueued(t *testing.T) {
+	sched, _, b, ids := testScheduler(t, "10.0.0.0/24", "10.0.1.0/24")
+	sched.trigger = make(chan int64, 1)
+
+	if !sched.Trigger(ids[0]) {
+		t.Fatal("first trigger should queue")
+	}
+	if sched.Trigger(ids[0]) {
+		t.Fatal("a subnet already queued should not queue again")
+	}
+	if sched.Trigger(ids[1]) {
+		t.Fatal("a full queue should refuse the trigger")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sched.Start(ctx)
+	waitFor(t, "the queued sweep to start", func() bool { return b.count("10.0.0.0/24") == 1 })
+	if sched.Trigger(ids[0]) {
+		t.Fatal("a subnet being swept should not queue again")
+	}
+	if !sched.Trigger(ids[1]) {
+		t.Fatal("the queue has room again")
+	}
+	waitFor(t, "the second sweep to start", func() bool { return b.count("10.0.1.0/24") == 1 })
+	close(b.release)
+	sched.Wait()
+}
+
 // Parallel scans must stay bounded: each sweep opens its own fan-out of
 // probes, so an unbounded number of subnets scanning at once would multiply
 // out into thousands of in-flight packets.
