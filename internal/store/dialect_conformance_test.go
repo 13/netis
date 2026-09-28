@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -829,6 +830,65 @@ func TestConformanceIntegrationDeviceLookups(t *testing.T) {
 		}
 		if _, ok, err := s.FindDeviceByWGPubKey(ctx, "peerB="); err != nil || ok {
 			t.Errorf("FindDeviceByWGPubKey(peerB=) = %v %v, want not found", ok, err)
+		}
+	})
+}
+
+// TestConformanceStatusTransitionsAreAtomic runs MarkSeen and MarkMissed from
+// many goroutines at once, the way parallel subnet sweeps do when one
+// interface has addresses in several subnets. Exactly one caller may report
+// each transition, and no miss may be lost to a read-then-write race.
+func TestConformanceStatusTransitionsAreAtomic(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := context.Background()
+		devID, err := s.CreateDevice(ctx, Device{Name: "host", Kind: "server", Source: "manual"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ifID, err := s.AddIface(ctx, devID, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		const n = 16
+		count := func(fn func() (bool, error)) int {
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			hits := 0
+			for range n {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ok, err := fn()
+					if err != nil {
+						t.Error(err)
+					}
+					if ok {
+						mu.Lock()
+						hits++
+						mu.Unlock()
+					}
+				}()
+			}
+			wg.Wait()
+			return hits
+		}
+
+		if got := count(func() (bool, error) { return s.MarkSeen(ctx, ifID, 1, time.Now()) }); got != 1 {
+			t.Fatalf("concurrent first sightings reported %d online transitions, want 1", got)
+		}
+		if got := count(func() (bool, error) { return s.MarkMissed(ctx, ifID, n) }); got != 1 {
+			t.Fatalf("concurrent misses reported %d offline transitions, want 1", got)
+		}
+		var missed int
+		if err := s.queryRow(ctx, `SELECT missed_sweeps FROM iface_status WHERE iface_id=?`, ifID).Scan(&missed); err != nil {
+			t.Fatal(err)
+		}
+		if missed != n {
+			t.Fatalf("missed_sweeps=%d after %d concurrent misses", missed, n)
+		}
+		if got := count(func() (bool, error) { return s.MarkSeen(ctx, ifID, 1, time.Now()) }); got != 1 {
+			t.Fatalf("concurrent sightings of an offline iface reported %d online transitions, want 1", got)
 		}
 	})
 }
