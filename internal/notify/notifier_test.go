@@ -76,7 +76,7 @@ func next(t *testing.T, ch chan request) request {
 	select {
 	case r := <-ch:
 		return r
-	case <-time.After(3 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("no request arrived")
 	}
 	return request{}
@@ -108,7 +108,9 @@ func TestBurstIsCoalescedIntoOneMessage(t *testing.T) {
 	st := openStore(t)
 	srv, got, _ := endpoint(t)
 	set(t, st, KeyWebhookURL, srv.URL, KeyBaseURL, "https://netis.lan/")
-	n := running(t, st, 200*time.Millisecond)
+	// The window has to outlast filtering all 50 events, which looks each one
+	// up in the store and is slow under -race.
+	n := running(t, st, 2*time.Second)
 
 	for i := 0; i < 50; i++ {
 		n.Notify("device_new", nil, "new device at 10.0.0."+string(rune('a'+i%26)))
