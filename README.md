@@ -178,6 +178,12 @@ shown on the settings page and in `/api/status`, and the first failure of an
 outage adds a `scan_error` event. Clicking Run now while that integration is
 already syncing reports "already running" instead of starting a second run.
 
+Syncs fill in devices but never overwrite your edits. A Proxmox guest or node
+takes its name and kind from Proxmox only when it is first imported; renaming
+it or changing its kind in netis sticks. A guest's parent follows it when it
+moves between Proxmox nodes, but a parent you set to a non-Proxmox device is
+kept. Nodes are recognised by the `proxmox_node` custom field the sync adds.
+
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
 Settings, not environment variables — add at least one subnet after
 first-run setup for scanning to do anything.

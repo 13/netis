@@ -59,10 +59,15 @@ func (s *Sync) upsertNode(ctx context.Context, node string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if ok {
-		return id, nil
+	if !ok {
+		id, err = s.store.CreateDevice(ctx, store.Device{Name: node, Kind: "server", Source: "proxmox"})
+		if err != nil {
+			return 0, err
+		}
 	}
-	return s.store.CreateDevice(ctx, store.Device{Name: node, Kind: "server", Source: "proxmox"})
+	// Record the Proxmox name apart from the device name, so a node the user
+	// renamed is still found instead of being created again.
+	return id, s.store.SetCustomField(ctx, id, "proxmox_node", node)
 }
 
 func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
@@ -74,6 +79,9 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 	if err != nil {
 		return err
 	}
+	// Name and kind are only seeded when the guest is created, so the user's
+	// edits stick. Afterwards the sync only moves the parent, and only between
+	// Proxmox nodes (see SetProxmoxGuestParent), never rewriting the row.
 	if !found { // new guest
 		vmid := g.VMID
 		devID, err = s.store.CreateDevice(ctx, store.Device{
@@ -84,15 +92,8 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) error {
 			return err
 		}
 		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("proxmox guest %s (%d)", g.Name, g.VMID))
-	} else {
-		d, err := s.store.GetDevice(ctx, devID)
-		if err != nil {
-			return err
-		}
-		d.Name, d.Kind, d.ParentDeviceID = g.Name, kind, &nodeID
-		if err := s.store.UpdateDevice(ctx, d); err != nil {
-			return err
-		}
+	} else if err := s.store.SetProxmoxGuestParent(ctx, devID, nodeID); err != nil {
+		return err
 	}
 	if err := s.store.SetCustomField(ctx, devID, "proxmox_status", g.Status); err != nil {
 		return err
