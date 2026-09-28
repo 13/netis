@@ -7,11 +7,42 @@ Wants=network-online.target
 ExecStart=/opt/netis/netis
 Environment=NETIS_DB=/var/lib/netis/netis.db
 Environment=NETIS_PRIVILEGED_ICMP=1
+# Secrets such as NETIS_SECRET_KEY go here (mode 0600, owned by root) rather
+# than in this unit, which is world-readable. The leading "-" makes the file
+# optional.
+EnvironmentFile=-/etc/netis/env
 AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
 StateDirectory=netis
 Restart=on-failure
 User=netis
 Group=netis
+UMask=0077
+
+# Sandboxing. The filesystem is read-only apart from /var/lib/netis
+# (StateDirectory). /root and /home are hidden, so the WireGuard SSH key and
+# known_hosts file named in Settings must live elsewhere, e.g. /etc/netis or
+# /var/lib/netis, readable by the netis user.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# AF_NETLINK: the Go runtime lists interfaces through it.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
 
 [Install]
 WantedBy=multi-user.target
