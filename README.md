@@ -1,894 +1,157 @@
+<div align="center">
+
+<img src="docs/images/logo.svg" width="72" height="72" alt="">
+
 # netis
 
-## What is netis
+Know what's on your home network.
 
-Netis is a self-hosted app that organizes a home LAN: an editable inventory
-of devices (computers, switches, phones, servers, IoT, VMs, LXCs, WireGuard
-peers), their IPs and MACs, live online/offline status with last-seen
-tracking, background network scanning, and a per-subnet grid overview
-showing which IPs are online, offline, reserved, free, or conflicting. It
-integrates with Proxmox (auto-import of VMs/LXCs), Pi-hole (DHCP leases,
-reservations and local DNS names), AdGuard Home and OPNsense (DHCP leases and
-reservations) and WireGuard (peer status via SSH). It ships as a single static Go binary with an embedded
-SQLite database — no external services required.
+[![CI](https://github.com/13/netis/actions/workflows/ci.yml/badge.svg)](https://github.com/13/netis/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/13/netis)](https://github.com/13/netis/releases/latest)
+[![Licence: MIT](https://img.shields.io/github/license/13/netis)](LICENSE)
+[![Go version](https://img.shields.io/github/go-mod/go-version/13/netis)](go.mod)
+
+</div>
+
+netis is a self-hosted inventory of your home LAN. It scans your subnets, keeps
+an editable list of every device (computers, switches, phones, servers, IoT,
+VMs, LXCs, WireGuard peers) with its IPs and MACs, and shows which ones are
+online right now. It ships as a single static Go binary with an embedded SQLite
+database — no external services required.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.png">
+  <img src="docs/images/dashboard-light.png" alt="The netis dashboard: a health strip, a list of things that need attention, subnet usage and recent activity">
+</picture>
+
+## What it does
+
+- **Finds devices.** Background ping sweeps of every subnet you add, with MAC
+  addresses, vendors and names from reverse DNS and mDNS — including hosts that
+  ignore ping.
+- **Tracks online and offline.** Live status, last seen, and 30 days of
+  availability per device.
+- **Flags what's new or odd.** New and unknown devices wait for your approval;
+  randomized phone MACs, IP conflicts and devices that vanished upstream are
+  called out on the dashboard.
+- **Maps your addresses.** A patch-panel grid per subnet shows every IP as
+  online, offline, reserved, free or conflicting, and suggests the next free one.
+- **Reads your other tools.** Proxmox (VMs and LXCs), Pi-hole, AdGuard Home and
+  OPNsense (DHCP leases and reservations) and WireGuard (peer status over SSH).
+  Syncs fill in details but never overwrite your edits.
+- **Tells you when it matters.** New devices, outages, IP conflicts and failing
+  integrations to a webhook or ntfy, batched so a big scan sends one message.
+- **Fits into scripts.** A JSON API with personal tokens, CSV/JSON export, CSV
+  import with a preview, and Prometheus metrics.
+- **Shares safely.** Admin and viewer roles, single sign-on through OpenID
+  Connect, an audit log, and encrypted integration credentials.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/devices.png" alt="Device list"></td>
+    <td width="50%"><img src="docs/images/device.png" alt="Device page"></td>
+  </tr>
+  <tr>
+    <td>Every device, searchable and filterable, with bulk approve and tag.</td>
+    <td>One device: availability, details, links, interfaces and history.</td>
+  </tr>
+  <tr>
+    <td>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/grid-dark.png">
+        <img src="docs/images/grid-light.png" alt="Subnet grid">
+      </picture>
+    </td>
+    <td align="center"><img src="docs/images/phone.png" width="200" alt="netis on a phone"></td>
+  </tr>
+  <tr>
+    <td>A subnet as a patch panel: one port per address.</td>
+    <td>The same app on a phone, with a bottom tab bar.</td>
+  </tr>
+</table>
 
 ## Quick start
 
-Build:
+**Docker**
 
 ```sh
-go tool templ generate && CGO_ENABLED=0 go build -o netis ./cmd/netis
+docker run -d --name netis --network host \
+  -v netis-data:/data -e NETIS_DB=/data/netis.db \
+  ghcr.io/13/netis:latest
 ```
 
-(`make build` does the same; templ is pinned in `go.mod` as a tool, so nothing
-needs installing first.)
+> [!NOTE]
+> `--network host` lets netis read the host's ARP table, which is where MAC
+> addresses and vendors come from. On a bridged network it still pings and
+> tracks online/offline, but finds no MACs.
 
-Run:
-
-```sh
-NETIS_DB=/var/lib/netis/netis.db ./netis
-```
-
-The server listens on `:8080` by default. On first run, visit `/setup` in
-a browser. A short setup flow follows: create the admin account (you stay
-signed in), pick the subnets to scan (the ones this machine is on are
-found and preselected; add others such as `192.168.1.0/24` by hand),
-optionally connect Pi-hole, Proxmox and the other integrations, and the
-last step starts the first scan and counts devices as they turn up.
-**Skip for now** opens the app straight away; the dashboard then shows a
-Finish setup panel listing what is still missing (no subnets, no scan
-yet, no integrations) until it is done or dismissed. Afterwards subnets
-live under **Settings → Network**, and the background scan loop sweeps
-them every 120s by default.
-
-## Make targets
-
-| Target | Does |
-| --- | --- |
-| `make generate` | `go tool templ generate` |
-| `make build` | generate, then build a static `./netis` |
-| `make run` | build and run it |
-| `make test` / `make race` | generate, then `go test ./...` (with `-race`) |
-| `make pg` / `make pg-stop` | start / remove a throwaway Postgres on port 55432 |
-| `make test-pg` | the tests against that Postgres as well as SQLite |
-| `make lint` | `go vet` and staticcheck |
-| `make vuln` | govulncheck |
-| `make docker` | `docker build -t netis .` |
-| `make e2e` | visual regression and accessibility tests in Docker (see below) |
-| `make e2e-update` | regenerate the screenshot baselines after an intended UI change |
-
-The app mark, favicons, home-screen icons and the web app manifest's icons
-are drawn once in `internal/web/gen_favicons.go` and committed. After changing
-the drawing, run `go run gen_favicons.go` from `internal/web` (it needs
-`rsvg-convert` and ImageMagick's `magick`, at build time only). The manifest
-lets a phone or desktop browser install netis as a standalone app.
-
-### Visual regression tests
-
-`e2e/` holds a Playwright suite that screenshots the dashboard, devices,
-a device, a subnet grid, events, the network settings and the sign-in page
-at 1440×900 and 390×844 in light and dark, and compares them with the
-baselines in `e2e/__screenshots__`. The same pages get an axe accessibility
-check that fails on serious or critical findings. The pages are served by
-the web package's test binary (`TestE2EServe`) from fixed data
-(`internal/web/testdata/e2e_seed.sql`) with the clock frozen, so relative
-times and availability bars render identically on every run.
-
-`make e2e` needs Docker only: it builds the fixture and runs the suite in the
-pinned `mcr.microsoft.com/playwright` image that CI uses, so fonts and
-rendering match. When a UI change is intended, run `make e2e-update`, look at
-the changed images and commit them with the change. On a CI failure the
-`e2e-report` artifact has the expected, actual and diff image of each page.
-
-## Views
-
-- **Dashboard** — a health strip (online, offline, new, conflicts, failing
-  integrations, each linking to the list behind it), a "Needs attention"
-  list with the action for each item (approve a new device, run a failing
-  integration, open an IP conflict, offline devices with alerts on, devices
-  gone upstream), per-subnet usage and recent activity by day.
-- **Events** — the full event log grouped by day, filterable by what
-  happened, device name and date range, paged 50 at a time.
-- **Subnet grid** — one square per IP in a subnet: green for online, dark
-  for used-but-offline, yellow (marked R) for assigned but not seen yet,
-  empty for free, red (marked !) for an IP claimed by two devices. The
-  border tells a static address (a reservation) from a DHCP lease, and the
-  subnet cards count the reservations. Each square also names its
-  address and state for screen readers. Squares update live over SSE during
-  a scan.
-- **Device list** — searchable table of every known device, filtered by
-  status, kind, subnet, tag, new (unreviewed), private MAC or missing
-  upstream. Filters are part of the URL (`/devices?status=offline`,
-  `/devices?new=1`, `/devices?subnet=2&tag=iot`), so a filtered list can be
-  bookmarked. MAC, lease, function and tags are optional columns, addresses
-  two devices share are flagged, and guests sit under their host until you
-  sort by a column. Admins can approve, tag or delete several devices at
-  once. CSV/JSON export and (for admins) a CSV import with a dry-run preview.
-- **Device page** — full device detail: interfaces, IPs, open ports,
-  uptime, links, tags, custom fields, parent/child devices (e.g. a
-  Proxmox host and its guests), event history, and buttons to send a
-  Wake-on-LAN packet or run an on-demand TCP port scan. The magic packet goes
-  to the directed broadcast of every subnet the device's interface has an
-  address in (e.g. `10.0.20.255`), so hosts on other VLANs can be woken, and to
-  `255.255.255.255` as before; the toast lists the addresses used. A directed
-  broadcast into a subnet netis is not attached to only arrives if the router
-  forwards it, which many do not by default.
-- **Events** — a filterable log of device-new/online/offline/ip-changed/
-  scan-error events, and device-missing/device-returned for integration
-  devices that leave or come back upstream.
-- **Settings** — two areas. **Account** (everyone): your profile, changing
-  your password (8 to 72 bytes; changing it signs your other sessions out),
-  the SSO link, your sessions with per-session revoke and a
-  sign-out-everywhere-else button, and your **API tokens** (admins see and can
-  revoke everyone's). **Admin** (admins only): **Network** — the one place
-  subnets are added, edited and removed, plus the offline threshold, presence
-  without ping and defaults for new subnets; **Integrations** — one panel per
-  integration with its status, last run, item count, Run now and its settings
-  behind Configure; **Notifications**; **Users** (add, delete, change role,
-  reset a password); **Audit log**; and **System** — retention, backup status
-  and the running version, build number, commit, database backend and
-  dependency versions. An admin's page footer shows the version and links to
-  System. Old `/settings?tab=…` links redirect to the new pages.
-
-Navigation is a sidebar on wide screens (folding to icons on tablets) and a
-bottom tab bar on phones. **Ctrl-K** (⌘-K on a Mac), or the search button,
-opens a command palette that jumps to a device by name, IP or MAC, a subnet, a
-page, or an action (new device, scan all — admins only). Other shortcuts:
-`/` focuses the page's search field (or opens the palette), `g d` / `g s` /
-`g e` / `g h` go to devices, subnets, events and the dashboard, `n` opens a new
-device (admins), and `?` lists them all. Every time is shown relative ("5m
-ago") with the exact time, in your time zone, on hover.
-
-The theme follows the operating system's light/dark preference, including
-when it changes, until you pick Light or Dark in the account menu (System
-goes back to following the OS); that choice is remembered in the browser. Deleting a device, subnet, user, link or custom
-field, and revoking sessions, asks for confirmation first. The device search
-and the New/Edit device forms also work with JavaScript turned off.
-
-Users are either `admin` or `viewer`. Viewers see the inventory, the subnets,
-events and each integration's status on the dashboard, and manage their own password, API tokens and
-sessions; they do not see the Admin settings area, or any of the
-edit, delete, scan, Wake-on-LAN and port-scan controls. An admin can change
-any user's role from Settings → Users; netis refuses to demote the last admin,
-just as it refuses to delete it. A role change applies to that user's next
-request, without signing them out.
-
-### Audit log
-
-Every state-changing request that reaches netis is recorded in an audit log,
-shown to admins under Settings → **Audit log**: when, who, the action
-(`device.update`, `user.role`, `login`, ...), what it acted on, the HTTP
-status it was answered with and the client address (honouring
-`NETIS_TRUSTED_PROXIES`). Refused attempts are recorded too — a failed login, a
-viewer's 403 — so the status column tells a change from an attempt. Writes made
-through the API with a personal token are attributed to the token's owner and
-marked "via API token". The log can
-be filtered by user and action and is paged newest first.
-
-No password, secret or form value is ever written to it. A failed login names
-the account only when it exists: an unknown username is logged blank, since it
-is often a password typed into the wrong box. Page views are not logged.
-Entries are kept for `audit_retention_days` (default 180) and survive the
-deletion of the account that made them.
-
-## Install
-
-Every `v*` tag publishes a static Linux amd64 binary to the GitHub release,
-alongside a `SHA256SUMS` file. Releases are amd64 only; on another architecture,
-build from source (see Quick start).
+**Release binary** (Linux amd64; other architectures build from source)
 
 ```sh
 tar -xzf netis_<version>_linux_amd64.tar.gz
-./netis
+NETIS_DB=/var/lib/netis/netis.db NETIS_PRIVILEGED_ICMP=1 ./netis
 ```
 
-## Docker
+Raw ICMP needs `CAP_NET_RAW` (`sudo setcap cap_net_raw+ep ./netis`); without
+`NETIS_PRIVILEGED_ICMP` netis uses unprivileged UDP-ICMP instead.
 
-Released images are published to GHCR on every `v*` tag, for `linux/amd64`:
+**Proxmox LXC** — copy the binary to `/opt/netis/netis`, add a `netis` system
+user and install the sandboxed unit from `deploy/netis.service`. See
+[Proxmox LXC with systemd](docs/install.md#proxmox-lxc-with-systemd).
 
-```sh
-docker pull ghcr.io/13/netis:latest
-```
-
-Publishing needs this repository's Actions token to be allowed to write
-packages (Settings → Actions → General → Workflow permissions → "Read and
-write permissions"). Without it the release workflow builds the image and then
-fails the push with `denied: permission_denied: write_package`.
-
-Or build locally:
-
-```sh
-docker build -t netis .
-docker run -d --name netis \
-  --network host \
-  -v netis-data:/data \
-  -e NETIS_DB=/data/netis.db \
-  netis
-```
-
-`--network host` is required: netis discovers MAC addresses by reading the
-host's ARP table (`/proc/net/arp`) after pinging hosts on the subnet, which
-only works if the container shares the host's network namespace. Running
-netis on a bridged/NAT network will still ping and track online/offline
-state, but MAC address (and therefore vendor) discovery will not work for
-those subnets.
-
-The image runs netis as root and sets `NETIS_PRIVILEGED_ICMP=1`, so it sends
-raw ICMP echo requests. Docker grants root in a container `CAP_NET_RAW` by
-default, so no `--cap-add` is needed. A runtime that drops it (Podman's
-defaults, `--cap-drop=ALL`, some hardened setups) needs `--cap-add=NET_RAW`;
-without it the sweeps fail and show up as scan errors.
-
-If most probes in a sweep cannot be sent at all (for example the process
-lacks permission to open ICMP sockets), the sweep is reported as a scan
-error on the dashboard and in Events, and device states are left as they
-were rather than counted as misses.
-
-## Discovery
-
-- **Hosts that ignore ping.** Sleeping phones, Windows with its firewall on
-  and a lot of IoT gear drop ICMP. On a directly attached subnet the sweep's
-  pings still make the kernel ARP for every address, so a host that answers
-  ARP ends up with a complete entry in `/proc/net/arp`. Such a host is
-  counted as seen when a TCP connect to one of ports 22, 80, 443, 445, 62078
-  or 8080 is accepted or refused (400 ms), or, failing that, when its ARP
-  entry still resolves to the same MAC about 9 seconds after the sweep, by
-  which time the kernel has re-probed a stale entry and dropped it if nobody
-  answered. A host that left within the last half minute can therefore look
-  present for one more sweep. Turn it off with **Presence without ping** in
-  Settings → Network. Routed subnets have no ARP entries, so it does nothing
-  there.
-- **Randomized MACs.** A MAC with the locally administered bit set (phones'
-  "Private Wi-Fi Address") gets a *private MAC* badge on the device list and
-  page, and `private_mac` in the API. A new device on one is named
-  `private-<mac>` and its event says it may be a phone. The QEMU/KVM
-  (`52:54:00`) and Docker (`02:42`) prefixes are not counted.
-- **Names.** Reverse DNS first, then an mDNS reverse lookup (a PTR query to
-  `224.0.0.251:5353` asking for a unicast answer), which is where Apple
-  devices, printers and Avahi hosts name themselves. Lookups run 16 at a time;
-  an address that returned no name is retried after 30 minutes. A discovered
-  name only fills an interface hostname that is empty.
-
-## Proxmox LXC install
-
-1. Build the static binary as above (or download a prebuilt one) and copy
-   it to the LXC as `/opt/netis/netis`.
-2. Create a dedicated system user: `useradd -r -s /usr/sbin/nologin netis`.
-3. Copy `deploy/netis.service` to `/etc/systemd/system/netis.service`.
-4. `systemctl daemon-reload && systemctl enable --now netis`.
-
-The unit sets `AmbientCapabilities=CAP_NET_RAW` so netis can send
-privileged ICMP echo requests without running as root, and uses
-`StateDirectory=netis` so `/var/lib/netis` exists and is writable by the
-`netis` user for the SQLite database.
-
-Secrets such as `NETIS_SECRET_KEY` belong in `/etc/netis/env` (read through
-`EnvironmentFile=`, optional), not in the unit file, which any local user can
-read:
-
-```sh
-install -d -m 0755 /etc/netis
-install -m 0600 /dev/null /etc/netis/env
-echo "NETIS_SECRET_KEY=$(openssl rand -base64 32)" >> /etc/netis/env
-```
-
-The unit is sandboxed: the filesystem is read-only except `/var/lib/netis`,
-`/home` and `/root` are hidden, the capability set is limited to
-`CAP_NET_RAW`, and system calls, address families and namespaces are
-restricted (`systemd-analyze security netis` shows the details). Because of
-`ProtectHome=yes`, put the WireGuard SSH key and `known_hosts` file under
-`/etc/netis` or `/var/lib/netis`, readable by the `netis` user, and point the
-`wg_ssh_key_path` / `wg_ssh_known_hosts` settings there; a key in
-`/root/.ssh` is invisible to the service. If a key must stay where it is, add
-it with a drop-in (`systemctl edit netis`) containing
-`BindReadOnlyPaths=/home/you/.ssh/netis_wg:/etc/netis/wg_key`.
-
-Because the LXC shares the Proxmox host's bridge, it sees the same L2
-segment as everything else on the LAN, so ARP-based MAC discovery works
-without any special networking configuration (unlike the Docker bridged
-case above).
+Then open `http://<host>:8080/setup`: create the admin account, pick the
+subnets to scan, optionally connect your integrations, and watch the first scan
+come in. More in [docs/install.md](docs/install.md).
 
 ## Configuration
 
-Environment variables:
+Most settings live in the web UI. The environment variables you are most likely
+to set:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NETIS_ADDR` | `:8080` | HTTP listen address. |
-| `NETIS_BACKUP_DIR` | unset | Directory the server writes scheduled SQLite backups to. Unset turns them off. See [Scheduled backups](#scheduled-backups). |
-| `NETIS_BACKUP_INTERVAL` | `24h` | Time between scheduled backups (a Go duration: `6h`, `90m`). Values under `1m` or unparseable fall back to the default. |
-| `NETIS_BACKUP_KEEP` | `7` | Scheduled backups kept; older ones are deleted. |
-| `NETIS_DB` | `netis.db` | Database to use. A path selects SQLite; a `postgres://` URL selects Postgres. See [Database backends](#database-backends). |
-| `NETIS_DB_MAX_OPEN_CONNS` | `10` | Postgres connection pool size. Ignored on SQLite, which is held to one connection to avoid `SQLITE_BUSY`. |
-| `NETIS_DB_MAX_IDLE_CONNS` | `5` | Postgres idle connections; clamped to the open limit. |
-| `NETIS_PRIVILEGED_ICMP` | unset | Set to `1` to send raw ICMP echo requests (requires `CAP_NET_RAW` or root) instead of the unprivileged UDP-ICMP fallback. |
-| `NETIS_OIDC_ISSUER`, `NETIS_OIDC_*` | unset | Single sign-on through an OpenID Connect provider. See [Single sign-on (OIDC)](#single-sign-on-oidc). |
-| `NETIS_METRICS_TOKEN` | unset | Bearer token a Prometheus scraper presents to read `/metrics`. Unset means `/metrics` needs a logged-in session. See [JSON API and metrics](#json-api-and-metrics). |
-| `NETIS_SECRET_KEY` | unset | 32-byte key (base64 or hex) that encrypts stored integration credentials. See [Encrypting stored credentials](#encrypting-stored-credentials). |
-| `NETIS_TRUSTED_PROXIES` | unset | Comma-separated CIDRs or addresses of reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers netis believes. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
-
-Settings configured in the web UI (Settings page), stored in the
-database's key/value settings table:
-
-| Key | Meaning |
-| --- | --- |
-| `offline_after` | Consecutive missed scan sweeps before a device is marked offline (default 3). |
-| `presence_fallback` | `on` (default) or `off`: count hosts that ignore ping but answer ARP as seen. See [Discovery](#discovery). |
-| `event_retention_days` | Days of event history to keep, swept every 6h; `0` keeps everything (default 30). |
-| `availability_retention_days` | Days of availability history to keep (default 365). One row per interface per hour, so this is the fastest-growing table. |
-| `audit_retention_days` | Days of audit log to keep (default 180); `0` keeps everything. |
-| `proxmox_url` | Base URL of the Proxmox API, e.g. `https://pve.local:8006`. |
-| `proxmox_token_id` | Proxmox API token ID, e.g. `user@pam!netis`. |
-| `proxmox_secret` | Proxmox API token secret. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
-| `proxmox_insecure` | `1` to skip TLS verification (self-signed certs). |
-| `wg_ssh_addr` | SSH address of the host running WireGuard (`host:port`). |
-| `wg_ssh_user` | SSH username for the WireGuard host. |
-| `wg_ssh_key_path` | Path to the SSH private key used to connect. |
-| `wg_ssh_known_hosts` | Path to an OpenSSH `known_hosts` file used to verify the WireGuard host. Unset means the host is **not** verified. |
-| `wg_iface` | WireGuard interface name to poll (default `wg0`): 1-15 letters, digits, `.`, `_` or `-`. It is part of the command run over SSH, so anything else is refused. |
-| `pihole_url` | Base URL of the Pi-hole admin, e.g. `https://pi.hole`. |
-| `pihole_password` | Pi-hole app password (never shown back in the UI). Encrypted at rest when `NETIS_SECRET_KEY` is set. |
-| `pihole_insecure` | `1` to skip TLS verification (self-signed certs). |
-| `adguard_url` | Base URL of AdGuard Home, e.g. `http://adguard.lan:3000`. |
-| `adguard_user`, `adguard_password` | AdGuard Home admin login. The password is encrypted at rest when `NETIS_SECRET_KEY` is set. |
-| `adguard_insecure` | `1` to skip TLS verification. |
-| `opnsense_url` | Base URL of the OPNsense web UI, e.g. `https://opnsense.lan`. |
-| `opnsense_key`, `opnsense_secret` | OPNsense API key and secret. The secret is encrypted at rest when `NETIS_SECRET_KEY` is set. |
-| `opnsense_insecure` | `1` to skip TLS verification. |
-| `notify_webhook_url`, `notify_ntfy_url` | Notification channels; blank disables one. See [Notifications](#notifications). |
-| `notify_webhook_auth`, `notify_ntfy_token` | Webhook `Authorization` header value and ntfy access token. Encrypted at rest when `NETIS_SECRET_KEY` is set. |
-| `notify_base_url` | netis's own URL, used to link messages to a device or the event log. |
-| `notify_device_new`, `notify_offline`, `notify_ip_conflict`, `notify_sync`, `notify_upstream` | `0` switches that kind of notification off (default on). |
-
-### Pi-hole (v6)
-
-Set in Settings → Integrations, or as `setting` rows:
-
-- `pihole_url` — base URL of the Pi-hole admin, e.g. `https://pi.hole` (empty disables the integration)
-- `pihole_password` — Pi-hole app password (never shown back in the UI)
-- `pihole_insecure` — `1` to skip TLS verification (self-signed certs)
-
-When configured, netis polls Pi-hole every minute and merges DHCP leases,
-static reservations, and local DNS A records into the device inventory:
-devices are matched by MAC (unknown MACs are created with source `pihole`),
-reservations mark their IP `static`, and DNS names attach to the matching
-device. When a lease moves, the device's old DHCP address is dropped, and an
-address leased to a new MAC is taken off whichever device held it by DHCP
-before; static addresses are never removed. Pi-hole data never changes a device's online/last-seen status — that
-stays driven by the scanner. IPs are only attached when they fall inside a
-subnet you've configured in netis.
-
-### AdGuard Home and OPNsense
-
-Two more DHCP servers netis can read leases from, set in Settings →
-Integrations (or the setup wizard). Their leases and reservations are merged
-exactly like Pi-hole's — matched by MAC, reservations `static`, a moved lease
-dropping the old DHCP address, nothing you set overwritten — and devices they
-discover get source `adguard` or `opnsense`.
-
-- **AdGuard Home**: `adguard_url`, `adguard_user`, `adguard_password`,
-  `adguard_insecure`. netis reads `/control/dhcp/status` with the admin login.
-  Only AdGuard's built-in DHCP server is read; when it is switched off the
-  integration reports "DHCP server disabled in AdGuard Home" and changes
-  nothing.
-- **OPNsense**: `opnsense_url`, `opnsense_key`, `opnsense_secret`,
-  `opnsense_insecure`. Create an API key under System → Access → Users. netis
-  reads leases from Kea, ISC dhcpd or Dnsmasq — whichever has them, in that
-  order — and Kea reservations and ISC static mappings as reservations. The
-  key needs the privileges for the DHCP server in use (for example "Services:
-  Kea DHCP" or "Status: DHCP leases") and, optionally, "Diagnostics: ARP
-  Table".
-
-  With the ARP privilege netis also reads the firewall's ARP table, which
-  fills in MAC addresses on routed subnets where netis's own scan sees only
-  IPs: an interface at an address that has no MAC yet gets the one the
-  firewall saw there. It is careful about it — expired entries, a MAC seen at
-  several addresses, an address two devices claim and a MAC another device
-  already has are skipped, nothing is created from ARP, and a MAC that is set
-  is never changed. Without the privilege the leases still sync and the status
-  line says the ARP table was unavailable.
-
-Each configured integration (Proxmox, Pi-hole, AdGuard Home, OPNsense, WireGuard) syncs once a minute
-and on demand from Settings → Integrations → Run now. A run is cut off after
-30 seconds. Its result — connected with a count, or failing with a category
-(timeout, authentication failed, host key rejected, connection failed,
-configuration error, sync error) — is shown on the settings page, the dashboard
-and in `/api/status`, and the first failure of an outage adds a `scan_error`
-event (its end adds a `sync_recovered` one). The full error, which can name key paths and internal addresses, goes
-only to the server log. Clicking Run now while that integration is
-already syncing reports "already running" instead of starting a second run.
-
-Syncs fill in devices but never overwrite your edits. A Proxmox guest or node
-takes its name and kind from Proxmox only when it is first imported; renaming
-it or changing its kind in netis sticks. A guest's parent follows it when it
-moves between Proxmox nodes, but a parent you set to a non-Proxmox device is
-kept. Nodes are recognised by the `proxmox_node` custom field the sync adds.
-When the scanner found a guest first, the guest takes over that device's
-interface (and its IPs) as long as you have not reviewed the discovered device;
-the discovered device is deleted if nothing else is left on it. A reviewed
-device keeps its interface.
-
-A WireGuard peer's AllowedIPs are followed on every sync: addresses inside a
-WireGuard subnet are added, and ones the sync added that the server no longer
-allows are removed. Addresses you recorded yourself are never removed, and
-changing an address's lease kind on the subnet grid makes it yours. (When
-upgrading, static addresses already on WireGuard peers inside WireGuard subnets
-are taken to be the sync's, since that is what it always created.)
-
-A Proxmox guest deleted in Proxmox, or a peer removed from the WireGuard
-server, is **not** deleted from netis: it gets a red **missing upstream** badge
-on its page and in the device list, and one `device_missing` event. If it comes
-back (same VMID or public key) the badge clears with a `device_returned` event.
-Delete the device yourself once you know it is gone. A device is only marked
-after a sync that succeeded and returned a non-empty list: a failed call marks
-nothing, and neither does an empty list, since a Proxmox token that lost its
-permissions sees no guests at all. The flip side is that removing the very last
-guest or peer is not flagged until another one exists. Proxmox nodes are never
-marked, because netis only learns of nodes through their guests.
-
-Subnets (CIDR, kind, scan interval, scan enabled) are managed via
-Settings, not environment variables — add at least one subnet during or
-after first-run setup for scanning to do anything.
-
-## JSON API and metrics
-
-The JSON API under `/api/` accepts either the session cookie the pages use or
-a personal **API token**. Create one under Settings → API tokens: it is shown
-once (`netis_` followed by 43 characters), only its SHA-256 digest is stored,
-and it acts with your role: a viewer's token can read, an admin's can also
-write. Tokens can expire (default 90 days, 0 = never), are revoked from the
-same tab, and are deleted with their user. Expired tokens are removed by the
-retention sweep.
-
-```sh
-export NETIS=http://netis.lan:8080 TOKEN=netis_...
-curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
-```
-
-| Endpoint | Role | Does |
-| --- | --- | --- |
-| `GET /api/devices` | any | every device with its IPs, MACs, tags and online state; `private_mac` is true when a MAC is randomized |
-| `GET /api/devices/{id}` | any | one device |
-| `GET /api/subnets` | any | configured subnets |
-| `GET /api/events?limit=N` | any | recent events, newest first (default 100, max 1000) |
-| `GET /api/status` | any | version, uptime, backend, device/subnet counts, integration results |
-| `GET /api/search?q=` | any | up to 8 devices (name, IP, MAC, tag, vendor, model or function) and 8 subnets (name or CIDR) matching `q`; what the command palette uses |
-| `GET /api/export/devices.csv` | any | inventory as CSV (one row per device; MACs, IPs, tags `;`-joined) |
-| `GET /api/export/devices.json` | any | inventory as JSON, with each interface's MAC and addresses |
-| `POST /api/devices` | admin | create a device |
-| `PATCH /api/devices/{id}` | admin | change some of a device's fields |
-| `DELETE /api/devices/{id}` | admin | delete a device |
-
-```sh
-# Create: name and kind are required; mac, ip, subnet_id, tags, notes,
-# vendor, model, function, icon and parent_device_id are optional. Without
-# subnet_id the IP goes into the narrowest configured subnet that holds it.
-# icon names one of the icon picker's choices (e.g. "hard-drive", listed on
-# /styleguide); anything else shows the kind's default icon.
-curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"nas","kind":"server","mac":"aa:bb:cc:00:00:01","ip":"192.168.1.20","tags":["core"]}' \
-  $NETIS/api/devices
-
-# Update only what you send; "parent_device_id": null clears the parent and
-# "tags" replaces the set.
-curl -X PATCH -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"notes":"rack 2","tags":["core","storage"]}' $NETIS/api/devices/42
-
-curl -X DELETE -H "Authorization: Bearer $TOKEN" $NETIS/api/devices/42
-
-curl -H "Authorization: Bearer $TOKEN" -o devices.csv $NETIS/api/export/devices.csv
-```
-
-Writes take `Content-Type: application/json` and validate exactly what the
-device form does. Errors come back as `{"error": "..."}`: 400 for a bad value
-or unknown parent/subnet, 401 for a missing, unknown or expired token, 403 for
-a viewer, 404 for no such device, 409 for a MAC that already belongs to another
-device. Token requests skip the browser cross-origin checks (they carry no
-cookie to forge), but 20 failed token attempts a minute from one address get
-429.
-
-**CSV import** (admins, Devices > Import CSV) creates and updates devices by
-MAC address. The first row names the columns: `mac` is required; `name`,
-`kind`, `ip`, `tags`, `notes`, `vendor`, `model` and `function` are optional,
-and anything else (such as the export's `id` or `last_seen`) is ignored, so an
-export can be edited and imported as it is. A preview lists what each line
-will create, update or skip before anything is written. A new MAC creates a
-manual device (it needs a name, and an IP must fall in a configured subnet).
-A known MAC only fills in what is missing: notes, vendor, model and function
-where empty, and tags are added, never removed. Names and kinds change only on
-unreviewed scan discoveries, so devices from integrations and devices you have
-reviewed keep theirs. Uploads may be up to 5 MB.
-
-`GET /metrics` serves the Prometheus text format — device and subnet counts,
-how many devices are online, when each integration last ran and whether it
-worked, and — with [scheduled backups](#scheduled-backups) on —
-`netis_last_backup_timestamp_seconds` and `netis_last_backup_success`. It needs a session too, unless you set a scrape token:
-
-```sh
-NETIS_METRICS_TOKEN="$(openssl rand -hex 16)" ./netis
-```
-
-```yaml
-scrape_configs:
-  - job_name: netis
-    static_configs: [{targets: ['netis.lan:8080']}]
-    authorization:
-      credentials: <the token>
-```
-
-The token is accepted on `/metrics` only — it is a scrape credential, not a
-login — and only in the `Authorization` header, so it stays out of access logs.
-Without it the endpoint is not left open: the metrics name every subnet and
-count every device, which is not something to publish to whoever can reach the
-port.
-
-## Notifications
-
-Settings → Notifications (admins only) sends the events worth hearing about to
-a generic webhook, an [ntfy](https://ntfy.sh) topic, or both:
-
-| Kind | When |
-| --- | --- |
-| New devices | A scan or an integration finds a device netis has not seen before. |
-| Offline / online | A device goes offline or comes back — **only** for devices you mark with **More › Turn on offline alerts** on their page. The mark is off for every device by default, so phones and laptops coming and going stay quiet. |
-| IP conflicts | After a subnet sweep, an address is newly claimed by more than one interface. Announced once per conflict; one still present after a restart is announced again. |
-| Scan and integration errors | A subnet sweep fails (the same error at most once an hour), an integration starts failing (once per outage), and when it works again. |
-| Missing upstream | A Proxmox guest or WireGuard peer is no longer listed by its integration, and when it comes back. |
-
-Each kind can be switched off. Events are collected for 30 seconds and sent
-together, so a scan that turns up fifty devices sends one summary instead of
-fifty messages. Sending never holds up a scan: events wait in a bounded queue,
-and if it fills (an endpoint down for a long time during a busy period) the
-overflow is dropped and logged. Each channel gets 5 seconds per attempt and
-three attempts; a 4xx answer other than 429 is not retried.
-
-The webhook receives a JSON `POST`:
-
-```json
-{"event": "offline", "device": {"id": 3, "name": "nas"},
- "details": "nas (192.168.1.5) went offline",
- "time": "2026-09-28T10:00:00Z", "url": "https://netis.lan/devices/3"}
-```
-
-A batch has `"event": "batch"`, a summary in `details` ("12 new devices, 1 went
-offline") and the individual events in `events`. `device` is `null` for events
-not about one device, and `url` is empty unless a base URL is set. An optional
-`Authorization` header value is sent as given.
-
-ntfy gets the details as the message body, with `Title`, `Tags` (an emoji per
-kind), `Priority` (4 for offline, conflicts and errors) and, with a base URL,
-`Click` headers. Set the topic URL (e.g. `https://ntfy.sh/my-netis-topic` or
-your own server) and, for a protected topic, an access token.
-
-**Send test** posts a test message with the saved settings and shows each
-channel's result. The webhook header and ntfy token are never shown back in the
-form; leave the field blank to keep the stored value or tick *clear* to remove
-it.
-
-## Encrypting stored credentials
-
-The Proxmox API token, the Pi-hole and AdGuard Home passwords, the OPNsense
-API secret and the notification credentials
-(webhook header, ntfy token) live in the database's `setting` table. Set
-`NETIS_SECRET_KEY` and they are encrypted there with AES-256-GCM instead:
-
-```sh
-NETIS_SECRET_KEY="$(openssl rand -base64 32)" ./netis
-```
-
-Only those rows are encrypted — the rest of the table is configuration, and
-stays readable in a SQL client. Values already stored in plaintext are
-re-encrypted on the next start, so adding the key to an existing deployment
-does not mean re-entering anything.
-
-The key never lives in the database, so keep it with (but not inside) your
-backups: a dump restored without it leaves netis unable to read those
-settings, and it says so rather than treating the credential as unset. Changing
-the key has the same effect — clear the affected settings and enter them again.
-`netis migrate-db` copies the rows as they are, so the same key works on the
-Postgres side.
-
-Session tokens need no key: the database only ever holds their SHA-256
-digest, so a copy of it cannot be used to sign in as anyone. Sessions from
-before netis stored them that way are dropped on upgrade, and everyone signs in
-once more.
-
-## Single sign-on (OIDC)
-
-netis can take logins from an OpenID Connect provider — Authelia, Authentik,
-Keycloak, Pocket ID and the like — next to (or instead of) its own passwords.
-It uses the authorization code flow with PKCE and checks the ID token's
-signature, issuer, audience, expiry and nonce.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `NETIS_OIDC_ISSUER` | unset | Issuer URL, exactly as the provider's discovery document spells it (trailing slash included). Unset turns SSO off. |
-| `NETIS_OIDC_CLIENT_ID` | — | Client ID registered at the provider. Required. |
-| `NETIS_OIDC_CLIENT_SECRET` | empty | Client secret. Leave empty for a public client. |
-| `NETIS_OIDC_REDIRECT_URL` | derived | Callback URL, registered at the provider. |
-| `NETIS_BASE_URL` | unset | netis's public URL; when the redirect URL is unset it is this plus `/auth/oidc/callback`. One of the two is required. |
-| `NETIS_OIDC_ADMIN_GROUP` | unset | Members of this group are admins, everyone else a viewer — set on every login, so leaving the group demotes at the next sign-in. Unset means SSO leaves roles alone: new users start as viewers and an admin promotes them in Settings. |
-| `NETIS_OIDC_GROUPS_CLAIM` | `groups` | ID-token claim holding the user's groups. |
-| `NETIS_OIDC_AUTO_CREATE` | `true` | Create a netis user the first time an unknown SSO identity signs in. `false` refuses them; existing accounts must be linked first (below). |
-| `NETIS_OIDC_DISABLE_PASSWORD` | `false` | Hide the password form. Password login then works only for local admins (see break-glass). |
-
-An issuer without a client ID or a redirect URL stops netis at startup. The
-provider does not have to be up when netis starts: discovery happens on the
-first SSO login and is retried until it works.
-
-The login page gets a **Sign in with SSO** button. An SSO user is matched by
-the provider's issuer and subject (`sub`) — never by username. The first
-login of an unknown identity creates a user named after its
-`preferred_username` (or its email, if the provider marks it verified; otherwise its subject). If a local account already has that name the
-login is refused rather than attached to it: many providers let users choose
-their own username, and matching on it would let someone call themselves
-`admin` and take over that account. To use SSO with an existing account, sign
-in with its password and press **Link SSO account** in Settings → Account.
-
-SSO-created users have no usable password; an admin can give them one with the
-usual reset. SSO is only offered once the first admin exists: that account is
-created at setup with a password and is the way back in if the provider is
-down.
-
-**Break-glass.** With `NETIS_OIDC_DISABLE_PASSWORD=true` the login page shows
-only the SSO button and a small "Sign in with a local account" link
-(`/login?local=1`). Password login is refused for everyone except admins that
-are not linked to SSO — keep one such account (the setup admin) with a strong
-password, for when the provider is unreachable.
-
-Failed callbacks count against the same per-address limit as wrong passwords.
-
-### Authelia
-
-```yaml
-# configuration.yml
-identity_providers:
-  oidc:
-    clients:
-      - client_id: netis
-        client_name: netis
-        client_secret: '$pbkdf2-sha512$...'   # authelia crypto hash generate pbkdf2
-        authorization_policy: two_factor
-        require_pkce: true
-        pkce_challenge_method: S256
-        redirect_uris:
-          - https://netis.example.com/auth/oidc/callback
-        scopes: [openid, profile, email, groups]
-        token_endpoint_auth_method: client_secret_basic
-```
-
-```sh
-NETIS_OIDC_ISSUER=https://auth.example.com
-NETIS_OIDC_CLIENT_ID=netis
-NETIS_OIDC_CLIENT_SECRET=the-plaintext-secret
-NETIS_BASE_URL=https://netis.example.com
-NETIS_OIDC_ADMIN_GROUP=admins
-```
-
-### Authentik
-
-Create an **OAuth2/OpenID Provider** (client type *Confidential*, redirect URI
-`https://netis.example.com/auth/oidc/callback`, strict) and an application
-using it with slug `netis`. Authentik's default `profile` scope already carries
-a `groups` claim.
-
-```sh
-NETIS_OIDC_ISSUER=https://authentik.example.com/application/o/netis/
-NETIS_OIDC_CLIENT_ID=<client id from the provider>
-NETIS_OIDC_CLIENT_SECRET=<client secret from the provider>
-NETIS_BASE_URL=https://netis.example.com
-NETIS_OIDC_ADMIN_GROUP=netis-admins
-```
-
-Keycloak (`https://kc.example.com/realms/<realm>`, add a *Group Membership*
-mapper named `groups` with "Full group path" off) and Pocket ID (issuer is its
-base URL; public clients work with the secret left empty) are configured the
-same way.
-
-## Behind a reverse proxy
-
-netis ignores `X-Forwarded-For` and `X-Forwarded-Proto` unless you name the
-proxy that sends them:
-
-```sh
-NETIS_TRUSTED_PROXIES=10.0.0.0/8,192.168.1.5 ./netis
-```
-
-Set this when netis sits behind nginx, Caddy, Traefik or similar. Without it
-every request is attributed to the proxy's own address, so the login rate
-limiter (5 failed attempts per minute) counts all users as one client and five
-wrong passwords from anywhere lock everyone out for a minute. With it, the
-limiter keys on the real client address — the rightmost forwarded entry that
-isn't itself a listed proxy, which is the furthest-left address the proxy chain
-can actually vouch for.
-
-`X-Forwarded-Proto: https` from a listed proxy also lets the session cookie
-carry the `Secure` flag when TLS terminates at the proxy.
-
-A malformed entry is a startup error rather than a warning: a list that quietly
-parsed to nothing would leave the limiter mis-keyed with no sign of it.
-
-The per-address limiter keys IPv6 clients by their /64. Separately, each
-account allows 10 wrong passwords per 15 minutes, whatever address they come
-from, so rotating addresses does not buy unlimited guesses, and the
-current-password check when changing your own password has the same limit. It is a
-sliding window, not a lockout: the account opens up again once old failures age
-out.
-
-## Database backends
-
-netis runs on SQLite (the default) or PostgreSQL. `NETIS_DB` decides which:
-a filesystem path is a SQLite database, a `postgres://` URL is a Postgres
-server.
-
-```sh
-NETIS_DB=/var/lib/netis/netis.db ./netis                       # SQLite
-NETIS_DB='postgres://netis:secret@db:5432/netis' ./netis       # Postgres
-```
-
-The backend is chosen once at startup, so switching means restarting netis
-with a different `NETIS_DB`. Nothing moves between the two on its own: point
-netis at an empty Postgres database and it creates its schema and starts
-fresh.
-
-To carry an existing SQLite database over instead, stop netis and run the
-one-shot importer, then restart with the Postgres URL:
-
-```sh
-netis migrate-db --from /var/lib/netis/netis.db \
-                 --to 'postgres://netis:secret@db:5432/netis'
-```
-
-It creates the schema on the destination, copies every table preserving ids
-and foreign keys, and advances the id sequences past the imported rows. It
-refuses to write into a database that already holds netis rows unless
-`--force` is given. The source database is only read.
-
-SQLite remains the right default for a single netis instance: it is a file,
-needs no server, and the binary stays static. Postgres is worth it when the
-database has to live outside the container, be backed up by existing
-infrastructure, or be read by something else.
-
-## Backups
-
-SQLite: copying `netis.db` with `cp` while netis is running is not safe — under
-WAL the committed state is split between the database and its `-wal` sidecar.
-Use the built-in snapshot, which works against a live database:
-
-```sh
-netis backup --to /backups/netis-$(date +%F).db
-```
-
-The source is `--from`, or `NETIS_DB` when that is not given. It must be an
-existing database file: the backup opens it read-only, so it never creates a
-database, and never migrates one — running a newer netis binary's `backup`
-leaves the live schema alone. An existing destination file is refused rather
-than overwritten.
-
-In Docker, run the binary inside the container; `NETIS_DB` already points at
-`/data/netis.db` there, so the backup lands in the same volume:
-
-```sh
-docker exec netis /netis backup --to /data/backup-$(date +%F).db
-```
-
-To take one nightly, a cron entry (note the escaped `%`):
-
-```
-15 3 * * * docker exec netis /netis backup --to /data/backup-$(date +\%F).db
-```
-
-or a systemd timer on a native install:
-
-```ini
-# /etc/systemd/system/netis-backup.service
-[Service]
-Type=oneshot
-User=netis
-ExecStart=/bin/sh -c '/opt/netis/netis backup --from /var/lib/netis/netis.db --to /var/lib/netis/backup-$(date +%%F).db'
-
-# /etc/systemd/system/netis-backup.timer
-[Timer]
-OnCalendar=daily
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable it with `systemctl enable --now netis-backup.timer`. Neither prunes old
-backups (the [scheduled backups](#scheduled-backups) below do); delete them on
-whatever schedule suits you, and copy them off the machine.
-
-### Scheduled backups
-
-netis can take these snapshots itself. Set `NETIS_BACKUP_DIR` and the server
-writes `netis-YYYYMMDD-HHMMSS.db` (UTC) there every `NETIS_BACKUP_INTERVAL`
-(default `24h`), keeping the newest `NETIS_BACKUP_KEEP` (default `7`). Each
-file is the same `VACUUM INTO` snapshot as `netis backup`, taken through the
-server's own database connection, written under a temporary name and renamed
-into place once complete, so a crash never leaves a half-written backup.
-Pruning only deletes files matching that name pattern; anything else in the
-directory is left alone.
-
-The first backup is due one interval after the newest one already in the
-directory, so restarts do not take extra backups and an instance that was
-stopped for longer catches up at once. A failed backup is retried after at most
-an hour, logged in full, and announced once as a `scan_error` event. Settings →
-System shows the last backup (or the failure), and `/metrics` exports
-`netis_last_backup_timestamp_seconds` and `netis_last_backup_success` for
-alerting on stale backups.
-
-In Docker, point it at a directory on a volume — ideally a different one from
-the database, so it can be copied off or mounted from the host:
-
-```sh
-docker run -d --name netis \
-  --network host \
-  -v netis-data:/data \
-  -v /srv/backups/netis:/backups \
-  -e NETIS_DB=/data/netis.db \
-  -e NETIS_BACKUP_DIR=/backups \
-  ghcr.io/13/netis:latest
-```
-
-With Postgres the setting is ignored with a warning at startup: use `pg_dump`
-(below). Restore a scheduled backup exactly like a manual one; see
-[Restoring a backup](#restoring-a-backup).
-
-### Restoring a backup
-
-To restore a SQLite backup (manual or scheduled):
-
-1. Stop netis (`systemctl stop netis`, or `docker stop netis`).
-2. Copy the backup over the database file, e.g.
-   `cp backup-2026-01-01.db /var/lib/netis/netis.db` (keep the owner the
-   netis user). The image has no shell, so with Docker do steps 2 and 3
-   from a throwaway container on the same volume:
-   `docker run --rm -v netis-data:/data alpine sh -c 'cp /data/backup-2026-01-01.db /data/netis.db && rm -f /data/netis.db-wal /data/netis.db-shm'`.
-3. Delete the `netis.db-wal` and `netis.db-shm` files next to it if present:
-   they belong to the old database, and SQLite would replay the old WAL on top
-   of the restored one.
-4. Start netis again and check the dashboard and device list. If
-   `NETIS_SECRET_KEY` was set when the backup was taken, the same key must be
-   set now (see [Encrypting stored credentials](#encrypting-stored-credentials)).
-
-With the Docker example from [Scheduled backups](#scheduled-backups), mount
-both volumes in step 2:
-`docker run --rm -v netis-data:/data -v /srv/backups/netis:/backups alpine sh -c 'cp /backups/netis-20260928-031500.db /data/netis.db && rm -f /data/netis.db-wal /data/netis.db-shm'`.
-
-A backup from an older release is fine: netis migrates it forward on start.
-
-Postgres: use `pg_dump`, which already handles this properly.
-
-```sh
-pg_dump "$NETIS_DB" > /backups/netis-$(date +%F).sql
-```
+| `NETIS_DB` | `netis.db` | SQLite path, or a `postgres://` URL for Postgres. |
+| `NETIS_PRIVILEGED_ICMP` | unset | `1` sends raw ICMP (needs `CAP_NET_RAW` or root). |
+| `NETIS_SECRET_KEY` | unset | Key that encrypts stored integration credentials. |
+| `NETIS_BACKUP_DIR` | unset | Directory for scheduled SQLite backups. |
+
+All of them, and every setting, are in [docs/configuration.md](docs/configuration.md).
+
+## Documentation
+
+- [Installing](docs/install.md) — Docker, binary, Proxmox LXC, systemd hardening, reverse proxy
+- [Using netis](docs/usage.md) — the pages, keyboard shortcuts, theme
+- [Configuration](docs/configuration.md) — environment variables and settings
+- [Discovery](docs/discovery.md) — how devices are found, named and marked online
+- [Integrations](docs/integrations.md) — Proxmox, Pi-hole, AdGuard Home, OPNsense, WireGuard
+- [Notifications](docs/notifications.md) — webhook and ntfy
+- [API, export and metrics](docs/api.md) — tokens, endpoints, CSV import, Prometheus
+- [Users and security](docs/security.md) — roles, SSO with Authelia or Authentik, audit log, encryption
+- [Backups and databases](docs/backups.md) — backups, restore, SQLite or Postgres
+- [Development](docs/development.md) — building, tests, design system
 
 ## Limitations
 
+- MAC addresses are only discovered on subnets on the same L2 segment as netis;
+  routed subnets get ping-only scanning unless a DHCP integration or OPNsense's
+  ARP table fills them in.
 - A subnet may hold at most 65,536 addresses (an IPv4 `/16`, an IPv6 `/112`).
-  Every address becomes a grid cell and a sweep target, so a wider prefix is
-  refused when the subnet is saved rather than discovered when the page is
-  opened.
+- Port scans run only on demand, one device at a time.
+- WireGuard needs SSH access to the WireGuard host; Proxmox guest IPs need the
+  QEMU guest agent.
 
-- MAC address discovery only works for subnets on the same local L2
-  segment as the netis host (it reads the kernel ARP table after pinging).
-  Remote/routed subnets get ping-only scanning: online/offline status and
-  IP tracking work, but no MAC or vendor — unless a DHCP integration leases
-  those addresses, or the OPNsense integration can read the router's ARP
-  table.
-- WireGuard peer status is read by SSHing into the host running WireGuard
-  and parsing `wg show dump`; it is not a local integration and requires
-  a reachable SSH endpoint with a configured key.
-- Port scanning is on-demand per device only (the button on the device
-  page); netis never automatically scans ports across a subnet. The only
-  automatic TCP connects are the six-port presence checks on hosts that
-  answered ARP but not ping.
-- Proxmox guest IPs depend on the QEMU guest agent being installed and
-  running in the VM; without it, only the guest's configured MAC/bridge
-  is known, not its IP.
+Details in [Discovery → Limitations](docs/discovery.md#limitations).
 
-## License
+## Contributing
+
+Issues and pull requests are welcome. `make build`, `make test` and `make lint`
+cover most work; `make e2e` runs the visual regression and accessibility suite
+in Docker. See [docs/development.md](docs/development.md) for every target.
+
+## Licence
 
 MIT — see [LICENSE](LICENSE).
