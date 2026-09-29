@@ -279,8 +279,8 @@ templ DevicePage(username string, d DeviceDetail) {
 						for _, e := range d.Events {
 							<tr>
 								<td>@Time(e.TS)</td>
-								<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
-								<td>{ e.Details }</td>
+								<td>@EventStatus(e)</td>
+								<td>{ EventDetail(e) }</td>
 							</tr>
 						}
 					</table>

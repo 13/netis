@@ -2,9 +2,12 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"netis/internal/scan"
 	"netis/internal/web/views"
@@ -53,47 +56,130 @@ func (s *Server) subnetRows(ctx context.Context) ([]views.DashRow, []views.Atten
 	return rows, conflicts, nil
 }
 
-func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error) {
-	u, _ := userFrom(r)
-	data := views.DashboardData{Username: u.Username}
+// dashNewLimit caps how many unreviewed devices the attention list names;
+// the rest are counted and linked to the device list.
+const dashNewLimit = 5
 
-	devices, err := s.store.ListDevices(r.Context())
+// dashEventLimit is how many recent events the dashboard shows.
+const dashEventLimit = 12
+
+func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error) {
+	ctx := r.Context()
+	u, _ := userFrom(r)
+	data := views.DashboardData{Username: u.Username, ConflictHref: "#attention"}
+
+	devices, err := s.store.ListDevices(ctx)
 	if err != nil {
 		return data, err
 	}
-	data.Stats.Total = len(devices)
+	alerting, err := s.store.AlertOfflineDeviceIDs(ctx)
+	if err != nil {
+		return data, err
+	}
+	var conflicts, failing, offline, fresh, upstream []views.AttentionItem
 	for _, d := range devices {
 		if d.Online {
-			data.Stats.Online++
+			data.Health.Online++
+		} else {
+			data.Health.Offline++
 		}
-		if d.Source == "scan" && strings.HasPrefix(d.Name, "unknown-") && !d.Reviewed {
-			data.Stats.Unknown++
-			data.Unknowns = append(data.Unknowns, views.AttentionUnknown{ID: d.ID, Name: d.Name})
+		href := fmt.Sprintf("/devices/%d", d.ID)
+		if !d.Reviewed {
+			data.Health.New++
+			if len(fresh) < dashNewLimit {
+				it := views.AttentionItem{Kind: views.AttentionNewKind, Title: d.Name, Href: href, DeviceID: d.ID, Detail: d.Vendor}
+				// A discovery is often named after its address; say it once.
+				if len(d.IPs) > 0 && d.IPs[0].IP != d.Name {
+					it.IP = d.IPs[0].IP
+				}
+				fresh = append(fresh, it)
+			} else {
+				data.MoreNew++
+			}
+		}
+		if !d.Online && alerting[d.ID] {
+			it := views.AttentionItem{Kind: views.AttentionOfflineKind, Title: d.Name, Href: href, Detail: "Last seen"}
+			if d.LastSeen != nil {
+				it.Since = *d.LastSeen
+			} else {
+				it.Detail = "Never seen"
+			}
+			offline = append(offline, it)
+		}
+		if d.UpstreamMissingSince != nil {
+			where := "upstream"
+			if t, ok := views.IntegrationTitles[d.Source]; ok {
+				where = "in " + t
+			}
+			upstream = append(upstream, views.AttentionItem{
+				Kind: views.AttentionUpstreamKind, Title: d.Name, Href: href,
+				Detail: "No longer listed " + where + " since", Since: *d.UpstreamMissingSince,
+			})
 		}
 	}
-	data.Stats.Offline = data.Stats.Total - data.Stats.Online
 
-	rows, conflicts, err := s.subnetRows(r.Context())
+	rows, found, err := s.subnetRows(ctx)
 	if err != nil {
 		return data, err
 	}
 	data.Rows = rows
-	data.Stats.Subnets = len(rows)
-	data.Conflicts = conflicts
-	sort.Slice(data.Conflicts, func(i, j int) bool { return data.Conflicts[i].IP < data.Conflicts[j].IP })
+	sort.Slice(found, func(i, j int) bool { return found[i].IP < found[j].IP })
+	for _, c := range found {
+		href := fmt.Sprintf("/subnets/%d?ip=%s", c.SubnetID, url.QueryEscape(c.IP))
+		conflicts = append(conflicts, views.AttentionItem{
+			Kind: views.AttentionConflictKind, Title: c.IP + " is claimed by more than one device",
+			Detail: "In " + c.SubnetName, Href: href,
+		})
+	}
+	data.Health.Conflicts = len(conflicts)
+	if len(conflicts) == 1 {
+		data.ConflictHref = conflicts[0].Href
+	}
 
-	statuses, err := s.store.ListIntegrationStatus(r.Context())
+	statuses, err := s.store.ListIntegrationStatus(ctx)
 	if err != nil {
 		return data, err
 	}
 	data.Integrations = statuses
+	for _, st := range statuses {
+		if st.OK {
+			continue
+		}
+		data.Health.Failing++
+		it := views.AttentionItem{
+			Kind: views.AttentionIntegrationKind, Title: views.IntegrationName(st.Name) + " is failing",
+			Detail: failureDetail(st.Detail), Since: st.LastRun,
+		}
+		if _, ok := views.IntegrationTitles[st.Name]; ok {
+			it.Integration = st.Name
+			if isAdmin(r) {
+				it.Href = "/settings/integrations"
+			}
+		} else if isAdmin(r) {
+			it.Href = "/settings/network"
+		}
+		failing = append(failing, it)
+	}
 
-	evs, err := s.store.ListEvents(r.Context(), 15)
+	for _, group := range [][]views.AttentionItem{conflicts, failing, offline, fresh, upstream} {
+		data.Attention = append(data.Attention, group...)
+	}
+
+	evs, err := s.store.ListEvents(ctx, dashEventLimit)
 	if err != nil {
 		return data, err
 	}
-	data.Events = evs
+	data.Days = views.GroupEventsByDay(evs, time.Now())
 	return data, nil
+}
+
+// failureDetail puts a stored failure detail ("timeout", "auth failed: 401
+// Unauthorized") in sentence case for the attention list.
+func failureDetail(d string) string {
+	if d == "" {
+		return "Last run failed"
+	}
+	return strings.ToUpper(d[:1]) + d[1:]
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {

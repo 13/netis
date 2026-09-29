@@ -113,12 +113,13 @@ func TestThemeFollowsOSPreferenceWhenUnset(t *testing.T) {
 }
 
 // Wide tables scroll inside their own box instead of widening the page, and
-// the nav has a narrow-screen layout.
+// the nav has a narrow-screen layout. (The events log is a list whose rows
+// stack on a phone, so it has no table to scroll.)
 func TestWideTablesAndNavFitPhones(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	for _, path := range []string{"/devices", "/events", "/settings/users", "/settings/sessions"} {
+	for _, path := range []string{"/devices", "/settings/users", "/settings/sessions"} {
 		body := authedGet(t, srv, st, path).Body.String()
 		if !strings.Contains(body, `class="table-wrap"`) {
 			t.Errorf("%s: table not wrapped in a scroll container", path)

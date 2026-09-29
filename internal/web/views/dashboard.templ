@@ -20,38 +20,115 @@ type DashRow struct {
 	Hosts    int
 }
 
-type DashStats struct {
-	Total   int
-	Online  int
-	Offline int
-	Unknown int
-	Subnets int
-}
-
-type AttentionUnknown struct {
-	ID   int64
-	Name string
-}
-
 type AttentionConflict struct {
 	IP         string
 	SubnetID   int64
 	SubnetName string
 }
 
+// DashHealth is the dashboard's health strip: devices online and offline,
+// devices not reviewed yet, IP conflicts and failing integrations.
+type DashHealth struct {
+	Online    int
+	Offline   int
+	New       int
+	Conflicts int
+	Failing   int
+}
+
+// Attention kinds, in the order the list shows them.
+const (
+	AttentionConflictKind    = "conflict"
+	AttentionIntegrationKind = "integration"
+	AttentionOfflineKind     = "offline"
+	AttentionNewKind         = "new"
+	AttentionUpstreamKind    = "upstream"
+)
+
+// AttentionItem is one thing on the dashboard that needs the user.
+type AttentionItem struct {
+	Kind   string
+	Title  string
+	Detail string
+	// IP is shown in mono after the detail, when there is one.
+	IP   string
+	Href string
+	// Since is when it started (last seen, gone upstream, last failed run).
+	Since    string
+	DeviceID int64
+	// Integration is the slug of a failing integration, for Run now; empty
+	// for the scanner, which has no single run.
+	Integration string
+}
+
+// attentionTone is the status tone of an attention item's LED.
+func attentionTone(kind string) string {
+	switch kind {
+	case AttentionConflictKind, AttentionIntegrationKind, AttentionOfflineKind:
+		return "is-error"
+	case AttentionNewKind:
+		return "is-new"
+	case AttentionUpstreamKind:
+		return "is-missing"
+	}
+	return ""
+}
+
+// attentionLabel is the kind of an attention item in words.
+func attentionLabel(kind string) string {
+	switch kind {
+	case AttentionConflictKind:
+		return "IP conflict"
+	case AttentionIntegrationKind:
+		return "Sync failing"
+	case AttentionOfflineKind:
+		return "Offline"
+	case AttentionNewKind:
+		return "New device"
+	case AttentionUpstreamKind:
+		return "Gone upstream"
+	}
+	return ""
+}
+
 type DashboardData struct {
 	Username     string
-	Stats        DashStats
+	Health       DashHealth
+	Attention    []AttentionItem
+	// MoreNew counts the unreviewed devices beyond those listed.
+	MoreNew      int
+	// ConflictHref is where the conflicts count leads: the grid of the one
+	// conflict, or the attention list when there are several.
+	ConflictHref string
 	Integrations []store.IntegrationStatus
-	Unknowns     []AttentionUnknown
-	Conflicts    []AttentionConflict
 	Rows         []DashRow
-	Events       []store.Event
+	Days         []EventDay
+}
+
+// attentionCount is how many items need the user, the unlisted new devices
+// included.
+func (d DashboardData) attentionCount() int {
+	return len(d.Attention) + d.MoreNew
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, one)
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 templ Dashboard(d DashboardData) {
 	@Layout("Dashboard", d.Username) {
-		<h1>Dashboard</h1>
+		<div class="page-head">
+			<h1>Dashboard</h1>
+			if IsAdmin(ctx) && len(d.Rows) > 0 {
+				<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="btn">
+					@Icon("radar", "")
+					Scan all subnets
+				</button>
+			}
+		</div>
 		<div id="dash" hx-get="/dashboard/widgets" hx-trigger="sse:dashboard, sse:events">
 			@DashboardBody(d)
 		</div>
@@ -59,90 +136,260 @@ templ Dashboard(d DashboardData) {
 }
 
 templ DashboardBody(d DashboardData) {
-	<div class="stats">
-		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Total) }</span> <span class="lbl">devices</span></div>
-		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Online) }</span> <span class="lbl"><span class="dot is-online"></span>online</span></div>
-		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Offline) }</span> <span class="lbl"><span class="dot"></span>offline</span></div>
-		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Unknown) }</span> <span class="lbl"><span class="dot is-new"></span>unknown</span></div>
-		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Subnets) }</span> <span class="lbl">subnets</span></div>
+	@healthStrip(d)
+	<div class="dash-cols">
+		<div class="dash-main">
+			@attentionPanel(d)
+			@activityPanel(d)
+		</div>
+		<div class="dash-aside">
+			@subnetsPanel(d)
+			@integrationsPanel(d)
+		</div>
 	</div>
-	<div class="band">
-		<section class="panel">
-			<h2>Integrations</h2>
-			if len(d.Integrations) == 0 {
-				<p class="muted">no integrations have run yet</p>
+}
+
+// healthStrip answers "is everything fine" in one line: a summary, then each
+// count as a link to the list behind it. A zero count keeps its LED dark.
+templ healthStrip(d DashboardData) {
+	<nav class="health panel" aria-label="Network health">
+		if d.attentionCount() == 0 {
+			<p class="health-sum is-online"><span class="dot"></span>All clear</p>
+		} else {
+			<a class="health-sum is-new" href="#attention"><span class="dot"></span>{ plural(d.attentionCount(), "item needs you", "items need you") }</a>
+		}
+		<ul class="health-items">
+			@healthItem("/devices?status=online", d.Health.Online, "online", "is-online")
+			@healthItem("/devices?status=offline", d.Health.Offline, "offline", "is-offline")
+			@healthItem("/devices?new=1", d.Health.New, "new", "is-new")
+			@healthItem(d.ConflictHref, d.Health.Conflicts, pluralWord(d.Health.Conflicts, "conflict", "conflicts"), "is-conflict")
+			if IsAdmin(ctx) {
+				@healthItem("/settings/integrations", d.Health.Failing, "failing", "is-error")
 			} else {
-				<table>
-					for _, it := range d.Integrations {
-						<tr>
-							<td>{ it.Name }</td>
-							<td>
-								if it.OK {
-									<span class="status is-online">ok</span>
-								} else {
-									<span class="status is-error">failing</span>
-								}
-							</td>
-							<td class="muted">@Time(it.LastRun)</td>
-							<td>{ it.Detail }</td>
-						</tr>
-					}
-				</table>
+				@healthItem("#attention", d.Health.Failing, "failing", "is-error")
 			}
-		</section>
-		<section class="panel">
-			<h2>Needs attention</h2>
-			if len(d.Unknowns) == 0 && len(d.Conflicts) == 0 {
-				<p class="muted">nothing needs attention</p>
-			} else {
-				<ul>
-					for _, u := range d.Unknowns {
-						<li>
-							<a href={ templ.URL(fmt.Sprintf("/devices/%d", u.ID)) }>
-								unknown device { u.Name }
-							</a>
-						</li>
-					}
-					for _, c := range d.Conflicts {
-						<li>
-							<a href={ templ.URL(fmt.Sprintf("/subnets/%d", c.SubnetID)) }>
-								IP conflict { c.IP } in { c.SubnetName }
-							</a>
-						</li>
-					}
-				</ul>
+		</ul>
+	</nav>
+}
+
+func pluralWord(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+templ healthItem(href string, n int, label, tone string) {
+	<li>
+		<a class={ "health-item", templ.KV(tone, n > 0), templ.KV("is-zero", n == 0) } href={ templ.SafeURL(href) }>
+			<span class="dot"></span>
+			<span class="health-n">{ fmt.Sprint(n) }</span>
+			<span class="health-l">{ label }</span>
+		</a>
+	</li>
+}
+
+templ attentionPanel(d DashboardData) {
+	<section class="panel dash-attn" id="attention" aria-labelledby="attn-h">
+		<div class="panel-head">
+			<h2 id="attn-h">Needs attention</h2>
+		</div>
+		if d.attentionCount() == 0 {
+			<div class="attn-clear">
+				@Icon("check", "icon-lg")
+				<div>
+					<p class="attn-clear-h">All clear</p>
+					<p class="muted">No conflicts, failing syncs or devices waiting for review.</p>
+				</div>
+			</div>
+		} else {
+			<ul class="attn-list">
+				for _, it := range d.Attention {
+					@attentionRow(it)
+				}
+			</ul>
+			if d.MoreNew > 0 {
+				<p class="attn-more">
+					<a href="/devices?new=1">{ plural(d.MoreNew, "more new device", "more new devices") }</a>
+				</p>
 			}
-		</section>
-	</div>
-	<h2>
-		Subnets
-		if IsAdmin(ctx) {
-			<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="btn btn-sm">
-				@Icon("radar", "")
-				Scan all
-			</button>
 		}
-	</h2>
-	<div class="cards">
-		for _, r := range d.Rows {
-			@subnetCard(r)
+	</section>
+}
+
+templ attentionRow(it AttentionItem) {
+	<li class={ "attn", attentionTone(it.Kind) }>
+		<span class="attn-led dot" aria-hidden="true"></span>
+		<div class="attn-body">
+			<p class="attn-title">
+				if it.Href != "" {
+					<a href={ templ.SafeURL(it.Href) }>{ it.Title }</a>
+				} else {
+					{ it.Title }
+				}
+				<span class="attn-kind">{ attentionLabel(it.Kind) }</span>
+			</p>
+			<p class="attn-detail">
+				if it.Detail != "" {
+					<span>{ it.Detail }</span>
+				}
+				if it.IP != "" {
+					<span class="mono">{ it.IP }</span>
+				}
+				if it.Since != "" {
+					<span>
+						@Time(it.Since)
+					</span>
+				}
+			</p>
+		</div>
+		<div class="attn-actions">
+			@attentionActions(it)
+		</div>
+	</li>
+}
+
+templ attentionActions(it AttentionItem) {
+	switch it.Kind {
+		case AttentionNewKind:
+			if IsAdmin(ctx) {
+				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", it.DeviceID)) } class="inline">
+					<input type="hidden" name="next" value="/"/>
+					<button type="submit" class="btn btn-sm">
+						@Icon("check", "")
+						Approve
+					</button>
+				</form>
+			}
+		case AttentionConflictKind:
+			<a class="btn btn-sm" href={ templ.SafeURL(it.Href) }>Show in grid</a>
+		case AttentionIntegrationKind:
+			if IsAdmin(ctx) {
+				if it.Integration != "" {
+					<button class="btn btn-sm" hx-post={ "/settings/integrations/" + it.Integration + "/run" } hx-target="#toasts" hx-swap="beforeend">
+						@Icon("refresh-cw", "")
+						Run now
+					</button>
+				}
+			}
+	}
+}
+
+templ activityPanel(d DashboardData) {
+	<section class="panel dash-activity" aria-labelledby="act-h">
+		<div class="panel-head">
+			<h2 id="act-h">Recent activity</h2>
+			<span class="spacer"></span>
+			if len(d.Days) > 0 {
+				<a href="/events" class="btn btn-quiet btn-sm">View all events</a>
+			}
+		</div>
+		if len(d.Days) == 0 {
+			<p class="muted">Nothing has happened yet. Devices coming and going show up here after the first scan.</p>
+		} else {
+			<div class="ev-log ev-log-compact">
+				@eventDays(d.Days, 3)
+			</div>
 		}
-	</div>
-	<h2>Recent events</h2>
-	<div class="table-wrap">
-	<table>
-		for _, e := range d.Events {
-			<tr>
-				<td class="muted">@Time(e.TS)</td>
-				<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
-				<td>
-					@eventDevice(e)
-				</td>
-				<td>{ e.Details }</td>
-			</tr>
+	</section>
+}
+
+templ subnetsPanel(d DashboardData) {
+	<section class="panel dash-subnets" aria-labelledby="sn-h">
+		<div class="panel-head">
+			<h2 id="sn-h">Subnets</h2>
+			<span class="spacer"></span>
+			if len(d.Rows) > 0 {
+				<a href="/subnets" class="btn btn-quiet btn-sm">All subnets</a>
+			}
+		</div>
+		if len(d.Rows) == 0 {
+			<p class="muted">No subnets yet.</p>
+			if IsAdmin(ctx) {
+				<a class="btn btn-sm" href="/settings/network">
+					@Icon("plus", "")
+					Add a subnet
+				</a>
+			}
+		} else {
+			<ul class="sn-list">
+				for _, r := range d.Rows {
+					@dashSubnet(r)
+				}
+			</ul>
 		}
-	</table>
-	</div>
+	</section>
+}
+
+// dashSubnet is one subnet as a compact row: name and range, a usage bar and
+// the counts behind it.
+templ dashSubnet(r DashRow) {
+	<li class="sn">
+		<div class="sn-head">
+			<a class="sn-name" href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a>
+			<span class="mono muted sn-cidr">{ r.Subnet.CIDR }</span>
+			<span class="spacer"></span>
+			<span class="sn-used muted">{ fmt.Sprintf("%d of %d used", r.Used, r.Hosts) }</span>
+			if r.Subnet.Kind != "wireguard" && IsAdmin(ctx) {
+				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="btn btn-quiet btn-sm btn-icon" aria-label={ "Scan " + r.Subnet.Name } title={ "Scan " + r.Subnet.Name }>
+					@Icon("radar", "")
+				</button>
+			}
+		</div>
+		<svg class="occ" aria-hidden="true">
+			for _, seg := range occSegments(r) {
+				<rect class={ seg.Class } x={ pct(seg.X) } width={ pct(seg.W) } height="100%"></rect>
+			}
+		</svg>
+		<div class="legend">
+			<span><span class="sw on"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
+			<span><span class="sw off"></span><b>{ fmt.Sprint(r.Offline) }</b> offline</span>
+			if r.Unseen > 0 {
+				<span><span class="sw res"></span><b>{ fmt.Sprint(r.Unseen) }</b> not seen yet</span>
+			}
+			<span><span class="sw free"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+			<span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
+		</div>
+	</li>
+}
+
+templ integrationsPanel(d DashboardData) {
+	<section class="panel dash-integ" aria-labelledby="integ-h">
+		<div class="panel-head">
+			<h2 id="integ-h">Integrations</h2>
+			<span class="spacer"></span>
+			if IsAdmin(ctx) {
+				<a href="/settings/integrations" class="btn btn-quiet btn-sm">Settings</a>
+			}
+		</div>
+		if len(d.Integrations) == 0 {
+			<p class="muted">No integration has run yet.</p>
+			if IsAdmin(ctx) {
+				<a class="btn btn-sm" href="/settings/integrations">Set up an integration</a>
+			}
+		} else {
+			<ul class="integ-rows">
+				for _, it := range d.Integrations {
+					<li>
+						<span class="integ-name">
+							{ IntegrationName(it.Name) }
+							if it.OK && it.Detail != "" {
+								<span class="integ-detail muted">{ it.Detail }</span>
+							}
+						</span>
+						if it.OK {
+							<span class="status is-online">Working</span>
+						} else {
+							<span class="status is-error">Failing</span>
+						}
+						<span class="integ-when muted">
+							@Time(it.LastRun)
+						</span>
+					</li>
+				}
+			</ul>
+		}
+	</section>
 }
 
 templ subnetCard(r DashRow) {

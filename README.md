@@ -58,8 +58,13 @@ lets a phone or desktop browser install netis as a standalone app.
 
 ## Views
 
-- **Dashboard** — per-subnet online/total counts, recent events, quick
-  search.
+- **Dashboard** — a health strip (online, offline, new, conflicts, failing
+  integrations, each linking to the list behind it), a "Needs attention"
+  list with the action for each item (approve a new device, run a failing
+  integration, open an IP conflict, offline devices with alerts on, devices
+  gone upstream), per-subnet usage and recent activity by day.
+- **Events** — the full event log grouped by day, filterable by what
+  happened, device name and date range, paged 50 at a time.
 - **Subnet grid** — one square per IP in a subnet: green for online, dark
   for used-but-offline, yellow (marked R) for assigned but not seen yet,
   empty for free, red (marked !) for an IP claimed by two devices. The

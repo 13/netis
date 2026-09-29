@@ -1,68 +1,112 @@
 package views
 
 import (
-	"fmt"
-
-	"netis/internal/store"
+	"net/url"
+	"strconv"
 )
 
-// eventPageTypes is the fixed set of event types accepted by the schema's
-// CHECK constraint (see internal/store/migrations/*/0010_alerts.sql), in the
-// order shown in the filter <select>.
-var eventPageTypes = []string{"device_new", "online", "offline", "ip_changed", "ip_conflict", "scan_error", "sync_recovered", "device_missing", "device_returned"}
-
-// deviceEventTypes are the event types that always name a device when
-// recorded. One of these without a device lost it to a deletion.
-var deviceEventTypes = map[string]bool{"device_new": true, "online": true, "offline": true, "ip_changed": true, "device_missing": true, "device_returned": true}
-
-// eventDevice names an event's device, linked to its page; an event whose
-// device was deleted says so, and one that never had a device renders nothing.
-templ eventDevice(e store.Event) {
-	if e.DeviceID != nil && e.DeviceName != nil {
-		<a href={ templ.URL(fmt.Sprintf("/devices/%d", *e.DeviceID)) }>{ *e.DeviceName }</a>
-	} else if e.DeviceID != nil || deviceEventTypes[e.Type] {
-		<span class="muted">deleted device</span>
-	}
+// EventsPageData is one page of the event log with the filters that chose it.
+type EventsPageData struct {
+	Username string
+	Days     []EventDay
+	// Kind is an EventKind key (or a stored type), Device part of a device
+	// name, From and To a day range as YYYY-MM-DD.
+	Kind, Device, From, To string
+	// BeforeID is the page's keyset cursor (0 for the newest page); Older is
+	// the cursor of the next page, 0 when this is the last.
+	BeforeID int64
+	Older    int64
 }
 
-templ EventsPage(username string, evs []store.Event, typeFilter string) {
-	@Layout("Events", username) {
-		<h1>Events</h1>
-		<form method="get" action="/events" class="toolbar">
+// Filtered reports whether any filter is set.
+func (d EventsPageData) Filtered() bool {
+	return d.Kind != "" || d.Device != "" || d.From != "" || d.To != ""
+}
+
+// pageURL is /events with the page's filters and the given cursor.
+func (d EventsPageData) pageURL(before int64) templ.SafeURL {
+	q := url.Values{}
+	for k, v := range map[string]string{"type": d.Kind, "device": d.Device, "from": d.From, "to": d.To} {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	if before > 0 {
+		q.Set("before", strconv.FormatInt(before, 10))
+	}
+	if len(q) == 0 {
+		return "/events"
+	}
+	return templ.SafeURL("/events?" + q.Encode())
+}
+
+templ EventsPage(d EventsPageData) {
+	@Layout("Events", d.Username) {
+		<div class="page-head">
+			<h1>Events</h1>
+		</div>
+		<form method="get" action="/events" class="ev-filters" role="search" aria-label="Filter events">
 			<label>
-				Type
-				<select name="type" onchange="this.form.submit()">
-					<option value="">all</option>
-					for _, t := range eventPageTypes {
-						if t == typeFilter {
-							<option value={ t } selected>{ t }</option>
-						} else {
-							<option value={ t }>{ t }</option>
-						}
+				What happened
+				<select name="type">
+					<option value="">All events</option>
+					for _, k := range EventKinds() {
+						<option value={ k.Key } selected?={ k.Key == d.Kind }>{ k.Label }</option>
 					}
 				</select>
 			</label>
-			<noscript><button type="submit" class="btn">Filter</button></noscript>
-		</form>
-		<div class="table-wrap">
-			<table>
-				<tr>
-					<th>Time</th>
-					<th>Type</th>
-					<th>Device</th>
-					<th>Details</th>
-				</tr>
-				for _, e := range evs {
-					<tr>
-						<td class="muted">@Time(e.TS)</td>
-						<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
-						<td>
-							@eventDevice(e)
-						</td>
-						<td>{ e.Details }</td>
-					</tr>
+			<label class="ev-f-device">
+				Device
+				<input type="search" name="device" value={ d.Device } placeholder="Name contains" autocomplete="off"/>
+			</label>
+			<label>
+				From
+				<input type="date" name="from" value={ d.From }/>
+			</label>
+			<label>
+				To
+				<input type="date" name="to" value={ d.To }/>
+			</label>
+			<div class="ev-f-actions">
+				<button type="submit" class="btn">
+					@Icon("filter", "")
+					Filter
+				</button>
+				if d.Filtered() {
+					<a class="btn btn-quiet" href="/events">Clear</a>
 				}
-			</table>
-		</div>
+			</div>
+		</form>
+		if len(d.Days) == 0 {
+			<div class="panel empty">
+				@Icon("activity", "")
+				if d.Filtered() || d.BeforeID > 0 {
+					<h3>No matching events</h3>
+					<p>Nothing recorded matches these filters. Widen the dates or clear the filters to see everything.</p>
+					<a class="btn" href="/events">Clear filters</a>
+				} else {
+					<h3>No events yet</h3>
+					<p>Devices coming online, going offline, new devices and failed scans show up here as netis sees them.</p>
+				}
+			</div>
+		} else {
+			<div class="ev-log">
+				@eventDays(d.Days, 2)
+			</div>
+			if d.Older > 0 || d.BeforeID > 0 {
+				<nav class="pager" aria-label="Pages">
+					if d.BeforeID > 0 {
+						<a class="btn" href={ d.pageURL(0) }>Newest events</a>
+					}
+					<span class="grow"></span>
+					if d.Older > 0 {
+						<a class="btn" href={ d.pageURL(d.Older) }>
+							Older events
+							@Icon("chevron-right", "")
+						</a>
+					}
+				</nav>
+			}
+		}
 	}
 }

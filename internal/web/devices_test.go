@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"netis/internal/store"
+	"netis/internal/web/views"
 )
 
 func authedPost(t *testing.T, srv *Server, st *store.Store, path string, form url.Values) *httptest.ResponseRecorder {
@@ -260,12 +261,12 @@ func TestApproveClearsDashboardUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if data.Stats.Unknown != 1 {
-		t.Fatalf("Stats.Unknown = %d, want 1", data.Stats.Unknown)
+	if data.Health.New != 1 {
+		t.Fatalf("Health.New = %d, want 1", data.Health.New)
 	}
 	found := false
-	for _, u := range data.Unknowns {
-		if u.ID == devID {
+	for _, u := range data.Attention {
+		if u.Kind == views.AttentionNewKind && u.DeviceID == devID {
 			found = true
 		}
 	}
@@ -280,11 +281,11 @@ func TestApproveClearsDashboardUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if data2.Stats.Unknown != 0 {
-		t.Fatalf("Stats.Unknown after approve = %d, want 0", data2.Stats.Unknown)
+	if data2.Health.New != 0 {
+		t.Fatalf("Health.New after approve = %d, want 0", data2.Health.New)
 	}
-	for _, u := range data2.Unknowns {
-		if u.ID == devID {
+	for _, u := range data2.Attention {
+		if u.DeviceID == devID {
 			t.Fatal("approved device still in attention list")
 		}
 	}

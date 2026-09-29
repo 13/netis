@@ -1,0 +1,57 @@
+/* Events: the event log page, and the day-grouped event list it shares with
+   the dashboard's recent activity (views/event.templ). */
+@layer pages {
+  /* ---- filters ---- */
+  .ev-filters { display:flex; flex-wrap:wrap; align-items:flex-end; gap:var(--sp-3); margin-bottom:var(--sp-4); }
+  .ev-filters label { margin:0; }
+  .ev-filters select { min-width:11rem; }
+  .ev-f-device input { width:14rem; }
+  .ev-f-actions { display:flex; gap:var(--sp-2); }
+
+  /* ---- day groups: the heading sticks while its day scrolls by ---- */
+  .ev-day + .ev-day { margin-top:var(--sp-4); }
+  .ev-day-h { position:sticky; top:0; z-index:2; margin:0; padding:var(--sp-2) 0; background:var(--bg);
+              font-size:var(--text-sm); font-weight:var(--w-semibold); color:var(--fg); }
+  .ev-list { list-style:none; margin:0; padding:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
+
+  /* One event: kind, device, details, time. Columns line up across days. */
+  .ev { display:grid; grid-template-columns:9.5rem minmax(7rem, 13rem) minmax(0, 1fr) 5.5rem; gap:var(--sp-3);
+        align-items:center; padding:var(--sp-2) var(--sp-3); border-top:1px solid var(--border); }
+  .ev:first-child { border-top:0; }
+  /* An event with no device gives its details the device's column too. */
+  .ev-dev:empty { display:none; }
+  .ev-dev:empty + .ev-detail { grid-column:2 / 4; }
+  .ev-dev { min-width:0; overflow-wrap:anywhere; }
+  .ev-dev a { font-weight:var(--w-medium); text-decoration:none; }
+  .ev-dev a:hover { text-decoration:underline; }
+  .ev-detail { min-width:0; color:var(--muted); font-size:var(--text-sm); overflow-wrap:anywhere; }
+  .ev-time { color:var(--muted); font-size:var(--text-sm); text-align:right; }
+
+  /* Inside a panel (dashboard): no frame of its own, quiet day labels. */
+  .ev-log-compact .ev-list { background:none; border:0; border-radius:0; }
+  .ev-log-compact .ev { grid-template-columns:8.5rem minmax(6rem, 10rem) minmax(0, 1fr) 4.5rem; padding:var(--sp-2) 0; }
+  .ev-log-compact .ev:first-child { border-top:1px solid var(--border); }
+  .ev-log-compact .ev-day + .ev-day { margin-top:var(--sp-3); }
+  .ev-log-compact .ev-day-h { position:static; padding:0 0 var(--sp-2); background:none; color:var(--muted); font-weight:var(--w-medium); }
+
+  .pager { display:flex; align-items:center; gap:var(--sp-2); margin-top:var(--sp-4); }
+
+  @media (max-width:640px) {
+    .ev-filters { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-2) var(--sp-3); }
+    .ev-filters > label:first-child, .ev-f-device, .ev-f-actions { grid-column:1 / -1; }
+    .ev-filters select, .ev-f-device input, .ev-filters input[type="date"] { width:100%; min-width:0; min-height:44px; }
+    .ev-f-actions .btn { min-height:44px; }
+    /* Below the sticky top bar. */
+    .ev-day-h { top:52px; }
+    /* Stacked rows: kind and time, then the device, then the details. */
+    .ev, .ev-log-compact .ev { grid-template-columns:minmax(0, 1fr) auto; grid-template-areas:"kind time" "dev dev" "detail detail";
+                               gap:2px var(--sp-3); }
+    .ev-kind { grid-area:kind; }
+    .ev-time { grid-area:time; }
+    .ev-dev { grid-area:dev; }
+    .ev-detail { grid-area:detail; }
+    .ev-dev:empty + .ev-detail { grid-area:detail; }
+    .ev-kind + .ev-dev { margin-top:var(--sp-1); }
+    .pager .btn { min-height:44px; }
+  }
+}
