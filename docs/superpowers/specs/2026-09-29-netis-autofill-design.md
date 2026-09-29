@@ -32,7 +32,7 @@ lookups. No new event type.
   per-field ownership, the full IEEE OUI registry, hostname rules, open-port
   rules, a settings toggle, "detected" markers and a "What netis detected"
   panel on the device page. Runs after every sweep, every lease sync and a
-  one-time backfill.
+  full pass at startup.
 - **A2 mDNS services.** After a subnet sweep, browse DNS-SD on the scan
   interface and turn service types and TXT records into hints.
 - **A3 SSDP/UPnP.** M-SEARCH on the scan interface, fetch each responder's
@@ -104,8 +104,8 @@ autofill record `rec`:
    an integration, and any value on a reviewed device.
 
 "Empty" is `""` for vendor, model, function and icon; `other` for kind; for
-name, a placeholder: the device's IP, `private-<mac>` or `<source>-<mac>`
-while the device is unreviewed. Kind is only filled from `other`, so a kind
+name, a placeholder while the device is unreviewed: `unknown-<mac>`,
+`unknown-<ip>`, `private-<mac>` (scan) or `<source>-<mac>` (lease sources). Kind is only filled from `other`, so a kind
 an integration set (vm, lxc, wg-peer, server) is never touched.
 
 Tags are additive. For each tag candidate `t` with record `rec = tag:t`:
@@ -122,20 +122,26 @@ device, detail `vendor=Brother, kind=printer (hostname, oui)`.
 
 ## When it runs
 
-`autofill.Service.Run(ctx, deviceIDs)` recomputes the local-source hints
-(oui, hostname, ports) for those devices from the database, then resolves and
-applies. Callers:
+`autofill.Service` has two entry points:
 
-- `scan.Engine.RunSubnet` after the sweep, for every device it saw or created.
-- `leases.Apply` after a sync, for every device it touched.
-- the port scan handler after it stores open ports.
-- startup: once per database, a backfill over all devices, marked done by
-  setting `autofill.backfilled`.
-- turning the setting on runs the backfill again.
+- `Run(ctx, deviceIDs...)` recomputes the local-source hints (oui, hostname,
+  ports) for those devices from the database, then resolves and applies.
+  With no ids it covers every device. A home inventory is a few hundred
+  devices and each costs a handful of indexed queries, so a full pass is
+  cheap.
+- `Kick()` asks for a full pass without waiting. Kicks coalesce: a loop
+  started by `Start(ctx)` runs one pass per burst of kicks, at most once
+  every 10 s.
 
-Setting `autofill.enabled`, default `true`, under Settings, Admin, Network
-("Fill in device details automatically"). Off stops Run; hints and records
-stay.
+Callers: `Start` runs a full pass at startup (this is the backfill for
+existing devices); `scan.Engine.RunSubnet` kicks after a sweep; the
+integration runner kicks after a successful run; the port scan handler calls
+`Run` for its device so the page it redirects to shows the result; saving
+the setting kicks.
+
+Setting `autofill_enabled`, default `on`, under Settings, Admin, Network
+("Fill in device details automatically"). Off makes Run a no-op; hints and
+records stay.
 
 The scan engine's own `Vendor()` call in `createUnknown` goes: vendor now
 comes through autofill like every other field.
