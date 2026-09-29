@@ -341,3 +341,18 @@ func TestPasswordFieldsCarryAutocomplete(t *testing.T) {
 		}
 	}
 }
+
+// The sign-in page has a main landmark and an h1 for screen readers, and its
+// brand sits in a header, so nothing on it is outside a landmark.
+func TestLoginPageLandmarks(t *testing.T) {
+	srv, st := testServer(t)
+	addAdmin(t, st)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	body := rec.Body.String()
+	for _, want := range []string{`<header class="onboard-brand">`, `<main class="auth-card">`, `<h1 class="sr-only">Sign in to netis</h1>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("login page missing %s", want)
+		}
+	}
+}
