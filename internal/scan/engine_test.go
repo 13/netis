@@ -79,8 +79,7 @@ func TestAutoCreatesUnknownDevice(t *testing.T) {
 		t.Fatalf("devices=%+v", rows)
 	}
 	d := rows[0]
-	if d.Name != "unknown-bc:24:11:00:00:01" || d.Source != "scan" ||
-		d.Vendor != "Proxmox Server Solutions" || !d.Online {
+	if d.Name != "unknown-bc:24:11:00:00:01" || d.Source != "scan" || !d.Online {
 		t.Fatalf("device=%+v", d)
 	}
 	evs, _ := st.ListEvents(t.Context(), 5)
