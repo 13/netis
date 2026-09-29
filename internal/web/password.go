@@ -42,24 +42,24 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// so guesses are limited per account the same way logins are.
 	key := "change:" + strconv.FormatInt(u.ID, 10)
 	if !s.userLimiter.reserve(key) {
-		s.settingsError(w, r, "users", http.StatusTooManyRequests, "too many attempts, try again later")
+		s.settingsError(w, r, "account", http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
 	wrong := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(r.FormValue("current_password"))) != nil
 	s.userLimiter.done(key, wrong)
 	if wrong {
-		s.settingsError(w, r, "users", http.StatusForbidden, "current password is wrong")
+		s.settingsError(w, r, "account", http.StatusForbidden, "current password is wrong")
 		return
 	}
 	next, msg := validNewPassword(r)
 	if msg != "" {
-		s.settingsError(w, r, "users", http.StatusBadRequest, msg)
+		s.settingsError(w, r, "account", http.StatusBadRequest, msg)
 		return
 	}
 	if !s.setPassword(w, r, u.ID, next) {
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/account", http.StatusSeeOther)
 }
 
 // handleUserPasswordReset sets another user's password without knowing the old
@@ -88,7 +88,7 @@ func (s *Server) handleUserPasswordReset(w http.ResponseWriter, r *http.Request)
 	if !s.setPassword(w, r, id, next) {
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
 }
 
 // validNewPassword reads and checks the new-password fields, returning what

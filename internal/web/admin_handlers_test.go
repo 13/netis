@@ -96,7 +96,7 @@ func TestSubnetUpdateAndDelete(t *testing.T) {
 	wantRedirect(t, authedPost(t, srv, st, path, url.Values{
 		"cidr": {"10.0.0.7/24"}, "name": {"renamed"}, "kind": {"wireguard"},
 		"scan_enabled": {"on"}, "scan_interval_sec": {"300"},
-	}), "/settings?tab=subnets")
+	}), "/settings/network")
 	sn, err := st.GetSubnet(t.Context(), snID)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestSubnetUpdateAndDelete(t *testing.T) {
 	}
 
 	wantRedirect(t, authedPost(t, srv, st, fmt.Sprintf("/settings/subnets/%d/delete", other), nil),
-		"/settings?tab=subnets")
+		"/settings/network")
 	if _, err := st.GetSubnet(t.Context(), other); err == nil {
 		t.Error("subnet still present after delete")
 	}
@@ -138,7 +138,7 @@ func TestUserCreate(t *testing.T) {
 	pw := strings.Repeat("p", minPasswordLen)
 
 	wantRedirect(t, authedPost(t, srv, st, "/settings/users",
-		url.Values{"username": {" alice "}, "password": {pw}, "role": {"viewer"}}), "/settings?tab=users")
+		url.Values{"username": {" alice "}, "password": {pw}, "role": {"viewer"}}), "/settings/users")
 	u, ok, _ := st.GetUserByName(t.Context(), "alice")
 	if !ok || u.Role != "viewer" {
 		t.Fatalf("created user = %+v ok=%v", u, ok)

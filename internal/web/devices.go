@@ -75,23 +75,7 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	q := strings.ToLower(r.URL.Query().Get("q"))
-	if q != "" {
-		filtered := rows[:0]
-		for _, row := range rows {
-			var ips []string
-			for _, ip := range row.IPs {
-				ips = append(ips, ip.IP)
-			}
-			hay := strings.ToLower(row.Name + " " + strings.Join(ips, " ") + " " +
-				strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " ") + " " +
-				row.Vendor + " " + row.Model + " " + row.Function)
-			if strings.Contains(hay, q) {
-				filtered = append(filtered, row)
-			}
-		}
-		rows = filtered
-	}
+	rows = filterDevices(rows, r.URL.Query().Get("q"))
 
 	sortKey, dir := parseDeviceSort(r)
 	sortDeviceRows(rows, sortKey, dir)
@@ -108,6 +92,31 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 
 	u, _ := userFrom(r)
 	s.render(w, r, views.DeviceList(u.Username, rows, r.URL.Query().Get("q"), sortKey, dir, total))
+}
+
+// filterDevices keeps the rows whose name, IPs, MACs, tags, vendor, model
+// or function contain q, ignoring case. An empty q keeps everything. The
+// device list filter and the command palette search both use it, so they
+// find the same devices.
+func filterDevices(rows []store.DeviceRow, q string) []store.DeviceRow {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return rows
+	}
+	filtered := rows[:0]
+	for _, row := range rows {
+		var ips []string
+		for _, ip := range row.IPs {
+			ips = append(ips, ip.IP)
+		}
+		hay := strings.ToLower(row.Name + " " + strings.Join(ips, " ") + " " +
+			strings.Join(row.MACs, " ") + " " + strings.Join(row.TagNames, " ") + " " +
+			row.Vendor + " " + row.Model + " " + row.Function)
+		if strings.Contains(hay, q) {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
 }
 
 // lowestIP returns the device's numerically smallest IP, or the zero Addr

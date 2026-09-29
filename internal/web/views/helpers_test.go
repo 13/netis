@@ -1,6 +1,8 @@
 package views
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,10 +36,36 @@ func TestTokenExpiry(t *testing.T) {
 	cases := []struct {
 		exp  *string
 		want string
-	}{{nil, "never"}, {&future, "in 29d"}, {&past, "expired 2d ago"}}
+	}{{nil, "never"}, {&future, ">in 29d</time>"}, {&past, "expired <time"}}
 	for _, c := range cases {
-		if got := tokenExpiry(store.APIToken{ExpiresAt: c.exp}); got != c.want {
-			t.Errorf("tokenExpiry(%v)=%q want %q", c.exp, got, c.want)
+		var b strings.Builder
+		if err := tokenExpiry(store.APIToken{ExpiresAt: c.exp}).Render(context.Background(), &b); err != nil {
+			t.Fatal(err)
 		}
+		if !strings.Contains(b.String(), c.want) {
+			t.Errorf("tokenExpiry(%v)=%q want %q", c.exp, b.String(), c.want)
+		}
+	}
+}
+
+// Every timestamp is a <time> carrying the machine-readable instant and the
+// absolute time on hover, with the relative time as its text; an empty one
+// is a dash and never an empty cell.
+func TestTimeComponent(t *testing.T) {
+	ts := time.Now().UTC().Add(-5 * time.Minute).Truncate(time.Second)
+	var b strings.Builder
+	if err := Time(ts.Format(time.RFC3339)).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	want := `<time datetime="` + ts.Format(time.RFC3339) + `" title="` + ts.Format("2 Jan 2006, 15:04 UTC") + `">5m ago</time>`
+	if b.String() != want {
+		t.Errorf("Time = %s\nwant   %s", b.String(), want)
+	}
+	b.Reset()
+	if err := Time("").Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "—") {
+		t.Errorf("empty Time = %q, want a dash", b.String())
 	}
 }

@@ -167,8 +167,18 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("GET /api/subnets", s.handleAPISubnets)
 	s.mux.HandleFunc("GET /api/events", s.handleAPIEvents)
 	s.mux.HandleFunc("GET /api/status", s.handleAPIStatus)
+	s.mux.HandleFunc("GET /api/search", s.handleSearch)
 	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
 	s.mux.HandleFunc("GET /settings", s.handleSettingsPage)
+	s.mux.HandleFunc("GET /settings/account", s.handleSettingsSection("account"))
+	s.mux.HandleFunc("GET /settings/sessions", s.handleSettingsSection("sessions"))
+	s.mux.HandleFunc("GET /settings/tokens", s.handleSettingsSection("tokens"))
+	s.mux.HandleFunc("GET /settings/network", s.requireAdmin(s.handleSettingsSection("network")))
+	s.mux.HandleFunc("GET /settings/integrations", s.requireAdmin(s.handleSettingsSection("integrations")))
+	s.mux.HandleFunc("GET /settings/notifications", s.requireAdmin(s.handleSettingsSection("notifications")))
+	s.mux.HandleFunc("GET /settings/users", s.requireAdmin(s.handleSettingsSection("users")))
+	s.mux.HandleFunc("GET /settings/audit", s.requireAdmin(s.handleSettingsSection("audit")))
+	s.mux.HandleFunc("GET /settings/system", s.requireAdmin(s.handleSettingsSection("system")))
 	s.mux.HandleFunc("POST /settings/subnets", s.requireAdmin(s.handleSubnetCreate))
 	s.mux.HandleFunc("POST /settings/subnets/{id}", s.requireAdmin(s.handleSubnetUpdate))
 	s.mux.HandleFunc("POST /settings/subnets/{id}/delete", s.requireAdmin(s.handleSubnetDelete))
@@ -340,7 +350,8 @@ func securityHeaders(next http.Handler) http.Handler {
 // client that hung up mid-page; discarding them entirely meant a genuine
 // template failure left no trace at all.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, c templ.Component) {
-	if err := c.Render(views.WithAdmin(r.Context(), isAdmin(r)), w); err != nil {
+	ctx := views.WithPath(views.WithAdmin(r.Context(), isAdmin(r)), r.URL.Path)
+	if err := c.Render(ctx, w); err != nil {
 		slog.Warn("rendering response failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	}
 }

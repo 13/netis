@@ -47,7 +47,7 @@ func (s *Server) gridCells(ctx context.Context, sn store.Subnet) ([]views.GridCe
 			c.Kind = o.Kind
 			c.Title = strings.TrimSpace(fmt.Sprintf("%s — %s %s", ip, o.DeviceName, o.MAC))
 			if o.LastSeen != "" {
-				c.Title += " last seen " + o.LastSeen
+				c.Title += " last seen " + views.RelTime(o.LastSeen)
 			}
 			switch {
 			case o.Count > 1:

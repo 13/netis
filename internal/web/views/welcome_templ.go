@@ -146,13 +146,15 @@ func WelcomeIntegrations(username string, values map[string]string) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<h1>Connect an integration</h1><p class=\"muted\">Optional — link Proxmox, WireGuard, or a DHCP server (Pi-hole, AdGuard Home, OPNsense). You can do this later in Settings.</p><form method=\"post\" action=\"/welcome/integrations\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<h1>Connect an integration</h1><p class=\"muted\">Optional — link Proxmox, WireGuard, or a DHCP server (Pi-hole, AdGuard Home, OPNsense). You can do this later in Settings.</p><form method=\"post\" action=\"/welcome/integrations\" class=\"integ-list\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = integrationsFields(values).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
+			for _, it := range Integrations(map[string]bool{}, nil) {
+				templ_7745c5c3_Err = IntegrationPanel(it, values, false).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<button type=\"submit\" class=\"btn btn-primary\">Save &amp; finish</button></form><form method=\"post\" action=\"/welcome/skip\"><button type=\"submit\" class=\"btn btn-quiet\">Skip for now</button></form>")
 			if templ_7745c5c3_Err != nil {

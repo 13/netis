@@ -1,0 +1,109 @@
+package views
+
+// paletteEntry is one fixed command-palette result: a page to open (Href) or
+// an action palette.js knows by name (Action). Keys are extra words it
+// matches on.
+type paletteEntry struct {
+	Group, Label, Icon, Href, Action, Keys, Shortcut string
+}
+
+// paletteEntries are the palette's fixed results for the signed-in role.
+// Admin-only pages and actions are left out for a viewer, as they are from
+// the navigation.
+func paletteEntries(admin bool) []paletteEntry {
+	out := []paletteEntry{
+		{Group: "Pages", Label: "Dashboard", Icon: "layout-dashboard", Href: "/", Keys: "home overview", Shortcut: "g h"},
+		{Group: "Pages", Label: "Devices", Icon: "monitor", Href: "/devices", Keys: "hosts inventory", Shortcut: "g d"},
+		{Group: "Pages", Label: "Subnets", Icon: "network", Href: "/subnets", Keys: "networks grid", Shortcut: "g s"},
+		{Group: "Pages", Label: "Events", Icon: "activity", Href: "/events", Keys: "history log", Shortcut: "g e"},
+		{Group: "Settings", Label: "Account", Icon: "user", Href: "/settings/account", Keys: "profile password sso"},
+		{Group: "Settings", Label: "Sessions", Icon: "clock", Href: "/settings/sessions", Keys: "sign out browsers"},
+		{Group: "Settings", Label: "API tokens", Icon: "key", Href: "/settings/tokens", Keys: "token script"},
+	}
+	if admin {
+		out = append(out,
+			paletteEntry{Group: "Settings", Label: "Network", Icon: "network", Href: "/settings/network", Keys: "subnets scanning offline presence manage"},
+			paletteEntry{Group: "Settings", Label: "Integrations", Icon: "refresh-cw", Href: "/settings/integrations", Keys: "proxmox wireguard pihole adguard opnsense dhcp"},
+			paletteEntry{Group: "Settings", Label: "Notifications", Icon: "bell", Href: "/settings/notifications", Keys: "webhook ntfy alerts"},
+			paletteEntry{Group: "Settings", Label: "Users", Icon: "user", Href: "/settings/users", Keys: "accounts roles"},
+			paletteEntry{Group: "Settings", Label: "Audit log", Icon: "list", Href: "/settings/audit", Keys: "audit history changes"},
+			paletteEntry{Group: "Settings", Label: "System", Icon: "server", Href: "/settings/system", Keys: "retention backups about version"},
+			paletteEntry{Group: "Actions", Label: "New device", Icon: "plus", Action: "new-device", Keys: "add create", Shortcut: "n"},
+			paletteEntry{Group: "Actions", Label: "Scan all subnets", Icon: "radar", Action: "scan-all", Keys: "scan now sweep"},
+		)
+	}
+	return append(out,
+		paletteEntry{Group: "Actions", Label: "Keyboard shortcuts", Icon: "keyboard", Action: "shortcuts", Keys: "help keys", Shortcut: "?"},
+		paletteEntry{Group: "Actions", Label: "Theme: follow system", Icon: "sun-moon", Action: "theme-system", Keys: "appearance auto"},
+		paletteEntry{Group: "Actions", Label: "Theme: light", Icon: "sun", Action: "theme-light", Keys: "appearance"},
+		paletteEntry{Group: "Actions", Label: "Theme: dark", Icon: "moon", Action: "theme-dark", Keys: "appearance"},
+	)
+}
+
+// palette is the command palette (Ctrl/⌘-K) and the shortcuts help, both
+// native dialogs that palette.js opens. Without JavaScript neither ever
+// opens and the buttons that would open them stay hidden.
+templ palette() {
+	<dialog id="palette" class="palette" aria-label="Search and jump to">
+		<div class="palette-input">
+			@Icon("search", "icon-lg")
+			<input
+				id="palette-q"
+				type="text"
+				role="combobox"
+				aria-expanded="true"
+				aria-controls="palette-list"
+				aria-autocomplete="list"
+				aria-label="Search devices, subnets and pages"
+				placeholder="Search devices, subnets, pages…"
+				autocomplete="off"
+				spellcheck="false"
+			/>
+			<kbd>Esc</kbd>
+		</div>
+		<ul id="palette-list" class="palette-list" role="listbox" aria-label="Results"></ul>
+		<p class="palette-empty" hidden>No matches.</p>
+		<div class="palette-foot">
+			<span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
+			<span><kbd>Enter</kbd> open</span>
+			<span><kbd>Esc</kbd> close</span>
+		</div>
+		<template id="palette-static">
+			for _, e := range paletteEntries(IsAdmin(ctx)) {
+				<li data-group={ e.Group } data-icon={ e.Icon } data-href={ e.Href } data-action={ e.Action } data-keys={ e.Keys } data-shortcut={ e.Shortcut }>{ e.Label }</li>
+			}
+		</template>
+	</dialog>
+	<dialog id="shortcuts" class="dialog" aria-labelledby="shortcuts-title">
+		<div class="dh">
+			<h3 id="shortcuts-title">Keyboard shortcuts</h3>
+			<button type="button" class="btn btn-quiet btn-icon btn-sm" data-dialog-close aria-label="Close">
+				@Icon("x", "")
+			</button>
+		</div>
+		<div class="db">
+			<dl class="keys">
+				<dt><kbd data-mod-key>Ctrl K</kbd></dt>
+				<dd>Search and jump to</dd>
+				<dt><kbd>/</kbd></dt>
+				<dd>Search this page, or open search</dd>
+				<dt><kbd>g</kbd> <kbd>h</kbd></dt>
+				<dd>Go to the dashboard</dd>
+				<dt><kbd>g</kbd> <kbd>d</kbd></dt>
+				<dd>Go to devices</dd>
+				<dt><kbd>g</kbd> <kbd>s</kbd></dt>
+				<dd>Go to subnets</dd>
+				<dt><kbd>g</kbd> <kbd>e</kbd></dt>
+				<dd>Go to events</dd>
+				if IsAdmin(ctx) {
+					<dt><kbd>n</kbd></dt>
+					<dd>New device</dd>
+				}
+				<dt><kbd>?</kbd></dt>
+				<dd>Show these shortcuts</dd>
+				<dt><kbd>Esc</kbd></dt>
+				<dd>Close a dialog</dd>
+			</dl>
+		</div>
+	</dialog>
+}

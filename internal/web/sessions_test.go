@@ -74,7 +74,7 @@ func TestSettingsListsOwnSessionsOnly(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	addUser(t, st, "kim", "kim-password", "viewer", "kim-token")
 	// authedGet creates admin "ben" with session "testtok".
-	body := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	body := authedGet(t, srv, st, "/settings/sessions").Body.String()
 
 	if !strings.Contains(body, "this browser") {
 		t.Error("the session making the request should be marked")

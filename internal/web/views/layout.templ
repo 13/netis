@@ -2,18 +2,22 @@ package views
 
 import "netis/internal/buildinfo"
 
-// footer carries the running version, linking to the About tab for the full
-// build detail. It reads buildinfo directly rather than taking a parameter:
-// the version is the same on every page, so threading it through Layout's
-// callers would add an argument that never varies.
+// footer carries the running version. For an admin it links to the System
+// settings page with the full build detail; a viewer has no such page. It
+// reads buildinfo directly rather than taking a parameter: the version is the
+// same on every page.
 templ footer() {
 	<footer class="footer">
-		<a href="/settings?tab=about" title="Build details">netis { buildinfo.Get().Label() }</a>
+		if IsAdmin(ctx) {
+			<a href="/settings/system" title="Build details">netis { buildinfo.Get().Label() }</a>
+		} else {
+			<span>netis { buildinfo.Get().Label() }</span>
+		}
 	</footer>
 }
 
 // themeBootstrap sets data-theme before first paint so the page never
-// flashes the wrong theme. A choice the user made with the toggle wins;
+// flashes the wrong theme. A choice the user made in the account menu wins;
 // otherwise the OS preference decides, dark when it states none. theme.js
 // keeps following the OS after load. Without JavaScript no data-theme is set
 // and app.css follows prefers-color-scheme on its own.
@@ -36,12 +40,143 @@ templ themeBootstrap() {
 	</script>
 }
 
+// navItem is one link in the sidebar or the mobile tab bar, marked
+// aria-current when it is the page being shown.
+templ navItem(href, icon, label string) {
+	<a
+		class="nav-item"
+		href={ templ.SafeURL(href) }
+		if navActive(currentPath(ctx), href) || (href == "/settings/account" && navActive(currentPath(ctx), "/settings")) {
+			aria-current="page"
+		}
+	>
+		@Icon(icon, "icon-lg")
+		<span class="lbl">{ label }</span>
+	</a>
+}
+
+// searchButton opens the command palette. It is hidden until palette.js
+// runs, since without JavaScript there is no palette to open.
+templ searchButton(class string) {
+	<button type="button" class={ "search-btn", class } data-palette-open hidden aria-label="Search and jump to">
+		@Icon("search", "")
+		<span class="lbl">Search</span>
+		<kbd class="lbl" data-mod-key>Ctrl K</kbd>
+	</button>
+}
+
+// accountItems is the account menu's content, in the sidebar's account menu
+// and the mobile More sheet: who is signed in, their settings, the theme
+// choice and sign out. The theme choice and the shortcuts entry need
+// JavaScript and stay hidden until theme.js and palette.js show them.
+templ accountItems(username string) {
+	<div class="menu-who">
+		<span class="menu-name">{ username }</span>
+		if IsAdmin(ctx) {
+			<span class="muted">Admin</span>
+		} else {
+			<span class="muted">Viewer</span>
+		}
+	</div>
+	<a class="menu-item" href="/settings/account">
+		@Icon("user", "")
+		Account settings
+	</a>
+	<div class="menu-theme" data-theme-choice hidden>
+		<span class="menu-label">Theme</span>
+		<div class="seg" role="group" aria-label="Theme">
+			<button type="button" data-theme-set="system">
+				@Icon("sun-moon", "")
+				System
+			</button>
+			<button type="button" data-theme-set="light">
+				@Icon("sun", "")
+				Light
+			</button>
+			<button type="button" data-theme-set="dark">
+				@Icon("moon", "")
+				Dark
+			</button>
+		</div>
+	</div>
+	<button type="button" class="menu-item" data-shortcuts-open hidden>
+		@Icon("keyboard", "")
+		Keyboard shortcuts
+	</button>
+	<form method="post" action="/logout" class="menu-form">
+		<button type="submit" class="menu-item">
+			@Icon("log-out", "")
+			Sign out
+		</button>
+	</form>
+}
+
+// sidebar is the desktop navigation: the mark, search, the four sections,
+// and at the bottom Settings and the account menu.
+templ sidebar(username string) {
+	<aside class="sidebar">
+		<a href="/" class="brand" aria-label="netis dashboard">
+			<img class="mark" src="/static/icon.svg" alt=""/>
+			<span class="lbl">netis</span>
+		</a>
+		@searchButton("")
+		<nav aria-label="Main">
+			@navItem("/", "layout-dashboard", "Dashboard")
+			@navItem("/devices", "monitor", "Devices")
+			@navItem("/subnets", "network", "Subnets")
+			@navItem("/events", "activity", "Events")
+		</nav>
+		<div class="sidebar-foot">
+			@navItem("/settings/account", "settings", "Settings")
+			<details class="acct">
+				<summary class="nav-item" aria-label={ "Account: " + username }>
+					@Icon("user", "icon-lg")
+					<span class="lbl acct-name">{ username }</span>
+					@Icon("chevron-down", "lbl acct-chev")
+				</summary>
+				<div class="menu">
+					@accountItems(username)
+				</div>
+			</details>
+		</div>
+	</aside>
+}
+
+// tabbar is the phone navigation along the bottom of the screen. More opens
+// a sheet with Settings and the account menu.
+templ tabbar(username string) {
+	<nav class="tabbar" aria-label="Main">
+		@navItem("/", "layout-dashboard", "Dashboard")
+		@navItem("/devices", "monitor", "Devices")
+		@navItem("/subnets", "network", "Subnets")
+		@navItem("/events", "activity", "Events")
+		<details class="more">
+			<summary
+				class="nav-item"
+				if navActive(currentPath(ctx), "/settings") {
+					aria-current="page"
+				}
+			>
+				@Icon("ellipsis", "icon-lg")
+				<span class="lbl">More</span>
+			</summary>
+			<div class="menu sheet">
+				<a class="menu-item" href="/settings/account">
+					@Icon("settings", "")
+					Settings
+				</a>
+				@accountItems(username)
+			</div>
+		</details>
+	</nav>
+}
+
 templ Layout(title string, username string) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 			<title>{ title } — netis</title>
 			@themeBootstrap()
 			@appIcons()
@@ -49,43 +184,29 @@ templ Layout(title string, username string) {
 			<script src="/static/htmx.min.js"></script>
 			<script src="/static/sse.js"></script>
 		</head>
-		<body hx-ext="sse" sse-connect="/events/stream">
-			<nav class="top" aria-label="Main">
-				<a href="/" class="brand"><span class="dot"></span> netis</a>
-				<div class="links">
-					<a href="/">Dashboard</a>
-					<a href="/devices">Devices</a>
-					<a href="/subnets">Subnets</a>
-					<a href="/events">Events</a>
-					<a href="/settings">Settings</a>
-				</div>
-				<div class="right">
-					<span class="who">
-						@Icon("user", "")
-						{ username }
-					</span>
-					<button type="button" id="theme-toggle" class="btn btn-quiet btn-sm theme-toggle" aria-label="Toggle theme">
-						@Icon("sun", "i-sun")
-						@Icon("moon", "i-moon")
-						<span class="tglabel">Theme</span>
-					</button>
-					<form method="post" action="/logout" class="logout">
-						<button type="submit" class="btn btn-quiet btn-sm">
-							@Icon("log-out", "")
-							Logout
-						</button>
-					</form>
-				</div>
-			</nav>
-			<main>
-				{ children... }
-			</main>
-			@footer()
+		<body class="app" hx-ext="sse" sse-connect="/events/stream">
+			<a class="skip" href="#main">Skip to content</a>
+			@sidebar(username)
+			<div class="page">
+				<header class="topbar">
+					<a href="/" class="brand" aria-label="netis dashboard"><img class="mark" src="/static/icon.svg" alt=""/></a>
+					<span class="topbar-title">{ title }</span>
+					@searchButton("btn-icon")
+				</header>
+				<main id="main">
+					{ children... }
+				</main>
+				@footer()
+			</div>
+			@tabbar(username)
 			<div id="modal"></div>
 			<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+			@palette()
 			<script src="/static/theme.js"></script>
 			<script src="/static/dialog.js"></script>
 			<script src="/static/toasts.js"></script>
+			<script src="/static/time.js"></script>
+			<script src="/static/palette.js"></script>
 		</body>
 	</html>
 }

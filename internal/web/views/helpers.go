@@ -3,8 +3,6 @@ package views
 import (
 	"fmt"
 	"time"
-
-	"netis/internal/store"
 )
 
 // relTime renders an RFC3339 timestamp as a short relative string: "5m ago"
@@ -58,15 +56,6 @@ func orDash(v *string) string {
 		return "—"
 	}
 	return *v
-}
-
-// sessionStarted describes when a session began. Sessions predating the
-// created_at column have no answer, and saying so beats inventing one.
-func sessionStarted(sess store.Session) string {
-	if sess.CreatedAt == nil || *sess.CreatedAt == "" {
-		return "unknown"
-	}
-	return relTime(*sess.CreatedAt)
 }
 
 // shortAgent trims a user-agent string to something a table cell can hold.

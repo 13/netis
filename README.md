@@ -81,25 +81,38 @@ lets a phone or desktop browser install netis as a standalone app.
 - **Events** — a filterable log of device-new/online/offline/ip-changed/
   scan-error events, and device-missing/device-returned for integration
   devices that leave or come back upstream.
-- **Settings** — subnet CRUD, scan interval, offline threshold, Proxmox
-  and WireGuard integration credentials, user management (add, delete,
-  change your own password, reset someone else's — passwords are 8 to 72
-  bytes long, and changing one signs that account's other sessions out), your
-  own session list with per-session revoke and a sign-out-everywhere-else
-  button, an **API tokens** tab for your own tokens (admins see and can
-  revoke everyone's), and an **About**
-  tab with the running version, build number, commit, database backend and
-  dependency versions. Every page's footer shows the version and links there.
+- **Settings** — two areas. **Account** (everyone): your profile, changing
+  your password (8 to 72 bytes; changing it signs your other sessions out),
+  the SSO link, your sessions with per-session revoke and a
+  sign-out-everywhere-else button, and your **API tokens** (admins see and can
+  revoke everyone's). **Admin** (admins only): **Network** — the one place
+  subnets are added, edited and removed, plus the offline threshold, presence
+  without ping and defaults for new subnets; **Integrations** — one panel per
+  integration with its status, last run, item count, Run now and its settings
+  behind Configure; **Notifications**; **Users** (add, delete, change role,
+  reset a password); **Audit log**; and **System** — retention, backup status
+  and the running version, build number, commit, database backend and
+  dependency versions. An admin's page footer shows the version and links to
+  System. Old `/settings?tab=…` links redirect to the new pages.
+
+Navigation is a sidebar on wide screens (folding to icons on tablets) and a
+bottom tab bar on phones. **Ctrl-K** (⌘-K on a Mac), or the search button,
+opens a command palette that jumps to a device by name, IP or MAC, a subnet, a
+page, or an action (new device, scan all — admins only). Other shortcuts:
+`/` focuses the page's search field (or opens the palette), `g d` / `g s` /
+`g e` / `g h` go to devices, subnets, events and the dashboard, `n` opens a new
+device (admins), and `?` lists them all. Every time is shown relative ("5m
+ago") with the exact time, in your time zone, on hover.
 
 The theme follows the operating system's light/dark preference, including
-when it changes, until you pick one with the theme button; that choice is then
-remembered in the browser. Deleting a device, subnet, user, link or custom
+when it changes, until you pick Light or Dark in the account menu (System
+goes back to following the OS); that choice is remembered in the browser. Deleting a device, subnet, user, link or custom
 field, and revoking sessions, asks for confirmation first. The device search
 and the New/Edit device forms also work with JavaScript turned off.
 
 Users are either `admin` or `viewer`. Viewers see the inventory, the subnets,
-events and each integration's status, and manage their own password, API tokens and
-sessions; they do not see integration settings, the user list, or any of the
+events and each integration's status on the dashboard, and manage their own password, API tokens and
+sessions; they do not see the Admin settings area, or any of the
 edit, delete, scan, Wake-on-LAN and port-scan controls. An admin can change
 any user's role from Settings → Users; netis refuses to demote the last admin,
 just as it refuses to delete it. A role change applies to that user's next
@@ -108,7 +121,7 @@ request, without signing them out.
 ### Audit log
 
 Every state-changing request that reaches netis is recorded in an audit log,
-shown to admins under Settings → **Audit**: when, who, the action
+shown to admins under Settings → **Audit log**: when, who, the action
 (`device.update`, `user.role`, `login`, ...), what it acted on, the HTTP
 status it was answered with and the client address (honouring
 `NETIS_TRUSTED_PROXIES`). Refused attempts are recorded too — a failed login, a
@@ -188,7 +201,7 @@ were rather than counted as misses.
   which time the kernel has re-probed a stale entry and dropped it if nobody
   answered. A host that left within the last half minute can therefore look
   present for one more sweep. Turn it off with **Presence without ping** in
-  Settings > General. Routed subnets have no ARP entries, so it does nothing
+  Settings → Network. Routed subnets have no ARP entries, so it does nothing
   there.
 - **Randomized MACs.** A MAC with the locally administered bit set (phones'
   "Private Wi-Fi Address") gets a *private MAC* badge on the device list and
@@ -385,7 +398,7 @@ first-run setup for scanning to do anything.
 ## JSON API and metrics
 
 The JSON API under `/api/` accepts either the session cookie the pages use or
-a personal **API token**. Create one under Settings > API tokens: it is shown
+a personal **API token**. Create one under Settings → API tokens: it is shown
 once (`netis_` followed by 43 characters), only its SHA-256 digest is stored,
 and it acts with your role: a viewer's token can read, an admin's can also
 write. Tokens can expire (default 90 days, 0 = never), are revoked from the
@@ -404,6 +417,7 @@ curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
 | `GET /api/subnets` | any | configured subnets |
 | `GET /api/events?limit=N` | any | recent events, newest first (default 100, max 1000) |
 | `GET /api/status` | any | version, uptime, backend, device/subnet counts, integration results |
+| `GET /api/search?q=` | any | up to 8 devices (name, IP, MAC, tag, vendor, model or function) and 8 subnets (name or CIDR) matching `q`; what the command palette uses |
 | `GET /api/export/devices.csv` | any | inventory as CSV (one row per device; MACs, IPs, tags `;`-joined) |
 | `GET /api/export/devices.json` | any | inventory as JSON, with each interface's MAC and addresses |
 | `POST /api/devices` | admin | create a device |
@@ -574,7 +588,7 @@ login of an unknown identity creates a user named after its
 login is refused rather than attached to it: many providers let users choose
 their own username, and matching on it would let someone call themselves
 `admin` and take over that account. To use SSO with an existing account, sign
-in with its password and press **Link SSO account** in Settings → Users.
+in with its password and press **Link SSO account** in Settings → Account.
 
 SSO-created users have no usable password; an admin can give them one with the
 usual reset. SSO is only offered once the first admin exists: that account is
@@ -766,7 +780,7 @@ The first backup is due one interval after the newest one already in the
 directory, so restarts do not take extra backups and an instance that was
 stopped for longer catches up at once. A failed backup is retried after at most
 an hour, logged in full, and announced once as a `scan_error` event. Settings →
-About shows the last backup (or the failure), and `/metrics` exports
+System shows the last backup (or the failure), and `/metrics` exports
 `netis_last_backup_timestamp_seconds` and `netis_last_backup_success` for
 alerting on stale backups.
 

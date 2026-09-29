@@ -135,12 +135,12 @@ func TestScanButtonsRendered(t *testing.T) {
 		t.Error("device list toolbar missing Scan all button")
 	}
 
-	settings := authedGet(t, srv, st, "/settings").Body.String()
+	settings := authedGet(t, srv, st, "/settings/network").Body.String()
 	if !strings.Contains(settings, `hx-post="/subnets/1/scan"`) {
-		t.Error("settings row missing scan button")
+		t.Error("network settings row missing scan button")
 	}
-	if !strings.Contains(settings, "Auto-scan") {
-		t.Error("settings should relabel Scan enabled -> Auto-scan")
+	if !strings.Contains(settings, "Scan periodically") {
+		t.Error("network settings should say Scan periodically, not Scan enabled")
 	}
 }
 

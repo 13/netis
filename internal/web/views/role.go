@@ -1,6 +1,9 @@
 package views
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 type adminKey struct{}
 
@@ -18,4 +21,28 @@ func WithAdmin(ctx context.Context, admin bool) context.Context {
 func IsAdmin(ctx context.Context) bool {
 	admin, _ := ctx.Value(adminKey{}).(bool)
 	return admin
+}
+
+type pathKey struct{}
+
+// WithPath records the request path on ctx, so the navigation can mark the
+// page it is on without every page passing it along.
+func WithPath(ctx context.Context, path string) context.Context {
+	return context.WithValue(ctx, pathKey{}, path)
+}
+
+// currentPath is the path WithPath recorded, or "" when rendered without one.
+func currentPath(ctx context.Context) string {
+	p, _ := ctx.Value(pathKey{}).(string)
+	return p
+}
+
+// navActive reports whether a navigation link to href belongs to the page at
+// path: the dashboard only on "/", every other section on its own path and
+// anything under it (a device's page is under Devices).
+func navActive(path, href string) bool {
+	if href == "/" {
+		return path == "/"
+	}
+	return path == href || strings.HasPrefix(path, href+"/")
 }

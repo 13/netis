@@ -152,5 +152,5 @@ func (s *Server) handleTokenRevoke(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=tokens", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/tokens", http.StatusSeeOther)
 }

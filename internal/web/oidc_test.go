@@ -385,11 +385,11 @@ func TestOIDCLinkExistingAccount(t *testing.T) {
 	}
 	cookie := &http.Cookie{Name: "netis_session", Value: "evetok"}
 
-	// The users tab offers the link.
-	req := httptest.NewRequest("GET", "/settings?tab=users", nil)
+	// The account page offers the link.
+	req := httptest.NewRequest("GET", "/settings/account", nil)
 	req.AddCookie(cookie)
 	if body := serve(srv, req).Body.String(); !strings.Contains(body, `action="/settings/sso/link"`) {
-		t.Fatal("users tab lacks the SSO link form")
+		t.Fatal("account page lacks the SSO link form")
 	}
 
 	req = httptest.NewRequest("POST", "/settings/sso/link", nil)
@@ -406,7 +406,7 @@ func TestOIDCLinkExistingAccount(t *testing.T) {
 	flow, loc = startFlow(t, srv, req)
 	code, state = idp.authorize(t, loc, identity{sub: "u-eve", username: "eve.sso"})
 	rec := callback(srv, code, state, flow, cookie)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/settings?tab=users" {
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/settings/account" {
 		t.Fatalf("link callback: code=%d loc=%q body=%s", rec.Code, rec.Header().Get("Location"), rec.Body)
 	}
 	if u, ok, _ := st.GetUserByOIDC(t.Context(), idp.srv.URL, "u-eve"); !ok || u.ID != eveID {

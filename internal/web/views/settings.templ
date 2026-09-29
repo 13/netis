@@ -1,8 +1,6 @@
 package views
 
 import (
-	"fmt"
-
 	"netis/internal/buildinfo"
 	"netis/internal/netdetect"
 	"netis/internal/store"
@@ -10,7 +8,7 @@ import (
 
 var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 
-// SettingsData is the view-model for the settings page. Values never contains
+// SettingsData is the view-model for a settings page. Values never contains
 // an integration secret (proxmox_secret, pihole_password, adguard_password,
 // opnsense_secret) — those fields always render blank so the stored secrets
 // are never echoed back.
@@ -28,7 +26,9 @@ type SettingsData struct {
 	// Configured says which integrations have settings, by name. Viewers get
 	// this and not Values, which is left empty for them.
 	Configured map[string]bool
-	ActiveTab  string
+	// ActiveTab is the settings page shown: one of the settingsSections
+	// keys ("account", "network", ...).
+	ActiveTab string
 	Detected   []netdetect.Detected
 	Statuses   map[string]store.IntegrationStatus
 	About      AboutData
@@ -62,670 +62,116 @@ type AboutData struct {
 	Uptime  string
 	Backend string // "sqlite" or "postgres"
 	Now     string
-	Backup  string // scheduled backup status, one line
+	Backup  BackupView
 }
 
-templ tabLink(active, tab, label string) {
-	if active == tab {
-		<a class="tab active" href={ templ.URL("/settings?tab=" + tab) }>{ label }</a>
-	} else {
-		<a class="tab" href={ templ.URL("/settings?tab=" + tab) }>{ label }</a>
+// BackupView is the scheduled-backup line on the About tab. Note, when set,
+// is the whole story (backups off, unsupported, none yet); otherwise At is
+// when the last backup ran, File what it wrote, and Failed whether that run
+// failed.
+type BackupView struct {
+	Note   string
+	At     string
+	File   string
+	Failed bool
+}
+
+// settingsSection is one page of Settings in the secondary navigation.
+type settingsSection struct {
+	Key, Label string
+}
+
+// accountSections are the settings every account has; adminSections only an
+// admin sees, and only an admin can open.
+var (
+	accountSections = []settingsSection{
+		{"account", "Profile"}, {"sessions", "Sessions"}, {"tokens", "API tokens"},
 	}
-}
+	adminSections = []settingsSection{
+		{"network", "Network"}, {"integrations", "Integrations"}, {"notifications", "Notifications"},
+		{"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
+	}
+)
 
-templ proxmoxFields(values map[string]string) {
-	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
-	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-	<label>Secret <input type="password" name="proxmox_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="proxmox_insecure"
-			if values["proxmox_insecure"] == "1" {
-				checked
+// settingsTitle is the heading of the settings page for key.
+func settingsTitle(key string) string {
+	for _, sec := range append(accountSections, adminSections...) {
+		if sec.Key == key {
+			if key == "account" {
+				return "Account"
 			}
-		/>
-		Skip TLS verification
-	</label>
-}
-
-templ wireguardFields(values map[string]string) {
-	<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
-	<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
-	<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
-	<label>Known hosts path <input type="text" name="wg_ssh_known_hosts" value={ values["wg_ssh_known_hosts"] } placeholder="/root/.ssh/known_hosts"/></label>
-	<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
-}
-
-templ piholeFields(values map[string]string) {
-	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-	<label>App password <input type="password" name="pihole_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="pihole_insecure"
-			if values["pihole_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
-}
-
-templ adguardFields(values map[string]string) {
-	<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
-	<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
-	<label>Password <input type="password" name="adguard_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="adguard_insecure"
-			if values["adguard_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
-}
-
-templ opnsenseFields(values map[string]string) {
-	<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
-	<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
-	<label>API secret <input type="password" name="opnsense_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="opnsense_insecure"
-			if values["opnsense_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
-}
-
-// integrationsFields renders the plain fieldsets used by the onboarding welcome
-// page; its output must stay identical to the pre-split version.
-templ integrationsFields(values map[string]string) {
-	<fieldset>
-		<legend>Proxmox</legend>
-		@proxmoxFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>WireGuard (via SSH)</legend>
-		@wireguardFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>Pi-hole (v6)</legend>
-		@piholeFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>AdGuard Home</legend>
-		@adguardFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>OPNsense</legend>
-		@opnsenseFields(values)
-	</fieldset>
-}
-
-// integrationStatus renders a connection-status pill (+ detail) for one
-// integration, resolved from the recorded poller status and whether the
-// integration is configured.
-templ integrationStatus(name string, configured bool, statuses map[string]store.IntegrationStatus) {
-	if st, ok := statuses[name]; ok {
-		if st.OK {
-			<span class="status-line"><span class="status is-online">connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
-		} else {
-			<span class="status-line"><span class="status is-error">failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
+			return sec.Label
 		}
-		if st.Detail != "" {
-			<p class="hint">{ st.Detail }</p>
+	}
+	return "Settings"
+}
+
+templ settingsLink(active string, sec settingsSection) {
+	<li><a
+		href={ templ.SafeURL("/settings/" + sec.Key) }
+		if active == sec.Key {
+			aria-current="page"
 		}
-	} else if configured {
-		<span class="status-line"><span class="status">configured · not run yet</span></span>
-	} else {
-		<span class="status-line"><span class="muted">not configured</span></span>
-	}
+	>{ sec.Label }</a></li>
 }
 
-// integrationsStatusTab is what a viewer sees of the integrations: whether each
-// one works and when it last ran, without its configuration or the controls.
-templ integrationsStatusTab(d SettingsData) {
-	<h2>Integrations</h2>
-	<div class="panel">
-		<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Configured["proxmox"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Configured["wireguard"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Configured["adguard"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Configured["opnsense"], d.Statuses)
-</div>
-	</div>
-}
-
-templ integrationsTab(d SettingsData) {
-	<h2>Integrations</h2>
-	<p class="muted">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p>
-	<form method="post" action="/settings/integrations">
-		<div class="panel">
-			<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@proxmoxFields(d.Values)
+// settingsNav is the secondary navigation: a list down the left on wide
+// screens, wrapping rows of links on a phone. The Admin group is left out
+// for a viewer.
+templ settingsNav(active string) {
+	<nav class="subnav" aria-label="Settings">
+		<div class="subnav-group">
+			<span class="subnav-h" id="subnav-account">Account</span>
+			<ul class="subnav-links" aria-labelledby="subnav-account">
+				for _, sec := range accountSections {
+					@settingsLink(active, sec)
+				}
+			</ul>
 		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/wireguard/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@wireguardFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@piholeFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Values["adguard_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/adguard/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@adguardFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Values["opnsense_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/opnsense/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@opnsenseFields(d.Values)
-		</div>
-		<button type="submit" class="btn btn-primary">Save integrations</button>
-	</form>
-}
-
-// subnetsListTab is the read-only subnet list a viewer sees.
-// scanEvery describes a subnet's periodic scan for the read-only list.
-func scanEvery(sn store.Subnet) string {
-	if !sn.ScanEnabled {
-		return "off"
-	}
-	switch sec := sn.ScanIntervalSec; {
-	case sec > 0 && sec%3600 == 0:
-		return fmt.Sprintf("every %dh", sec/3600)
-	case sec > 0 && sec%60 == 0:
-		return fmt.Sprintf("every %dm", sec/60)
-	default:
-		return fmt.Sprintf("every %ds", sec)
-	}
-}
-
-// subnetsListTab is the viewer's Subnets tab: the subnets as a read-only
-// table, each linked to its grid.
-templ subnetsListTab(d SettingsData) {
-	<h2>Subnets</h2>
-	if len(d.Subnets) == 0 {
-		<p class="muted">No subnets configured.</p>
-	} else {
-		<div class="panel">
-			<div class="table-wrap">
-				<table>
-					<tr><th>Name</th><th>CIDR</th><th>Kind</th><th>Auto-scan</th></tr>
-					for _, sn := range d.Subnets {
-						<tr>
-							<td><a href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a></td>
-							<td class="mono">{ sn.CIDR }</td>
-							<td><span class="chip">{ sn.Kind }</span></td>
-							<td>{ scanEvery(sn) }</td>
-						</tr>
+		if IsAdmin(ctx) {
+			<div class="subnav-group">
+				<span class="subnav-h" id="subnav-admin">Admin</span>
+				<ul class="subnav-links" aria-labelledby="subnav-admin">
+					for _, sec := range adminSections {
+						@settingsLink(active, sec)
 					}
-				</table>
+				</ul>
 			</div>
-		</div>
-	}
-}
-
-templ subnetsTab(d SettingsData) {
-	<h2>Subnets</h2>
-	for _, sn := range d.Subnets {
-		<div class="panel">
-			<div class="panel-head">
-				<h3>{ sn.Name }</h3>
-				<span class="mono muted">{ sn.CIDR }</span>
-				<span class="chip">{ sn.Kind }</span>
-				if sn.ScanEnabled {
-					<span class="chip">auto-scan on</span>
-				} else {
-					<span class="chip">auto-scan off</span>
-				}
-			</div>
-			<form id={ fmt.Sprintf("sn-edit-%d", sn.ID) } method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
-				<div class="field-grid">
-					<label>CIDR <input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/></label>
-					<label>Name <input type="text" name="name" value={ sn.Name } required/></label>
-					<label>
-						Kind
-						<select name="kind">
-							for _, k := range subnetKinds {
-								if k == sn.Kind {
-									<option value={ k } selected>{ k }</option>
-								} else {
-									<option value={ k }>{ k }</option>
-								}
-							}
-						</select>
-					</label>
-					<label>Interval (s) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
-					<label class="chk"><input
-	type="checkbox"
-	name="scan_enabled"
-	if sn.ScanEnabled {
-		checked
-	}
-/> Auto-scan (periodic)</label>
-				</div>
-			</form>
-			<div class="row">
-				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="btn btn-primary">Save</button>
-				if sn.Kind != "wireguard" {
-					<button type="button" class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
-						@Icon("radar", "")
-						Scan
-					</button>
-				}
-				<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline" data-confirm={ "Delete the subnet " + sn.CIDR + " and its IP assignments?" }>
-					<button type="submit" class="btn btn-danger">
-						@Icon("trash-2", "")
-						Delete
-					</button>
-				</form>
-			</div>
-		</div>
-	}
-	<h3>Detected subnets</h3>
-	if len(d.Detected) == 0 {
-		<p class="muted">no new subnets detected</p>
-	} else {
-		<div class="chips">
-			for _, det := range d.Detected {
-				<form method="post" action="/settings/subnets" class="inline">
-					<input type="hidden" name="cidr" value={ det.CIDR }/>
-					<input type="hidden" name="name" value={ det.Iface }/>
-					<input type="hidden" name="kind" value="lan"/>
-					<input type="hidden" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/>
-					<input type="hidden" name="scan_enabled" value="on"/>
-					<button type="submit" class="chip">
-						@Icon("plus", "")
-						<span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span>
-					</button>
-				</form>
-			}
-		</div>
-	}
-	<div class="panel">
-		<div class="panel-head"><h3>Add subnet</h3></div>
-		<form method="post" action="/settings/subnets">
-			<div class="field-grid">
-				<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required/></label>
-				<label>Name <input type="text" name="name" required/></label>
-				<label>
-					Kind
-					<select name="kind">
-						for _, k := range subnetKinds {
-							if k == settingOr(d.Values, "default_subnet_kind", "lan") {
-								<option value={ k } selected>{ k }</option>
-							} else {
-								<option value={ k }>{ k }</option>
-							}
-						}
-					</select>
-				</label>
-				<label>Interval (s) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
-				<label class="chk"><input
-	type="checkbox"
-	name="scan_enabled"
-	if defaultScanEnabled(d.Values) {
-		checked
-	}
-/> Auto-scan (periodic)</label>
-			</div>
-			<button type="submit" class="btn btn-primary">Add subnet</button>
-		</form>
-	</div>
-}
-
-templ usersTab(d SettingsData) {
-	<h2>Users</h2>
-	<div class="panel">
-		<div class="table-wrap">
-			<table>
-				<tr><th>Username</th><th>Role</th><th></th></tr>
-				for _, u := range d.Users {
-					<tr>
-						<td>{ u.Username }</td>
-						<td><span class="chip">{ u.Role }</span></td>
-						<td>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
-								<select name="role" aria-label={ "Role for " + u.Username }>
-									for _, role := range []string{"viewer", "admin"} {
-										if role == u.Role {
-											<option value={ role } selected>{ role }</option>
-										} else {
-											<option value={ role }>{ role }</option>
-										}
-									}
-								</select>
-								<button type="submit" class="btn btn-sm">set role</button>
-							</form>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
-								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
-								<button type="submit" class="btn btn-sm">reset password</button>
-							</form>
-							if u.ID != d.CurrentUserID {
-								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
-									<button type="submit" class="btn btn-danger btn-sm">delete</button>
-								</form>
-							}
-						</td>
-					</tr>
-				}
-			</table>
-		</div>
-	</div>
-	@myAccount(d)
-	<div class="panel">
-		<div class="panel-head"><h3>Add user</h3></div>
-		<form method="post" action="/settings/users">
-			<div class="field-grid">
-				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
-				<label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" required/></label>
-				<label>
-					Role
-					<select name="role">
-						<option value="viewer">viewer</option>
-						<option value="admin">admin</option>
-					</select>
-				</label>
-			</div>
-			<button type="submit" class="btn btn-primary">Add user</button>
-		</form>
-	</div>
-}
-
-// myAccount is the part of the users tab about the signed-in user's own
-// account: sessions and password, which every role manages for itself.
-templ myAccount(d SettingsData) {
-	<div class="panel">
-		<div class="panel-head"><h3>My sessions</h3></div>
-		<div class="table-wrap">
-			<table>
-				<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
-				for _, sess := range d.Sessions {
-					<tr>
-						<td>
-							{ sessionStarted(sess) }
-							if sess.ID == d.CurrentSessionID {
-								<span class="chip">this browser</span>
-							}
-						</td>
-						<td>{ orDash(sess.IP) }</td>
-						<td>{ shortAgent(sess.UserAgent) }</td>
-						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
-						<td>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
-								<button type="submit" class="btn btn-sm">revoke</button>
-							</form>
-						</td>
-					</tr>
-				}
-			</table>
-		</div>
-		<form method="post" action="/settings/sessions/revoke-others" class="inline" data-confirm="Sign out every other session?">
-			<button type="submit" class="btn">Sign out other sessions</button>
-		</form>
-	</div>
-	if d.SSO.Enabled {
-		<div class="panel">
-			<div class="panel-head"><h3>Single sign-on</h3></div>
-			if d.SSO.Linked {
-				<p class="hint">This account is linked to an SSO account. Linking again replaces the link.</p>
-			} else {
-				<p class="hint">Link this account to your SSO account to sign in with it.</p>
-			}
-			<form method="post" action="/settings/sso/link" class="inline">
-				<button type="submit" class="btn">Link SSO account</button>
-			</form>
-		</div>
-	}
-	<div class="panel">
-		<div class="panel-head"><h3>Change my password</h3></div>
-		<form method="post" action="/settings/password">
-			<div class="field-grid">
-				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
-				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
-				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
-			</div>
-			<p class="hint">Your other sessions are signed out when the password changes.</p>
-			<button type="submit" class="btn btn-primary">Change password</button>
-		</form>
-	</div>
-}
-
-templ generalTab(d SettingsData) {
-	<h2>General</h2>
-	<form method="post" action="/settings/general">
-		<div class="panel">
-			<div class="panel-head"><h3>Availability</h3></div>
-			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
-			<p class="hint">A device is marked offline after this many consecutive missed scans.</p>
-			<label>Presence without ping
-				<select name="presence_fallback">
-					if d.Values["presence_fallback"] != "off" {
-						<option value="on" selected>Enabled</option>
-						<option value="off">Disabled</option>
-					} else {
-						<option value="on">Enabled</option>
-						<option value="off" selected>Disabled</option>
-					}
-				</select>
-			</label>
-			<p class="hint">On directly attached subnets, a host that ignores ping but answers ARP (confirmed by a TCP connect or a second ARP check) counts as seen.</p>
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>Defaults for new subnets</h3></div>
-			<div class="field-grid">
-				<label>Default scan interval (s) <input type="number" name="default_scan_interval_sec" min="30" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/></label>
-				<label>
-					Default kind
-					<select name="default_subnet_kind">
-						for _, k := range subnetKinds {
-							if k == settingOr(d.Values, "default_subnet_kind", "lan") {
-								<option value={ k } selected>{ k }</option>
-							} else {
-								<option value={ k }>{ k }</option>
-							}
-						}
-					</select>
-				</label>
-				<label>
-					Default auto-scan
-					<select name="default_scan_enabled">
-						if defaultScanEnabled(d.Values) {
-							<option value="on" selected>Enabled</option>
-							<option value="off">Disabled</option>
-						} else {
-							<option value="on">Enabled</option>
-							<option value="off" selected>Disabled</option>
-						}
-					</select>
-				</label>
-			</div>
-			<p class="hint">Prefilled into the Add-subnet form.</p>
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>Retention</h3></div>
-			<div class="field-grid">
-				<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
-				<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
-				<label>Keep audit log (days) <input type="number" name="audit_retention_days" min="0" value={ settingOr(d.Values, "audit_retention_days", "180") }/></label>
-			</div>
-			<p class="hint">
-				Older rows are deleted every six hours. Availability history is one row
-				per interface per hour, so it is the fastest-growing table. Set a value
-				to 0 to keep everything.
-			</p>
-		</div>
-		<button type="submit" class="btn btn-primary">Save</button>
-	</form>
-}
-
-// aboutRow renders one label/value pair, blanking out anything unknown so an
-// unstamped local build shows an em dash rather than an empty cell.
-templ aboutRow(label, value string) {
-	<tr>
-		<td class="muted">{ label }</td>
-		if value == "" {
-			<td class="mono">—</td>
-		} else {
-			<td class="mono">{ value }</td>
 		}
-	</tr>
-}
-
-templ aboutTab(a AboutData) {
-	<div class="cards">
-		<div class="panel">
-			<h3>Build</h3>
-			<table>
-				<tbody>
-					@aboutRow("Version", a.Info.Label())
-					@aboutRow("Build number", a.Info.Build)
-					<tr>
-						<td class="muted">Commit</td>
-						if a.Info.Commit == "" {
-							<td class="mono">—</td>
-						} else {
-							<td class="mono">
-								<a href={ templ.URL(a.Info.CommitURL()) } target="_blank" rel="noreferrer noopener">
-									{ a.Info.ShortCommit() }
-								</a>
-								if a.Info.Modified {
-									<span class="muted">(dirty tree)</span>
-								}
-							</td>
-						}
-					</tr>
-					@aboutRow("Built", a.Info.Date)
-				</tbody>
-			</table>
-		</div>
-		<div class="panel">
-			<h3>Runtime</h3>
-			<table>
-				<tbody>
-					@aboutRow("Go", a.Info.GoVersion)
-					@aboutRow("Platform", a.Info.OS+"/"+a.Info.Arch)
-					@aboutRow("Database", a.Backend)
-					@aboutRow("Uptime", a.Uptime)
-					@aboutRow("Server time", a.Now)
-					@aboutRow("Last backup", a.Backup)
-				</tbody>
-			</table>
-		</div>
-		<div class="panel">
-			<h3>Dependencies</h3>
-			if len(a.Info.Deps) == 0 {
-				<p class="muted">Not recorded in this binary.</p>
-			} else {
-				<table>
-					<tbody>
-						for _, dep := range a.Info.Deps {
-							@aboutRow(dep.Path, dep.Version)
-						}
-					</tbody>
-				</table>
-			}
-		</div>
-	</div>
+	</nav>
 }
 
 templ SettingsPage(username string, d SettingsData) {
-	@Layout("Settings", username) {
-		<h1>Settings</h1>
-		<nav class="tabs">
-			@tabLink(d.ActiveTab, "subnets", "Subnets")
-			@tabLink(d.ActiveTab, "integrations", "Integrations")
-			if IsAdmin(ctx) {
-				@tabLink(d.ActiveTab, "users", "Users")
-				@tabLink(d.ActiveTab, "general", "General")
-				@tabLink(d.ActiveTab, "notifications", "Notifications")
-				@tabLink(d.ActiveTab, "audit", "Audit")
-			} else {
-				@tabLink(d.ActiveTab, "users", "Account")
-			}
-			@tabLink(d.ActiveTab, "tokens", "API tokens")
-			@tabLink(d.ActiveTab, "about", "About")
-		</nav>
-		if d.Error != "" {
-			<p class="form-error" role="alert">{ d.Error }</p>
-		}
-		if d.ActiveTab == "tokens" {
-			@tokensTab(d)
-		} else if !IsAdmin(ctx) {
-			if d.ActiveTab == "subnets" {
-				@subnetsListTab(d)
-			} else if d.ActiveTab == "integrations" {
-				@integrationsStatusTab(d)
-			} else if d.ActiveTab == "users" {
-				<h2>Account</h2>
-				@myAccount(d)
-			} else if d.ActiveTab == "about" {
-				@aboutTab(d.About)
-			}
-		} else if d.ActiveTab == "subnets" {
-			@subnetsTab(d)
-		} else if d.ActiveTab == "integrations" {
-			@integrationsTab(d)
-		} else if d.ActiveTab == "users" {
-			@usersTab(d)
-		} else if d.ActiveTab == "general" {
-			@generalTab(d)
-		} else if d.ActiveTab == "notifications" {
-			@notificationsTab(d.Notify)
-		} else if d.ActiveTab == "audit" {
-			@auditTab(d.Audit)
-		} else if d.ActiveTab == "about" {
-			@aboutTab(d.About)
-		}
+	@Layout(settingsTitle(d.ActiveTab)+" · Settings", username) {
+		<div class="settings">
+			@settingsNav(d.ActiveTab)
+			<div class="settings-body">
+				<h1>{ settingsTitle(d.ActiveTab) }</h1>
+				if d.Error != "" {
+					<p class="form-error" role="alert">{ d.Error }</p>
+				}
+				switch d.ActiveTab {
+					case "sessions":
+						@sessionsSection(d)
+					case "tokens":
+						@tokensTab(d)
+					case "network":
+						@networkSection(d)
+					case "integrations":
+						@integrationsTab(d)
+					case "notifications":
+						@notificationsTab(d.Notify)
+					case "users":
+						@usersTab(d)
+					case "audit":
+						@auditTab(d.Audit)
+					case "system":
+						@systemSection(d)
+					default:
+						@accountSection(username, d)
+				}
+			</div>
+		</div>
 	}
 }
 

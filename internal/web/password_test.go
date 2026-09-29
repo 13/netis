@@ -201,11 +201,12 @@ func TestPasswordResetIsAdminOnlyAndChecksTheUserExists(t *testing.T) {
 	}
 }
 
-// The users tab has to offer both forms, or the feature is unreachable.
+// The account page offers the change-password form and the users page the
+// reset, or the features are unreachable.
 func TestUsersTabOffersPasswordForms(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
-	body := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	body := authedGet(t, srv, st, "/settings/account").Body.String() + authedGet(t, srv, st, "/settings/users").Body.String()
 	for _, want := range []string{
 		`action="/settings/password"`,
 		`name="current_password"`,

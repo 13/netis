@@ -1,0 +1,127 @@
+package views
+
+// aboutRow renders one label/value pair, blanking out anything unknown so an
+// unstamped local build shows an em dash rather than an empty cell.
+templ aboutRow(label, value string) {
+	<tr>
+		<td class="muted">{ label }</td>
+		if value == "" {
+			<td class="mono">—</td>
+		} else {
+			<td class="mono">{ value }</td>
+		}
+	</tr>
+}
+
+templ aboutTab(a AboutData) {
+	<div class="cards">
+		<div class="panel">
+			<h3>Build</h3>
+			<table>
+				<tbody>
+					@aboutRow("Version", a.Info.Label())
+					@aboutRow("Build number", a.Info.Build)
+					<tr>
+						<td class="muted">Commit</td>
+						if a.Info.Commit == "" {
+							<td class="mono">—</td>
+						} else {
+							<td class="mono">
+								<a href={ templ.URL(a.Info.CommitURL()) } target="_blank" rel="noreferrer noopener">
+									{ a.Info.ShortCommit() }
+								</a>
+								if a.Info.Modified {
+									<span class="muted">(dirty tree)</span>
+								}
+							</td>
+						}
+					</tr>
+					<tr>
+						<td class="muted">Built</td>
+						<td>@Time(a.Info.Date)</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="panel">
+			<h3>Runtime</h3>
+			<table>
+				<tbody>
+					@aboutRow("Go", a.Info.GoVersion)
+					@aboutRow("Platform", a.Info.OS+"/"+a.Info.Arch)
+					@aboutRow("Database", a.Backend)
+					@aboutRow("Uptime", a.Uptime)
+					<tr>
+						<td class="muted">Server time</td>
+						<td>{ serverTime(a.Now) }</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="panel">
+			<h3>Dependencies</h3>
+			if len(a.Info.Deps) == 0 {
+				<p class="muted">Not recorded in this binary.</p>
+			} else {
+				<table>
+					<tbody>
+						for _, dep := range a.Info.Deps {
+							@aboutRow(dep.Path, dep.Version)
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}
+
+// serverTime is the server's clock as an absolute time, so a reader can spot
+// skew against their own.
+func serverTime(ts string) string {
+	if t, ok := parseTS(ts); ok {
+		return absTime(t)
+	}
+	return ts
+}
+
+// backupLine says how scheduled backups are doing.
+templ backupLine(b BackupView) {
+	if b.Note != "" {
+		{ b.Note }
+	} else if b.Failed {
+		Failed, see the server log:{ " " }
+		@Time(b.At)
+	} else {
+		@Time(b.At) <span class="muted">({ b.File })</span>
+	}
+}
+
+// systemSection is the admin's System page: how long history is kept, how
+// backups are doing, and what build is running.
+templ systemSection(d SettingsData) {
+	<form method="post" action="/settings/general" class="panel">
+		<input type="hidden" name="section" value="system"/>
+		<div class="panel-head"><h2>Retention</h2></div>
+		<div class="field-grid narrow">
+			<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
+			<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
+			<label>Keep audit log (days) <input type="number" name="audit_retention_days" min="0" value={ settingOr(d.Values, "audit_retention_days", "180") }/></label>
+		</div>
+		<p class="hint">
+			Older rows are deleted every six hours. Availability history is one row per interface per
+			hour, so it grows fastest. 0 keeps everything.
+		</p>
+		<button type="submit" class="btn btn-primary">Save retention</button>
+	</form>
+	<section class="panel">
+		<div class="panel-head"><h2>Backups</h2></div>
+		<dl class="facts">
+			<dt>Last backup</dt>
+			<dd>
+				@backupLine(d.About.Backup)
+			</dd>
+		</dl>
+	</section>
+	<h2>About</h2>
+	@aboutTab(d.About)
+}

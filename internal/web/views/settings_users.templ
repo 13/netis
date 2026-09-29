@@ -1,0 +1,172 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+// usersTab is the admin's Users page: every account with its role, a
+// password reset and delete, and a form to add one.
+templ usersTab(d SettingsData) {
+	<div class="panel">
+		<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Username</th><th>Role</th><th></th></tr>
+				</thead>
+				<tbody>
+					for _, u := range d.Users {
+						<tr>
+							<td>
+								{ u.Username }
+								if u.ID == d.CurrentUserID {
+									<span class="chip">you</span>
+								}
+							</td>
+							<td><span class="chip">{ u.Role }</span></td>
+							<td>
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
+									<select name="role" aria-label={ "Role for " + u.Username }>
+										for _, role := range []string{"viewer", "admin"} {
+											if role == u.Role {
+												<option value={ role } selected>{ role }</option>
+											} else {
+												<option value={ role }>{ role }</option>
+											}
+										}
+									</select>
+									<button type="submit" class="btn btn-sm">Set role</button>
+								</form>
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
+									<input type="password" name="new_password" placeholder="New password" aria-label={ "New password for " + u.Username } autocomplete="new-password" minlength="8" required/>
+									<button type="submit" class="btn btn-sm">Reset password</button>
+								</form>
+								if u.ID != d.CurrentUserID {
+									<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
+										<button type="submit" class="btn btn-danger btn-sm">Delete</button>
+									</form>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<details class="panel disclosure">
+		<summary>
+			@Icon("plus", "")
+			Add user
+		</summary>
+		<form method="post" action="/settings/users">
+			<div class="field-grid">
+				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
+				<label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" required/></label>
+				<label>
+					Role
+					<select name="role">
+						<option value="viewer">viewer</option>
+						<option value="admin">admin</option>
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="btn btn-primary">Add user</button>
+		</form>
+	</details>
+}
+
+// accountSection is the signed-in user's own account: who they are, the
+// single sign-on link and their password. Every role manages these itself.
+templ accountSection(username string, d SettingsData) {
+	<div class="panel">
+		<div class="panel-head"><h2>Profile</h2></div>
+		<dl class="facts">
+			<dt>Username</dt>
+			<dd>{ username }</dd>
+			<dt>Role</dt>
+			<dd>
+				if IsAdmin(ctx) {
+					Admin <span class="muted">— can change everything</span>
+				} else {
+					Viewer <span class="muted">— can look, not change</span>
+				}
+			</dd>
+		</dl>
+	</div>
+	if d.SSO.Enabled {
+		<div class="panel">
+			<div class="panel-head"><h2>Single sign-on</h2></div>
+			if d.SSO.Linked {
+				<p class="hint">This account is linked to an SSO account. Linking again replaces the link.</p>
+			} else {
+				<p class="hint">Link this account to your SSO account to sign in with it.</p>
+			}
+			<form method="post" action="/settings/sso/link" class="inline">
+				<button type="submit" class="btn">Link SSO account</button>
+			</form>
+		</div>
+	}
+	<div class="panel">
+		<div class="panel-head"><h2>Change password</h2></div>
+		<form method="post" action="/settings/password">
+			<div class="field-grid">
+				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
+				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
+				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
+			</div>
+			<p class="hint">Your other sessions are signed out when the password changes.</p>
+			<button type="submit" class="btn btn-primary">Change password</button>
+		</form>
+	</div>
+}
+
+// sessionsSection lists where the signed-in user is signed in, each with a
+// revoke, and signs out everywhere else at once.
+templ sessionsSection(d SettingsData) {
+	<p class="muted">Where your account is signed in. Revoke a session you do not recognise.</p>
+	<div class="panel">
+		<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
+				</thead>
+				<tbody>
+					for _, sess := range d.Sessions {
+						<tr>
+							<td>
+								@sessionStarted(sess)
+								if sess.ID == d.CurrentSessionID {
+									<span class="chip">this browser</span>
+								}
+							</td>
+							<td class="mono">{ orDash(sess.IP) }</td>
+							<td>{ shortAgent(sess.UserAgent) }</td>
+							<td>
+								@Time(sess.ExpiresAt)
+							</td>
+							<td>
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
+									<button type="submit" class="btn btn-sm">Revoke</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<form method="post" action="/settings/sessions/revoke-others" class="panel-actions" data-confirm="Sign out every other session?">
+			<button type="submit" class="btn">Sign out other sessions</button>
+		</form>
+	</div>
+}
+
+// sessionStarted says when a session began. Sessions predating the created_at
+// column have no answer, and saying so beats inventing one.
+templ sessionStarted(sess store.Session) {
+	if sess.CreatedAt == nil || *sess.CreatedAt == "" {
+		unknown
+	} else {
+		@Time(*sess.CreatedAt)
+	}
+}

@@ -1,0 +1,211 @@
+package views
+
+import (
+	"fmt"
+
+	"netis/internal/store"
+)
+
+// scanEvery describes a subnet's periodic scan: "Scans every 5m".
+func scanEvery(sn store.Subnet) string {
+	if !sn.ScanEnabled {
+		return "Not scanned automatically"
+	}
+	switch sec := sn.ScanIntervalSec; {
+	case sec > 0 && sec%3600 == 0:
+		return fmt.Sprintf("Scans every %dh", sec/3600)
+	case sec > 0 && sec%60 == 0:
+		return fmt.Sprintf("Scans every %dm", sec/60)
+	default:
+		return fmt.Sprintf("Scans every %ds", sec)
+	}
+}
+
+// subnetKindSelect is the kind picker in the subnet forms.
+templ subnetKindSelect(current string) {
+	<label>
+		Kind
+		<select name="kind">
+			for _, k := range subnetKinds {
+				if k == current {
+					<option value={ k } selected>{ k }</option>
+				} else {
+					<option value={ k }>{ k }</option>
+				}
+			}
+		</select>
+	</label>
+}
+
+// subnetRow is one subnet in the Network page's list: its summary, and its
+// edit form behind a disclosure so the page is a list, not a wall of forms.
+templ subnetRow(sn store.Subnet) {
+	<details class="subnet-row" id={ fmt.Sprintf("subnet-%d", sn.ID) }>
+		<summary>
+			@Icon("chevron-right", "disc-chev")
+			<span class="subnet-name">{ sn.Name }</span>
+			<span class="mono">{ sn.CIDR }</span>
+			<span class="chip">{ sn.Kind }</span>
+			<span class="muted subnet-scan">{ scanEvery(sn) }</span>
+		</summary>
+		<div class="subnet-edit">
+			<form id={ fmt.Sprintf("sn-edit-%d", sn.ID) } method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
+				<div class="field-grid">
+					<label>Name <input type="text" name="name" value={ sn.Name } required/></label>
+					<label>CIDR <input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required class="mono"/></label>
+					@subnetKindSelect(sn.Kind)
+					<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
+				</div>
+				<label class="chk">
+					<input
+						type="checkbox"
+						name="scan_enabled"
+						if sn.ScanEnabled {
+							checked
+						}
+					/>
+					Scan periodically
+				</label>
+			</form>
+			<div class="row">
+				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="btn btn-primary">Save changes</button>
+				if sn.Kind != "wireguard" {
+					<button type="button" class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
+						@Icon("radar", "")
+						Scan now
+					</button>
+				}
+				<a class="btn btn-quiet" href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>Open grid</a>
+				<span class="grow"></span>
+				<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline" data-confirm={ "Delete the subnet " + sn.CIDR + " and its IP assignments?" }>
+					<button type="submit" class="btn btn-danger">
+						@Icon("trash-2", "")
+						Delete subnet
+					</button>
+				</form>
+			</div>
+		</div>
+	</details>
+}
+
+// networkSection is the admin's Network page: the one place subnets are
+// added, changed and removed, and the scanning settings that apply to all
+// of them.
+templ networkSection(d SettingsData) {
+	<section class="panel">
+		<div class="panel-head">
+			<h2>Subnets</h2>
+			<span class="count">{ fmt.Sprint(len(d.Subnets)) }</span>
+		</div>
+		if len(d.Subnets) == 0 {
+			<p class="muted">No subnets yet. Add the networks netis should scan.</p>
+		} else {
+			<div class="subnet-list">
+				for _, sn := range d.Subnets {
+					@subnetRow(sn)
+				}
+			</div>
+		}
+		if len(d.Detected) > 0 {
+			<h3>Found on this host</h3>
+			<p class="hint">Networks this machine is attached to that netis does not scan yet. Add one with a click.</p>
+			<div class="chips">
+				for _, det := range d.Detected {
+					<form method="post" action="/settings/subnets" class="inline">
+						<input type="hidden" name="cidr" value={ det.CIDR }/>
+						<input type="hidden" name="name" value={ det.Iface }/>
+						<input type="hidden" name="kind" value="lan"/>
+						<input type="hidden" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/>
+						<input type="hidden" name="scan_enabled" value="on"/>
+						<button type="submit" class="chip" aria-label={ "Add " + det.CIDR + " (" + det.Iface + ")" }>
+							@Icon("plus", "")
+							<span class="mono">{ det.CIDR }</span> <span class="muted">{ det.Iface }</span>
+						</button>
+					</form>
+				}
+			</div>
+		}
+		<details
+			class="disclosure"
+			if len(d.Subnets) == 0 {
+				open
+			}
+		>
+			<summary>
+				@Icon("plus", "")
+				Add subnet
+			</summary>
+			<form method="post" action="/settings/subnets">
+				<div class="field-grid">
+					<label>Name <input type="text" name="name" required/></label>
+					<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required class="mono"/></label>
+					@subnetKindSelect(settingOr(d.Values, "default_subnet_kind", "lan"))
+					<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
+				</div>
+				<label class="chk">
+					<input
+						type="checkbox"
+						name="scan_enabled"
+						if defaultScanEnabled(d.Values) {
+							checked
+						}
+					/>
+					Scan periodically
+				</label>
+				<button type="submit" class="btn btn-primary">Add subnet</button>
+			</form>
+		</details>
+	</section>
+	<form method="post" action="/settings/general" class="panel">
+		<input type="hidden" name="section" value="network"/>
+		<div class="panel-head"><h2>Scanning</h2></div>
+		<div class="field-grid narrow">
+			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
+			<label>
+				Presence without ping
+				<select name="presence_fallback">
+					if d.Values["presence_fallback"] != "off" {
+						<option value="on" selected>On</option>
+						<option value="off">Off</option>
+					} else {
+						<option value="on">On</option>
+						<option value="off" selected>Off</option>
+					}
+				</select>
+			</label>
+		</div>
+		<p class="hint">
+			A device counts as offline after this many scans in a row miss it. With presence without ping on,
+			a host on a directly attached subnet that ignores ping but answers ARP still counts as seen.
+		</p>
+		<h3>Defaults for new subnets</h3>
+		<div class="field-grid narrow">
+			<label>Scan interval (seconds) <input type="number" name="default_scan_interval_sec" min="30" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/></label>
+			<label>
+				Kind
+				<select name="default_subnet_kind">
+					for _, k := range subnetKinds {
+						if k == settingOr(d.Values, "default_subnet_kind", "lan") {
+							<option value={ k } selected>{ k }</option>
+						} else {
+							<option value={ k }>{ k }</option>
+						}
+					}
+				</select>
+			</label>
+			<label>
+				Scan periodically
+				<select name="default_scan_enabled">
+					if defaultScanEnabled(d.Values) {
+						<option value="on" selected>On</option>
+						<option value="off">Off</option>
+					} else {
+						<option value="on">On</option>
+						<option value="off" selected>Off</option>
+					}
+				</select>
+			</label>
+		</div>
+		<button type="submit" class="btn btn-primary">Save scanning settings</button>
+	</form>
+}
