@@ -11,6 +11,7 @@ import (
 
 	"netis/internal/events"
 	"netis/internal/macaddr"
+	"netis/internal/oui"
 	"netis/internal/store"
 )
 
@@ -216,7 +217,7 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	if resolved != "" {
 		hostP = &resolved
 	}
-	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: Vendor(mac)}
+	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: oui.Vendor(mac)}
 	// Device, interface and IP are created together: a device that got as far
 	// as being inserted without an interface is invisible to MAC matching and
 	// would linger in the list forever.
