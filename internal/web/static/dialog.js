@@ -143,5 +143,70 @@
 			b.classList.toggle('selected', b.dataset.icon === icon);
 			b.setAttribute('aria-pressed', b.dataset.icon === icon ? 'true' : 'false');
 		});
+		// The picker's summary shows the icon the device will get.
+		var disc = pick.closest('.iconpick-disc');
+		var use = disc && disc.querySelector('.icon-preview use');
+		if (use) { use.setAttribute('href', '/static/icons.svg#' + icon); }
 	}
+
+	// Device form: typing an IP chooses the subnet that holds it (the most
+	// specific one), unless the user has chosen one by hand. IPv4 only.
+	function ip4(s) {
+		var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s.trim());
+		if (!m) { return null; }
+		var n = 0;
+		for (var i = 1; i <= 4; i++) {
+			var o = +m[i];
+			if (o > 255) { return null; }
+			n = n * 256 + o;
+		}
+		return n;
+	}
+	function cidrBits(ip, cidr) {
+		var parts = cidr.split('/');
+		var base = ip4(parts[0]);
+		var bits = +parts[1];
+		if (base === null || isNaN(bits) || bits < 0 || bits > 32) { return -1; }
+		var size = Math.pow(2, 32 - bits);
+		return Math.floor(ip / size) === Math.floor(base / size) ? bits : -1;
+	}
+	document.addEventListener('input', function (e) {
+		if (!e.target.matches || !e.target.matches('.device-form input[name=ip]')) { return; }
+		var sel = e.target.form.querySelector('select[name=subnet_id]');
+		if (!sel || sel.dataset.userChosen) { return; }
+		var ip = ip4(e.target.value);
+		if (ip === null) { return; }
+		var best = null, bestBits = -1;
+		Array.prototype.forEach.call(sel.options, function (o) {
+			if (!o.dataset.cidr) { return; }
+			var b = cidrBits(ip, o.dataset.cidr);
+			if (b > bestBits) { best = o; bestBits = b; }
+		});
+		if (best) { sel.value = best.value; }
+	});
+	document.addEventListener('change', function (e) {
+		if (e.target.matches && e.target.matches('.device-form select[name=subnet_id]')) {
+			e.target.dataset.userChosen = '1';
+		}
+	});
+
+	// Device form: the parent picker's filter box narrows the list by name
+	// or IP. Without JavaScript the box stays hidden and the list is whole.
+	function armFilters(root) {
+		root.querySelectorAll('.df-filter[hidden]').forEach(function (f) { f.hidden = false; });
+	}
+	armFilters(document);
+	document.addEventListener('htmx:afterSwap', function (e) { armFilters(e.detail.target || document); });
+	document.addEventListener('input', function (e) {
+		if (!e.target.matches || !e.target.matches('.df-filter')) { return; }
+		var sel = document.getElementById(e.target.getAttribute('data-filter-for'));
+		if (!sel) { return; }
+		var q = e.target.value.trim().toLowerCase();
+		Array.prototype.forEach.call(sel.options, function (o) {
+			o.hidden = q !== '' && o.value !== '' && !o.selected && o.text.toLowerCase().indexOf(q) < 0;
+		});
+		sel.querySelectorAll('optgroup').forEach(function (g) {
+			g.hidden = !Array.prototype.some.call(g.children, function (o) { return !o.hidden; });
+		});
+	});
 })();

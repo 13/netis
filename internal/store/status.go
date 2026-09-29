@@ -92,3 +92,35 @@ func (s *Store) AvailabilityPct(ctx context.Context, ifaceID int64, sinceBucket 
 	}
 	return 100 * float64(up) / float64(total), nil
 }
+
+// AvailabilityBucket is one hour of a device's availability history: the
+// share of sweeps in that hour that found it up, from 0 to 1.
+type AvailabilityBucket struct {
+	Start string // RFC3339, the start of the hour
+	Up    float64
+}
+
+// DeviceAvailability returns the device's hourly availability since
+// sinceBucket, oldest first. A device counts as up in an hour when any of
+// its interfaces was, so an unused second port does not halve its figure:
+// the best interface's share stands for the hour. Hours without a sweep are
+// left out.
+func (s *Store) DeviceAvailability(ctx context.Context, deviceID int64, sinceBucket string) ([]AvailabilityBucket, error) {
+	rows, err := s.query(ctx, `SELECT ah.bucket_start, MAX(CAST(ah.up_count AS DOUBLE PRECISION) / ah.total_count)
+		FROM availability_history ah JOIN iface i ON i.id = ah.iface_id
+		WHERE i.device_id = ? AND ah.bucket_start >= ? AND ah.total_count > 0
+		GROUP BY ah.bucket_start ORDER BY ah.bucket_start`, deviceID, sinceBucket)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AvailabilityBucket
+	for rows.Next() {
+		var b AvailabilityBucket
+		if err := rows.Scan(&b.Start, &b.Up); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}

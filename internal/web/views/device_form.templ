@@ -2,8 +2,9 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"strings"
-	
+
 	"netis/internal/store"
 )
 
@@ -29,11 +30,18 @@ type DeviceForm struct {
 	IP         string
 	MAC        string
 	Error      string
+	// Prefilled is set when the form was opened for an address, from a
+	// free cell of the subnet grid: the title and a line at the top say
+	// which one.
+	Prefilled bool
 }
 
 func (f DeviceForm) title() string {
-	if f.IsEdit {
-		return "Edit device"
+	switch {
+	case f.IsEdit:
+		return "Edit " + f.Device.Name
+	case f.Prefilled && f.IP != "":
+		return "New device at " + f.IP
 	}
 	return "New device"
 }
@@ -54,22 +62,81 @@ func (f DeviceForm) cancelURL() string {
 	return "/devices"
 }
 
-// deviceFormInner is the shared header + form used by the centered create
-// dialog, the right-side edit drawer and the full-page form served without
-// htmx. In a dialog the form posts through htmx, so an error comes back into
-// the dialog; on the page it is a plain post.
+// subnet is the preselected subnet, when there is one.
+func (f DeviceForm) subnet() (store.Subnet, bool) {
+	for _, sn := range f.Subnets {
+		if sn.ID == f.SubnetID {
+			return sn, true
+		}
+	}
+	return store.Subnet{}, false
+}
+
+// moreOpen says whether "More details" starts open: when any field in it
+// already has a value, so editing a device never hides what it holds.
+func (f DeviceForm) moreOpen() bool {
+	d := f.Device
+	return d.Vendor != "" || d.Model != "" || d.Function != "" || d.Notes != "" ||
+		d.ParentDeviceID != nil || len(f.Tags) > 0
+}
+
+// parentGroup is one <optgroup> of the parent picker.
+type parentGroup struct {
+	Label   string
+	Devices []store.DeviceRow
+}
+
+// parentKinds are the kinds other devices usually hang off, offered first.
+var parentKinds = map[string]bool{"router": true, "switch": true, "modem": true, "server": true}
+
+// parentGroups sorts the devices a device can hang off into network gear
+// and servers first, then everything else, each by name. The device itself
+// is left out.
+func (f DeviceForm) parentGroups() []parentGroup {
+	var infra, other []store.DeviceRow
+	for _, pd := range f.AllDevices {
+		if f.IsEdit && pd.ID == f.Device.ID {
+			continue
+		}
+		if parentKinds[pd.Kind] {
+			infra = append(infra, pd)
+		} else {
+			other = append(other, pd)
+		}
+	}
+	byName := func(s []store.DeviceRow) {
+		sort.SliceStable(s, func(i, j int) bool { return strings.ToLower(s[i].Name) < strings.ToLower(s[j].Name) })
+	}
+	byName(infra)
+	byName(other)
+	var out []parentGroup
+	if len(infra) > 0 {
+		out = append(out, parentGroup{"Network gear and servers", infra})
+	}
+	if len(other) > 0 {
+		out = append(out, parentGroup{"Other devices", other})
+	}
+	return out
+}
+
+// deviceFormInner is the shared header + form used by the dialog and the
+// full-page form served without htmx. In a dialog the form posts through
+// htmx, so an error comes back into the dialog; on the page it is a plain
+// post. The fields come in order of how often they matter: name, kind,
+// then the address; the rest waits under "More details".
 templ deviceFormInner(f DeviceForm, modal bool) {
 	<div class="dh">
 		<h3 id="dlg-title">{ f.title() }</h3>
 		if modal {
 			<button type="button" class="btn btn-quiet btn-icon btn-sm" data-close aria-label="Close">
-					@Icon("x", "")
-				</button>
+				@Icon("x", "")
+			</button>
 		}
 	</div>
 	<form
 		method="post"
-		action={ templ.URL(f.action()) }
+		action={ templ.SafeURL(f.action()) }
+		class="device-form"
 		if modal {
 			hx-post={ f.action() }
 			hx-target="#modal"
@@ -79,109 +146,120 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 			if f.Error != "" {
 				<p class="form-error" role="alert">{ f.Error }</p>
 			}
+			if f.Prefilled && !f.IsEdit && f.IP != "" {
+				<p class="df-prefill">
+					@Icon("network", "")
+					<span>
+						Adding a device at <span class="mono">{ f.IP }</span>
+						if sn, ok := f.subnet(); ok {
+							{ " " }in { sn.Name } <span class="mono muted">{ sn.CIDR }</span>
+						}
+					</span>
+				</p>
+			}
 			<label>
 				Name
-				<input type="text" name="name" value={ f.Device.Name } required autofocus/>
+				<input type="text" name="name" value={ f.Device.Name } required autofocus autocomplete="off"/>
 			</label>
 			<label>
 				Kind
 				<select name="kind">
 					for _, k := range deviceKinds {
 						if k == f.Device.Kind {
-							<option value={ k } selected>{ k }</option>
+							<option value={ k } selected>{ kindName(k) }</option>
 						} else {
-							<option value={ k }>{ k }</option>
+							<option value={ k }>{ kindName(k) }</option>
 						}
 					}
 				</select>
 			</label>
-			<div>
-				<div class="fieldlabel">Icon</div>
-				<div class="iconpick" data-kind-default={ KindIcon(f.Device.Kind) }>
-					for _, ic := range IconChoices {
-						if ic == DeviceIcon(f.Device.Icon, f.Device.Kind) {
-							<button type="button" class="ic-swatch selected" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="true">
-								@Icon(ic, "icon-lg")
-							</button>
-						} else {
-							<button type="button" class="ic-swatch" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="false">
-								@Icon(ic, "icon-lg")
-							</button>
-						}
-					}
-				</div>
-				<input type="hidden" name="icon" value={ DeviceIcon(f.Device.Icon, f.Device.Kind) }/>
-			</div>
-			<label>
-				Vendor
-				<input type="text" name="vendor" value={ f.Device.Vendor }/>
-			</label>
-			<label>
-				Model
-				<input type="text" name="model" value={ f.Device.Model }/>
-			</label>
-			<label>
-				Function
-				<input type="text" name="function" value={ f.Device.Function } placeholder="role, channel…"/>
-			</label>
-			<label>
-				Parent device
-				<select name="parent_device_id">
-					<option value="">— none —</option>
-					for _, pd := range f.AllDevices {
-						if pd.ID != f.Device.ID {
-							if f.Device.ParentDeviceID != nil && *f.Device.ParentDeviceID == pd.ID {
-								<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
-							} else {
-								<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
-							}
-						}
-					}
-				</select>
-			</label>
-			<label>
-				Notes
-				<textarea name="notes">{ f.Device.Notes }</textarea>
-			</label>
-			<label>
-				Tags
-				<input type="text" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="comma,separated"/>
-			</label>
+			@iconPicker(f)
 			if !f.IsEdit {
-				<div class="ifgroup">
-					<div class="fieldlabel">First interface (optional)</div>
-					<label>
-						MAC
-						<input type="text" name="mac" placeholder="aa:bb:cc:dd:ee:ff" value={ f.MAC }/>
+				<label>
+					MAC address
+					<input type="text" name="mac" class="mono" placeholder="aa:bb:cc:dd:ee:ff" value={ f.MAC } autocomplete="off" spellcheck="false"/>
+				</label>
+				<div class="df-row">
+					<label class="grow">
+						IP address
+						<input type="text" name="ip" class="mono" placeholder="192.168.1.20" value={ f.IP } autocomplete="off" spellcheck="false" inputmode="decimal"/>
 					</label>
-					<label>
-						IP
-						<input type="text" name="ip" placeholder="10.0.0.5" value={ f.IP }/>
-					</label>
-					<label>
+					<label class="grow">
 						Subnet
 						<select name="subnet_id">
-							<option value="">—</option>
+							<option value="">Choose a subnet</option>
 							for _, sn := range f.Subnets {
 								if sn.ID == f.SubnetID {
-									<option value={ fmt.Sprint(sn.ID) } selected>{ sn.Name } { sn.CIDR }</option>
+									<option value={ fmt.Sprint(sn.ID) } selected data-cidr={ sn.CIDR }>{ sn.Name } · { sn.CIDR }</option>
 								} else {
-									<option value={ fmt.Sprint(sn.ID) }>{ sn.Name } { sn.CIDR }</option>
+									<option value={ fmt.Sprint(sn.ID) } data-cidr={ sn.CIDR }>{ sn.Name } · { sn.CIDR }</option>
 								}
 							}
 						</select>
 					</label>
 				</div>
+				<p class="hint">MAC and IP are optional. A scan fills them in when it finds the device.</p>
 			}
+			<details class="df-more" open?={ f.moreOpen() }>
+				<summary>
+					@Icon("chevron-right", "df-chev")
+					More details
+					<span class="muted">Vendor, model, parent, notes, tags</span>
+				</summary>
+				<div class="df-more-body">
+					<div class="df-row">
+						<label class="grow">
+							Vendor
+							<input type="text" name="vendor" value={ f.Device.Vendor } autocomplete="off"/>
+						</label>
+						<label class="grow">
+							Model
+							<input type="text" name="model" value={ f.Device.Model } autocomplete="off"/>
+						</label>
+					</div>
+					<label>
+						Function
+						<input type="text" name="function" value={ f.Device.Function } placeholder="Role, room, Wi-Fi channel…" autocomplete="off"/>
+					</label>
+					<div class="field">
+						<label for="df-parent">Parent device</label>
+						<input type="search" class="df-filter" data-filter-for="df-parent" placeholder="Filter by name or IP" aria-label="Filter parent devices" hidden/>
+						<select name="parent_device_id" id="df-parent">
+							<option value="">None</option>
+							for _, g := range f.parentGroups() {
+								<optgroup label={ g.Label }>
+									for _, pd := range g.Devices {
+										if f.Device.ParentDeviceID != nil && *f.Device.ParentDeviceID == pd.ID {
+											<option value={ fmt.Sprint(pd.ID) } selected>{ parentLabel(pd) }</option>
+										} else {
+											<option value={ fmt.Sprint(pd.ID) }>{ parentLabel(pd) }</option>
+										}
+									}
+								</optgroup>
+							}
+						</select>
+						<span class="hint">The device this one hangs off, such as its switch or host.</span>
+					</div>
+					<label>
+						Notes
+						<textarea name="notes" rows="3">{ f.Device.Notes }</textarea>
+					</label>
+					<div class="field">
+						<label for="df-tags">Tags</label>
+						<input type="text" id="df-tags" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="media, upstairs" autocomplete="off"/>
+						<span class="hint">Separate tags with commas.</span>
+					</div>
+				</div>
+			</details>
 		</div>
 		<div class="df">
 			if modal {
 				<button type="button" class="btn" data-close>Cancel</button>
 			} else {
-				<a class="btn" href={ templ.URL(f.cancelURL()) }>Cancel</a>
+				<a class="btn" href={ templ.SafeURL(f.cancelURL()) }>Cancel</a>
 			}
 			if f.IsEdit {
-				<button type="submit" class="btn btn-primary">Save</button>
+				<button type="submit" class="btn btn-primary">Save changes</button>
 			} else {
 				<button type="submit" class="btn btn-primary">Create device</button>
 			}
@@ -189,17 +267,40 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 	</form>
 }
 
-// DeviceDialog is the centered modal used for creating a device. dialog.js
-// opens it with showModal() once htmx has swapped it into #modal.
-templ DeviceDialog(f DeviceForm) {
-	<dialog class="dialog" aria-labelledby="dlg-title">
-		@deviceFormInner(f, true)
-	</dialog>
+// iconPicker shows the icon the device gets, which follows its kind until
+// the user picks another from the disclosure.
+templ iconPicker(f DeviceForm) {
+	<details class="iconpick-disc">
+		<summary>
+			<span class="icon-preview ic">
+				@Icon(DeviceIcon(f.Device.Icon, f.Device.Kind), "")
+			</span>
+			<span>Icon</span>
+			<span class="muted">follows the kind unless you pick one</span>
+			<span class="df-change">Change</span>
+		</summary>
+		<div class="iconpick" data-kind-default={ KindIcon(f.Device.Kind) }>
+			for _, ic := range IconChoices {
+				if ic == DeviceIcon(f.Device.Icon, f.Device.Kind) {
+					<button type="button" class="ic-swatch selected" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="true">
+						@Icon(ic, "icon-lg")
+					</button>
+				} else {
+					<button type="button" class="ic-swatch" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="false">
+						@Icon(ic, "icon-lg")
+					</button>
+				}
+			}
+		</div>
+		<input type="hidden" name="icon" value={ DeviceIcon(f.Device.Icon, f.Device.Kind) }/>
+	</details>
 }
 
-// DeviceDrawer is the right-side sliding panel used for editing a device.
-templ DeviceDrawer(f DeviceForm) {
-	<dialog class="dialog drawer" aria-labelledby="dlg-title">
+// DeviceDialog is the device form in a modal, for both New and Edit.
+// dialog.js opens it with showModal() once htmx has swapped it into #modal;
+// on a phone it fills the screen.
+templ DeviceDialog(f DeviceForm) {
+	<dialog class="dialog device-dialog" aria-labelledby="dlg-title">
 		@deviceFormInner(f, true)
 	</dialog>
 }
@@ -209,7 +310,7 @@ templ DeviceDrawer(f DeviceForm) {
 // a plain post that failed validation.
 templ DeviceFormPage(username string, f DeviceForm) {
 	@Layout(f.title(), username) {
-		<section class="dialog page-dialog" aria-labelledby="dlg-title">
+		<section class="dialog page-dialog device-dialog" aria-labelledby="dlg-title">
 			@deviceFormInner(f, false)
 		</section>
 	}

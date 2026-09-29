@@ -1,0 +1,176 @@
+/* Device detail page and the device form (dialog, full-screen sheet on a
+   phone, and the page served without JavaScript). Built from app.css tokens. */
+@layer pages {
+  /* ---- detail: back link and head ---- */
+  .dd-back { display:inline-flex; align-items:center; gap:6px; margin-bottom:var(--sp-3); color:var(--muted);
+             font-size:var(--text-sm); font-weight:var(--w-medium); text-decoration:none; }
+  .dd-back:hover { color:var(--accent); }
+  .dd-head { display:flex; align-items:flex-start; gap:var(--sp-4); margin-bottom:var(--sp-4); }
+  .dd-title { flex:1; min-width:0; }
+  .dd-title h1 { margin:2px 0 var(--sp-2); overflow-wrap:anywhere; }
+  .dd-meta { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-3); font-size:var(--text-sm); }
+  .dd-meta .mono { font-size:var(--text-sm); }
+  .dd-actions { display:flex; align-items:center; gap:var(--sp-2); flex:none; }
+  .dd-actions form { margin:0; }
+
+  /* The More menu floats under its button, right-aligned. */
+  .dd-more > summary { list-style:none; }
+  .dd-more > summary::-webkit-details-marker { display:none; }
+  .dd-more[open] > summary { background:var(--surface-2); }
+  .dd-more .menu { right:0; top:calc(100% + var(--sp-1)); min-width:224px; }
+  .dd-more hr { margin:var(--sp-1) 0; }
+  .menu-item.danger, .menu-item.danger .icon { color:var(--fault); }
+  .menu-item.danger:hover { background:var(--fault-soft); }
+
+  /* ---- availability bar ---- */
+  .dd-avail .panel-head { margin-bottom:var(--sp-2); }
+  .dd-avail h2 { font-size:var(--text-md); }
+  .dd-avail-pct { font-size:var(--text-md); font-weight:var(--w-semibold); }
+  .avail-bar { display:block; width:100%; height:40px; }
+  .avail-bar .track { fill:var(--surface-2); stroke:var(--border); stroke-width:.5; vector-effect:non-scaling-stroke; }
+  .avail-bar .fill { fill:var(--link); }
+  .avail-bar .part .fill { fill:color-mix(in srgb, var(--link) 70%, var(--activity)); }
+  .avail-bar .low .fill { fill:var(--activity); }
+  .avail-bar .none .track { fill:none; stroke-dasharray:2 2; }
+  .avail-bar .day:hover .track { stroke:var(--border-strong); }
+  .avail-axis { display:flex; justify-content:space-between; margin-top:var(--sp-1); font-size:var(--text-xs); }
+  .dd-avail .hint { margin:var(--sp-2) 0 0; }
+
+  /* ---- sections ---- */
+  .dd-section { margin-top:var(--sp-5); }
+  .dd-section > h2 { margin:0 0 var(--sp-3); font-size:var(--text-lg); }
+  .dd-section > .panel + .panel { margin-top:var(--sp-3); }
+  /* Overview: two columns whose panels share row heights, so neither side
+     runs on alone. */
+  .dd-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--sp-3); }
+  .dd-grid > .panel + .panel { margin-top:0; }
+  .dd-grid > .panel { display:flex; flex-direction:column; }
+  .dd-grid h3 { margin:0 0 var(--sp-3); font-size:var(--text-md); }
+  .dd-notes { white-space:pre-line; }
+  .dd-facts { font-size:var(--text-sm); }
+  .dd-facts + .hint { margin-top:var(--sp-3); }
+  .dd-tags { display:inline-flex; flex-wrap:wrap; gap:var(--sp-1); }
+  .dd-sub { margin:0 0 var(--sp-1); color:var(--muted); font-size:var(--text-sm); display:flex; align-items:center; gap:var(--sp-2); }
+  .dd-sub + ul { margin-bottom:var(--sp-3); }
+  .dd-sub + ul:last-child { margin-bottom:0; }
+
+  /* Parent and children: icon, name, IP, then status at the right edge. */
+  .dd-related { list-style:none; margin:0; padding:0; border-top:1px solid var(--border); }
+  .dd-related li { display:flex; align-items:center; gap:var(--sp-2); min-height:40px; padding:var(--sp-1) 0; border-bottom:1px solid var(--border); }
+  .dd-related li:last-child { border-bottom:0; }
+  .dd-related .ic { width:26px; height:26px; }
+  .dd-related a { font-weight:var(--w-medium); text-decoration:none; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dd-related a:hover { text-decoration:underline; }
+  .dd-related .mono { font-size:var(--text-xs); }
+  .dd-related .spacer { flex:1; }
+
+  /* Links and custom fields: rows with an icon button to remove, and a
+     compact add form pinned to the bottom of the panel. */
+  .dd-list { list-style:none; margin:0; padding:0; }
+  .dd-list li { display:flex; align-items:center; gap:var(--sp-2); min-height:36px; border-bottom:1px solid var(--border); }
+  .dd-list li:last-child { border-bottom:0; }
+  .dd-list a { display:inline-flex; align-items:center; gap:var(--sp-1); font-weight:var(--w-medium); flex:none; max-width:50%;
+               overflow:hidden; white-space:nowrap; text-decoration:none; }
+  .dd-list a:hover { text-decoration:underline; }
+  .dd-list a .icon { width:12px; height:12px; color:var(--muted); }
+  .dd-url { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--text-xs); }
+  .dd-list form, .dd-fields form { margin:0 0 0 auto; }
+  .dd-fields { margin:0; }
+  .dd-fields > div { display:grid; grid-template-columns:minmax(80px, 34%) minmax(0, 1fr); gap:var(--sp-3); align-items:center;
+                     min-height:36px; border-bottom:1px solid var(--border); font-size:var(--text-sm); }
+  .dd-fields > div:last-child { border-bottom:0; }
+  .dd-fields dt { color:var(--muted); overflow-wrap:anywhere; }
+  .dd-fields dd { margin:0; display:flex; align-items:center; gap:var(--sp-2); min-width:0; overflow-wrap:anywhere; }
+  .dd-add { display:flex; align-items:flex-end; gap:var(--sp-2); margin-top:auto; padding-top:var(--sp-3); }
+  .dd-add label { margin:0; flex:0 1 34%; min-width:0; }
+  .dd-add label.grow { flex:1 1 0; }
+  .dd-add input { width:100%; min-height:var(--h-sm); font-size:var(--text-sm); padding:0 var(--sp-2); }
+  .dd-add .btn { flex:none; }
+  .dd-grid .panel > p.muted { margin:0; font-size:var(--text-sm); }
+
+  /* ---- network ---- */
+  .dd-iface .panel-head h3 { font-size:var(--text-md); }
+  .dd-iface .panel-head .mono { font-size:var(--text-md); font-weight:var(--w-medium); }
+  .dd-iface-body { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--sp-4) var(--sp-5); }
+  .dd-iface-body h4 { margin:0 0 var(--sp-2); font-size:var(--text-sm); font-weight:var(--w-semibold); }
+  .dd-iface-body .table-wrap { margin:0; border:1px solid var(--border); border-radius:var(--r-control); }
+  .dd-iface-body p.muted { margin:0; font-size:var(--text-sm); }
+  .dd-events td:first-child { width:1%; white-space:nowrap; }
+  .dd-events td:nth-child(2) { width:1%; white-space:nowrap; }
+
+  /* ---- device form ---- */
+  dialog.dialog.device-dialog, .device-dialog.page-dialog { max-width:560px; }
+  dialog.dialog.device-dialog { width:min(560px, calc(100% - 32px)); }
+  .device-form .df-row { display:flex; gap:var(--sp-3); }
+  .device-form .df-row > label { margin:0; min-width:0; }
+  .device-form .df-row > .grow { flex:1 1 0; }
+  .device-form .field { margin:0; }
+  .device-form .hint { margin:0; }
+  .df-prefill { display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); border-radius:var(--r-control);
+                background:var(--accent-soft); color:var(--fg); font-size:var(--text-sm); }
+  .df-prefill > .icon { color:var(--accent); }
+
+  /* Icon: a one-line summary under Kind; the picker opens beneath it. */
+  .iconpick-disc { margin-top:calc(-1 * var(--sp-1)); }
+  .iconpick-disc > summary { display:flex; align-items:center; gap:var(--sp-2); list-style:none; cursor:pointer; font-size:var(--text-sm); }
+  .iconpick-disc > summary::-webkit-details-marker { display:none; }
+  .iconpick-disc .icon-preview { width:28px; height:28px; }
+  .iconpick-disc .df-change { margin-left:auto; color:var(--accent); font-weight:var(--w-medium); }
+  .iconpick-disc[open] .df-change { visibility:hidden; }
+  .iconpick-disc[open] > summary { margin-bottom:var(--sp-2); }
+  .iconpick-disc .iconpick { padding:var(--sp-2); border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); }
+
+  /* More details: collapsed unless it already holds something. */
+  .df-more { border-top:1px solid var(--border); padding-top:var(--sp-3); }
+  .df-more > summary { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; list-style:none; cursor:pointer;
+                       font-weight:var(--w-medium); }
+  .df-more > summary::-webkit-details-marker { display:none; }
+  .df-more > summary .muted { font-weight:var(--w-regular); font-size:var(--text-sm); }
+  .df-more .df-chev { color:var(--muted); transition:transform .12s var(--ease); }
+  .df-more[open] .df-chev { transform:rotate(90deg); }
+  .df-more-body { display:flex; flex-direction:column; gap:var(--sp-3); margin-top:var(--sp-3); }
+  .df-more-body label { margin:0; }
+  .df-filter { margin-bottom:var(--sp-1); }
+
+  @media (max-width:900px) {
+    .dd-grid, .dd-iface-body { grid-template-columns:minmax(0, 1fr); }
+  }
+
+  @media (max-width:640px) {
+    .dd-head { flex-wrap:wrap; gap:var(--sp-3); }
+    .dd-head > .ic-lg { width:40px; height:40px; }
+    .dd-title { flex-basis:calc(100% - 56px); }
+    .dd-actions { width:100%; }
+    .dd-actions > form, .dd-actions > a { flex:1; }
+    .dd-actions > form .btn, .dd-actions > a.btn { width:100%; height:var(--h-lg); }
+    .dd-actions .dd-more > summary { height:var(--h-lg); }
+    .dd-more .menu { min-width:240px; }
+    .dd-more .menu-item { min-height:44px; }
+    .dd-iface .panel-head .spacer { display:none; }
+    .dd-iface .panel-head > .text-sm { flex-basis:100%; }
+    .dd-add { flex-wrap:wrap; }
+    .dd-add label, .dd-add label.grow { flex:1 1 100%; }
+    .dd-add input { min-height:var(--h-lg); font-size:var(--text-base); }
+    .dd-add .btn { height:var(--h-lg); }
+    .dd-list li, .dd-fields > div { min-height:44px; }
+    .dd-list .btn-icon, .dd-fields .btn-icon { width:44px; height:44px; }
+    .dd-list .dd-url { display:none; }
+    .dd-list a { max-width:none; flex:1; }
+    .dd-events thead { display:none; }
+    .dd-events tr { display:grid; grid-template-columns:auto 1fr; gap:var(--sp-1) var(--sp-2); padding:var(--sp-2) var(--sp-4);
+                    border-bottom:1px solid var(--border); }
+    .dd-events tr:last-child { border-bottom:0; }
+    .dd-events td { padding:0; border:0; width:auto !important; }
+    .dd-events td:first-child { grid-column:2; grid-row:1; justify-self:end; font-size:var(--text-xs); }
+    .dd-events td:nth-child(2) { grid-column:1; grid-row:1; }
+    .dd-events td:nth-child(3) { grid-column:1 / -1; font-size:var(--text-sm); }
+
+    /* The form fills the screen on a phone, footer pinned at the bottom. */
+    dialog.dialog.device-dialog { width:100%; max-width:100%; height:100%; max-height:100%; margin:0;
+                                   border:0; border-radius:0; animation:sheetin .18s var(--ease); }
+    .device-form .df-row { flex-direction:column; gap:var(--sp-3); }
+    .device-form input, .device-form select { min-height:var(--h-lg); font-size:1rem; }
+    .device-dialog .df .btn { height:var(--h-lg); flex:1; }
+    @keyframes sheetin { from { transform:translateY(16px); opacity:.6; } to { transform:none; opacity:1; } }
+  }
+}

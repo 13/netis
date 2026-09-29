@@ -351,6 +351,25 @@ func TestConformanceStatusAndEvents(t *testing.T) {
 		if pct != 50 {
 			t.Errorf("AvailabilityPct = %v, want 50", pct)
 		}
+		// A second interface that was down all hour does not pull the
+		// device's figure down: the better interface stands for the hour.
+		if2, err := s.AddIface(ctx, devID, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.RecordAvailability(ctx, if2, false, bucket); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.RecordAvailability(ctx, if2, false, "2026-09-07T18:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+		hours, err := s.DeviceAvailability(ctx, devID, "2026-09-07T00:00:00Z")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hours) != 2 || hours[0].Start != bucket || hours[0].Up != 0.5 || hours[1].Up != 0 {
+			t.Errorf("DeviceAvailability = %+v, want 17:00 at 0.5 then 18:00 at 0", hours)
+		}
 
 		evID, err := s.AddEvent(ctx, "online", &devID, "up")
 		if err != nil {

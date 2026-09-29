@@ -319,8 +319,7 @@ func (s *Server) deviceFormLists(r *http.Request, f *views.DeviceForm) error {
 	return err
 }
 
-// renderDeviceForm answers with the device form: the dialog (or edit drawer)
-// alone for htmx, which swaps it into #modal, and a page of its own
+// renderDeviceForm answers with the device form: the dialog alone for htmx, which swaps it into #modal, and a page of its own
 // otherwise, so the New and Edit links work without JavaScript and a plain
 // post that failed shows its error with the form. status is the code to
 // send, 200 for a fresh form.
@@ -329,19 +328,40 @@ func (s *Server) renderDeviceForm(w http.ResponseWriter, r *http.Request, f view
 		s.fail(w, r, err)
 		return
 	}
+	if f.SubnetID == 0 {
+		f.SubnetID = subnetFor(f.Subnets, f.IP)
+	}
 	var c templ.Component
 	switch {
 	case !isHTMX(r):
 		u, _ := userFrom(r)
 		c = views.DeviceFormPage(u.Username, f)
-	case f.IsEdit:
-		c = views.DeviceDrawer(f)
 	default:
 		c = views.DeviceDialog(f)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	s.render(w, r, c)
+}
+
+// subnetFor returns the id of the subnet that contains ip, so a form given
+// only an address comes up with its subnet chosen. When subnets nest, the
+// most specific wins. Zero when ip is not an address or no subnet holds it.
+func subnetFor(subnets []store.Subnet, ip string) int64 {
+	addr, err := netip.ParseAddr(strings.TrimSpace(ip))
+	if err != nil {
+		return 0
+	}
+	var best int64
+	bits := -1
+	for _, sn := range subnets {
+		p, err := netip.ParsePrefix(sn.CIDR)
+		if err != nil || !p.Contains(addr) || p.Bits() <= bits {
+			continue
+		}
+		best, bits = sn.ID, p.Bits()
+	}
+	return best
 }
 
 // submittedDeviceForm is the form as the user filled it in, to send back
@@ -373,6 +393,7 @@ func (s *Server) handleDeviceForm(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("subnet"); v != "" {
 		f.SubnetID, _ = strconv.ParseInt(v, 10, 64)
 	}
+	f.Prefilled = f.IP != ""
 	s.renderDeviceForm(w, r, f, http.StatusOK)
 }
 
@@ -441,6 +462,7 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Device created")
 	redirectAfterForm(w, r, "/devices/"+strconv.FormatInt(devID, 10))
 }
 
@@ -556,6 +578,7 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Changes saved")
 	redirectAfterForm(w, r, "/devices/"+r.PathValue("id"))
 }
 
@@ -577,6 +600,7 @@ func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Device approved")
 	http.Redirect(w, r, localNext(r.FormValue("next"), "/devices"), http.StatusSeeOther)
 }
 
@@ -594,12 +618,13 @@ func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Device deleted")
 	http.Redirect(w, r, "/devices", http.StatusSeeOther)
 }
 
 // handleDevicePage assembles the full device detail view: fields, per-iface
-// IPs/ports/availability, tags, custom fields, links, parent/children and
-// recent event history.
+// IPs/ports/availability, the 30-day availability bar, tags, custom fields,
+// links, parent/children and recent event history.
 func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -621,7 +646,8 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	since := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Hour).Format(time.RFC3339)
+	now := time.Now()
+	since := now.UTC().Add(-30 * 24 * time.Hour).Truncate(time.Hour).Format(time.RFC3339)
 	ifaceDetails := make([]views.IfaceDetail, 0, len(ifaces))
 	for _, f := range ifaces {
 		ips, err := s.store.ListIPs(r.Context(), f.ID)
@@ -652,6 +678,25 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 			Iface: f, IPs: ips, Ports: ports, AvailabilityPct: pct, Online: online, LastSeen: ls,
 		})
 	}
+	// The bar covers the local days ending today, so it asks from the start
+	// of the first of them.
+	y, m, day := now.Date()
+	barSince := time.Date(y, m, day-views.AvailabilityDays+1, 0, 0, 0, 0, now.Location()).UTC().Format(time.RFC3339)
+	hours, err := s.store.DeviceAvailability(r.Context(), id, barSince)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
+	subnets, err := s.store.ListSubnets(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	subnetByID := make(map[int64]store.Subnet, len(subnets))
+	for _, sn := range subnets {
+		subnetByID[sn.ID] = sn
+	}
 
 	tags, err := s.store.DeviceTags(r.Context(), id)
 	if err != nil {
@@ -668,19 +713,29 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	children, err := s.store.ListChildren(r.Context(), id)
+	// Parent and children come from the device rows, which carry the
+	// status and IPs the page shows beside each of them. The query behind
+	// ListDevices is a fixed handful of statements whatever the fleet size.
+	rows, err := s.store.ListDevices(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	var parent *store.Device
-	if d.ParentDeviceID != nil {
-		p, err := s.store.GetDevice(r.Context(), *d.ParentDeviceID)
-		if err == nil {
-			parent = &p
+	var parent *store.DeviceRow
+	var children []store.DeviceRow
+	for i := range rows {
+		row := rows[i]
+		if d.ParentDeviceID != nil && row.ID == *d.ParentDeviceID {
+			parent = &row
+		}
+		if row.ParentDeviceID != nil && *row.ParentDeviceID == id && row.ID != id {
+			children = append(children, row)
 		}
 	}
-	evs, err := s.store.ListDeviceEvents(r.Context(), id, 20)
+	sort.SliceStable(children, func(i, j int) bool {
+		return strings.ToLower(children[i].Name) < strings.ToLower(children[j].Name)
+	})
+	evs, err := s.store.ListDeviceEvents(r.Context(), id, views.DeviceEventLimit)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -696,8 +751,47 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, views.DevicePage(u.Username, views.DeviceDetail{
 		Device: d, Ifaces: ifaceDetails, Tags: tags,
 		Fields: fields, Links: links, Children: children, Parent: parent, Events: evs,
+		Subnets:      subnetByID,
+		Availability: views.BuildAvailability(hours, now, views.AvailabilityDays),
 		AlertOffline: alert,
+		Back:         s.deviceBackLink(r),
 	}))
+}
+
+// deviceBackLink points the device page's back link at the page the user
+// came from, when the Referer is one of ours that lists devices: the list
+// (with its filter and sort), the dashboard, events, or a subnet. Anything
+// else, including a device page itself after a form post, goes to the list.
+func (s *Server) deviceBackLink(r *http.Request) views.BackLink {
+	list := views.BackLink{URL: "/devices", Label: "Devices"}
+	ref, err := url.Parse(r.Referer())
+	if err != nil || ref.Host != r.Host {
+		return list
+	}
+	switch p := ref.Path; {
+	case p == "/devices":
+		if ref.RawQuery != "" {
+			list.URL += "?" + ref.RawQuery
+		}
+		return list
+	case p == "/":
+		return views.BackLink{URL: "/", Label: "Dashboard"}
+	case p == "/events":
+		return views.BackLink{URL: "/events", Label: "Events"}
+	case p == "/subnets":
+		return views.BackLink{URL: "/subnets", Label: "Subnets"}
+	case strings.HasPrefix(p, "/subnets/"):
+		id, err := strconv.ParseInt(strings.TrimPrefix(p, "/subnets/"), 10, 64)
+		if err != nil {
+			return list
+		}
+		sn, err := s.store.GetSubnet(r.Context(), id)
+		if err != nil {
+			return list
+		}
+		return views.BackLink{URL: "/subnets/" + strconv.FormatInt(id, 10), Label: sn.Name}
+	}
+	return list
 }
 
 // handleDeviceAlert switches the device's offline/online notifications on
@@ -716,9 +810,15 @@ func (s *Server) handleDeviceAlert(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if err := s.store.SetDeviceAlertOffline(r.Context(), id, r.FormValue("alert_offline") == "1"); err != nil {
+	on := r.FormValue("alert_offline") == "1"
+	if err := s.store.SetDeviceAlertOffline(r.Context(), id, on); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	if on {
+		s.flashToast(w, r, "Offline alerts turned on")
+	} else {
+		s.flashToast(w, r, "Offline alerts turned off")
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
@@ -732,6 +832,7 @@ func (s *Server) handleLinkAdd(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+		s.flashToast(w, r, "Link added")
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
@@ -745,6 +846,7 @@ func (s *Server) handleLinkDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Link removed")
 	http.Redirect(w, r, "/devices/"+devID, http.StatusSeeOther)
 }
 
@@ -756,6 +858,7 @@ func (s *Server) handleFieldSet(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+		s.flashToast(w, r, "Field saved")
 	}
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
@@ -767,6 +870,7 @@ func (s *Server) handleFieldDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, "Field removed")
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
@@ -810,9 +914,10 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if isHTMX(r) {
-			s.render(w, r, views.ScanToast("Magic packet for "+*f.MAC+" sent to "+wol.HostsOf(sent)))
+			s.render(w, r, views.ScanToast("Wake on LAN sent to "+*f.MAC+" via "+wol.HostsOf(sent)))
 			return
 		}
+		s.flashToast(w, r, "Wake on LAN sent to "+*f.MAC)
 		http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 		return
 	}
@@ -887,7 +992,16 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.flashToast(w, r, portScanToast(ips[0].IP, len(found)))
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
+}
+
+// portScanToast says what a port scan found, repeating what was done.
+func portScanToast(ip string, open int) string {
+	if open == 0 {
+		return "Ports scanned on " + ip + ": none open"
+	}
+	return "Ports scanned on " + ip + ": " + strconv.Itoa(open) + " open"
 }
 
 // handleDeviceIPKind flips an IP assignment's lease kind (static/dhcp) from the
