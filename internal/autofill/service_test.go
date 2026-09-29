@@ -3,6 +3,8 @@ package autofill
 import (
 	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,20 +114,67 @@ func TestKickCoalescesAndStartStops(t *testing.T) {
 	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
 		svc := New(st)
 		svc.interval = 10 * time.Millisecond
-		passes := 0
-		svc.afterPass = func() { passes++ }
+		var passes atomic.Int32
+		svc.afterPass = func() { passes.Add(1) }
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
 		go func() { svc.Start(ctx); close(done) }()
 		for i := 0; i < 5; i++ {
 			svc.Kick()
 		}
-		time.Sleep(100 * time.Millisecond)
+		// Poll instead of a fixed sleep: wait for the startup pass plus the
+		// coalesced burst pass, with a generous deadline for loaded CI.
+		deadline := time.Now().Add(5 * time.Second)
+		for passes.Load() < 2 && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+		}
+		// Let things settle a bit longer so a spurious extra pass would show up.
+		time.Sleep(50 * time.Millisecond)
 		cancel()
 		<-done
-		// startup pass + at most two for the burst of kicks
-		if passes < 2 || passes > 3 {
-			t.Fatalf("passes = %d", passes)
+		// startup pass + one for the burst of kicks, coalesced into one.
+		if got := passes.Load(); got != 2 {
+			t.Fatalf("passes = %d", got)
+		}
+	})
+}
+
+// TestRunSerialisesConcurrentPasses guards against the same device being
+// autofilled by two overlapping Run calls at once (e.g. Start's background
+// pass and a direct Run from the web port-scan handler), which could
+// otherwise interleave ReplaceHints calls into a primary-key conflict on
+// Postgres.
+func TestRunSerialisesConcurrentPasses(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		ctx := t.Context()
+		svc := New(st)
+		id := discovered(t, st, "BRW3C2AF4A1B2C3", "00:1b:a9:00:00:01", "BRW3C2AF4A1B2C3", "10.0.0.5")
+
+		var wg sync.WaitGroup
+		errs := make(chan error, 10)
+		for g := 0; g < 2; g++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < 5; i++ {
+					if err := svc.Run(ctx, id); err != nil {
+						errs <- err
+					}
+				}
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatal(err)
+		}
+
+		entries, _, err := st.ListAudit(ctx, store.AuditFilter{Action: "device.autofill", Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("audit entries = %+v", entries)
 		}
 	})
 }

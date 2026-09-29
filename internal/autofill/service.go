@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"netis/internal/store"
@@ -21,6 +22,10 @@ type Service struct {
 	interval time.Duration // least time between kicked passes
 	// afterPass is a test hook, called after each pass Start runs.
 	afterPass func()
+	// mu serialises Run: Start's background pass and a direct Run from the
+	// web port-scan handler can overlap, and interleaved ReplaceHints calls
+	// for the same device can hit a primary-key conflict on Postgres.
+	mu sync.Mutex
 }
 
 // New returns a service over st. Call Start to serve Kick.
@@ -77,6 +82,8 @@ func (s *Service) Run(ctx context.Context, ids ...int64) error {
 	if !Enabled(ctx, s.st) {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(ids) == 0 {
 		all, err := s.st.DeviceIDs(ctx)
 		if err != nil {
