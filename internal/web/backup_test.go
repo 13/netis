@@ -30,7 +30,7 @@ func TestBackupsOffInAboutAndMetrics(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	about := authedGet(t, srv, st, "/settings/system").Body.String()
-	if !strings.Contains(about, "Last backup") || !strings.Contains(about, "off (set NETIS_BACKUP_DIR)") {
+	if !strings.Contains(about, "Last backup") || !strings.Contains(about, "Off; set NETIS_BACKUP_DIR") {
 		t.Errorf("About tab does not report backups as off:\n%s", about)
 	}
 	metrics := authedGet(t, srv, st, "/metrics").Body.String()

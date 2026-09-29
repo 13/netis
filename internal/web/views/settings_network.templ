@@ -28,9 +28,9 @@ templ subnetKindSelect(current string) {
 		<select name="kind">
 			for _, k := range subnetKinds {
 				if k == current {
-					<option value={ k } selected>{ k }</option>
+					<option value={ k } selected>{ subnetKindLabel(k) }</option>
 				} else {
-					<option value={ k }>{ k }</option>
+					<option value={ k }>{ subnetKindLabel(k) }</option>
 				}
 			}
 		</select>
@@ -45,7 +45,7 @@ templ subnetRow(sn store.Subnet) {
 			@Icon("chevron-right", "disc-chev")
 			<span class="subnet-name">{ sn.Name }</span>
 			<span class="mono">{ sn.CIDR }</span>
-			<span class="chip">{ sn.Kind }</span>
+			<span class="chip">{ subnetKindLabel(sn.Kind) }</span>
 			<span class="muted subnet-scan">{ scanEvery(sn) }</span>
 		</summary>
 		<div class="subnet-edit">
@@ -200,9 +200,9 @@ templ scanningForm(d SettingsData) {
 				<select name="default_subnet_kind">
 					for _, k := range subnetKinds {
 						if k == settingOr(d.Values, "default_subnet_kind", "lan") {
-							<option value={ k } selected>{ k }</option>
+							<option value={ k } selected>{ subnetKindLabel(k) }</option>
 						} else {
-							<option value={ k }>{ k }</option>
+							<option value={ k }>{ subnetKindLabel(k) }</option>
 						}
 					}
 				</select>

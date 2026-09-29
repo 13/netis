@@ -38,7 +38,7 @@ func TestDeviceDetailActions(t *testing.T) {
 	}
 
 	page = authedGet(t, srv, st, "/devices/"+itoa(found)).Body.String()
-	for _, want := range []string{"Wake on LAN", "Scan ports", `action="/devices/` + itoa(found) + `/approve"`, `name="next" value="/devices/` + itoa(found) + `"`, ">new<"} {
+	for _, want := range []string{"Wake on LAN", "Scan ports", `action="/devices/` + itoa(found) + `/approve"`, `name="next" value="/devices/` + itoa(found) + `"`, ">New<"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("unreviewed device with MAC and IP: page missing %q", want)
 		}

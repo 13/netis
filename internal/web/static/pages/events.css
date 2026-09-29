@@ -37,7 +37,7 @@
   .pager { display:flex; align-items:center; gap:var(--sp-2); margin-top:var(--sp-4); }
 
   @media (max-width:640px) {
-    .ev-filters { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-2) var(--sp-3); }
+    .ev-filters { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:var(--sp-2) var(--sp-3); }
     .ev-filters > label:first-child, .ev-f-device, .ev-f-actions { grid-column:1 / -1; }
     .ev-filters select, .ev-f-device input, .ev-filters input[type="date"] { width:100%; min-width:0; min-height:44px; }
     .ev-f-actions .btn { min-height:44px; }

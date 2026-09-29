@@ -17,17 +17,17 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	title, ok := integrationTitles[name]
 	if !ok {
-		http.Error(w, "unknown integration", 400)
+		http.Error(w, "netis has no integration by that name", 400)
 		return
 	}
 	if s.runner == nil {
-		s.render(w, r, views.ScanToast("integration run not available"))
+		s.render(w, r, views.ScanToast("Integrations cannot be run from here on this server"))
 		return
 	}
 	// The runner applies its own per-run deadline.
 	runErr := s.runner.Run(r.Context(), name)
 	if errors.Is(runErr, ErrIntegrationBusy) {
-		s.render(w, r, views.ScanToast(title+": already running"))
+		s.render(w, r, views.ScanToast(title+" is already running; wait for it to finish"))
 		return
 	}
 
@@ -43,16 +43,16 @@ func (s *Server) handleIntegrationRun(w http.ResponseWriter, r *http.Request) {
 	var msg string
 	switch {
 	case st == nil && runErr != nil:
-		msg = title + ": not configured"
+		msg = title + " is not set up yet; configure it first"
 	case st == nil:
-		msg = title + ": ran"
+		msg = title + " ran"
 	case st.OK:
-		msg = title + ": connected"
+		msg = title + " ran and is connected"
 		if st.Detail != "" {
 			msg += " · " + st.Detail
 		}
 	default:
-		msg = title + ": failing"
+		msg = title + " ran and is failing"
 		if st.Detail != "" {
 			msg += " · " + st.Detail
 		}

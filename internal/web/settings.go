@@ -273,13 +273,13 @@ func (s *Server) backupSummary() views.BackupView {
 		case !st.LastAttempt.IsZero() && !st.OK:
 			return views.BackupView{Failed: true, At: st.LastAttempt.UTC().Format(time.RFC3339)}
 		case st.LastSuccess.IsZero():
-			return views.BackupView{Note: "none yet"}
+			return views.BackupView{Note: "None yet"}
 		}
 		return views.BackupView{At: st.LastSuccess.UTC().Format(time.RFC3339), File: st.File}
 	case s.store.Dialect() == store.Postgres:
-		return views.BackupView{Note: "not available on Postgres (use pg_dump)"}
+		return views.BackupView{Note: "Not available on Postgres; back up with pg_dump"}
 	}
-	return views.BackupView{Note: "off (set NETIS_BACKUP_DIR)"}
+	return views.BackupView{Note: "Off; set NETIS_BACKUP_DIR to turn it on"}
 }
 
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
@@ -330,11 +330,18 @@ const subnetExistsMsg = "a subnet with that CIDR already exists"
 // returning what is wrong with it as msg on validation failure. The
 // CIDR is normalized to its masked form (e.g. "10.0.0.5/24" -> "10.0.0.0/24")
 // so stored subnets are always canonical regardless of what a user typed.
+// retentionLabels name the retention settings the way the System page does.
+var retentionLabels = map[string]string{
+	"event_retention_days":        "event history",
+	"availability_retention_days": "availability history",
+	"audit_retention_days":        "audit log",
+}
+
 func parseSubnetForm(r *http.Request) (sn store.Subnet, msg string) {
 	cidr := strings.TrimSpace(r.FormValue("cidr"))
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
-		return store.Subnet{}, "invalid CIDR"
+		return store.Subnet{}, "that is not a subnet in CIDR form; write it like 192.168.1.0/24"
 	}
 	// Every address in a subnet becomes a grid cell and a sweep target, so an
 	// over-wide prefix is refused here rather than discovered when the page is
@@ -344,7 +351,7 @@ func parseSubnetForm(r *http.Request) (sn store.Subnet, msg string) {
 	}
 	kind := r.FormValue("kind")
 	if kind != "lan" && kind != "wireguard" && kind != "proxmox-bridge" {
-		return store.Subnet{}, "bad kind"
+		return store.Subnet{}, "choose a subnet kind from the list"
 	}
 	interval, err := strconv.Atoi(r.FormValue("scan_interval_sec"))
 	if err != nil || interval < 30 {
@@ -462,7 +469,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	note := auditNote(r)
 	note.Target, note.Detail = "user "+username, "role "+role
 	if username == "" || len(password) < minPasswordLen {
-		s.settingsError(w, r, "users", http.StatusBadRequest, "username required, password min "+strconv.Itoa(minPasswordLen)+" chars")
+		s.settingsError(w, r, "users", http.StatusBadRequest, "enter a username and a password of at least "+strconv.Itoa(minPasswordLen)+" characters")
 		return
 	}
 	if len(password) > maxPasswordLen {
@@ -470,7 +477,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if role != "admin" && role != "viewer" {
-		s.settingsError(w, r, "users", http.StatusBadRequest, "bad role")
+		s.settingsError(w, r, "users", http.StatusBadRequest, "choose a role: Admin or Viewer")
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
@@ -497,7 +504,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	// Deleting yourself would sign you out mid-click and, for the last
 	// admin with SSO off, lock everyone out; another admin has to do it.
 	if me, ok := userFrom(r); ok && me.ID == id {
-		s.settingsError(w, r, "users", http.StatusBadRequest, "you cannot delete your own account")
+		s.settingsError(w, r, "users", http.StatusBadRequest, "you cannot delete your own account; sign in as another admin to delete it")
 		return
 	}
 	// DeleteUserGuarded performs the existence check, admin count, and
@@ -529,7 +536,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot delete the last admin")
+		s.settingsError(w, r, "users", http.StatusBadRequest, "this is the only admin; make another user an admin first, then delete this one")
 		return
 	}
 	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
@@ -557,8 +564,8 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 	note := auditNote(r)
 	note.Target, note.Detail = "user "+u.Username, u.Role+" -> "+role
 	if role != "admin" && role != "viewer" {
-		note.Detail = "bad role"
-		s.settingsError(w, r, "users", http.StatusBadRequest, "bad role")
+		note.Detail = "choose a role: Admin or Viewer"
+		s.settingsError(w, r, "users", http.StatusBadRequest, "choose a role: Admin or Viewer")
 		return
 	}
 	// Guarded in one statement, like delete: two admins demoting each other
@@ -569,7 +576,7 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !changed {
-		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot demote the last admin")
+		s.settingsError(w, r, "users", http.StatusBadRequest, "this is the only admin; make another user an admin first, then change this role")
 		return
 	}
 	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
@@ -597,7 +604,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	if v := r.FormValue("default_scan_interval_sec"); v != "" {
 		iv, err := strconv.Atoi(v)
 		if err != nil || iv < 30 {
-			s.settingsError(w, r, tab, http.StatusBadRequest, "default scan interval must be an integer >= 30")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "the scan interval must be a whole number of seconds, 30 or more")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
@@ -607,7 +614,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_subnet_kind"); v != "" {
 		if v != "lan" && v != "wireguard" && v != "proxmox-bridge" {
-			s.settingsError(w, r, tab, http.StatusBadRequest, "bad subnet kind")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "choose a subnet kind from the list")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_subnet_kind", v); err != nil {
@@ -617,7 +624,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_scan_enabled"); v != "" {
 		if v != "on" && v != "off" {
-			s.settingsError(w, r, tab, http.StatusBadRequest, "bad default scan enabled")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "choose whether new subnets are scanned: On or Off")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
@@ -627,7 +634,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("presence_fallback"); v != "" {
 		if v != "on" && v != "off" {
-			http.Error(w, "bad presence fallback", 400)
+			s.settingsError(w, r, tab, http.StatusBadRequest, "choose a presence fallback from the list")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "presence_fallback", v); err != nil {
@@ -644,7 +651,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			s.settingsError(w, r, tab, http.StatusBadRequest, k+" must be a non-negative integer")
+			s.settingsError(w, r, tab, http.StatusBadRequest, retentionLabels[k]+" must be a whole number of days, 0 or more")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), k, strconv.Itoa(n)); err != nil {

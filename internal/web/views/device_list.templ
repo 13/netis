@@ -97,7 +97,7 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 					<div class="dev-name">
 						<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
 						if !row.Reviewed {
-							<span class="status is-new">new</span>
+							<span class="status is-new">New</span>
 						}
 						@missingUpstreamPill(row.Device)
 					</div>
@@ -105,7 +105,7 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 						<div class="muted sub">
 							{ joinNonEmpty(" · ", row.Vendor, row.Model) }
 							if macaddr.AnyPrivate(row.MACs) {
-								<span class="chip" title={ privateMACTitle }>private MAC</span>
+								<span class="chip" title={ privateMACTitle }>Private MAC</span>
 							}
 						</div>
 					}
@@ -120,7 +120,7 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 				<div class="ip-line">
 					<span>{ ip.IP }</span>
 					if o.Conflicts[ConflictKey(ip.SubnetID, ip.IP)] {
-						<span class="status is-conflict" title="Another device holds this address in the same subnet">conflict</span>
+						<span class="status is-conflict" title="Another device holds this address in the same subnet">Conflict</span>
 					}
 				</div>
 			}
@@ -135,17 +135,17 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 		<td class="col-lease opt">
 			for _, ip := range row.IPs {
 				if ip.Kind == "static" {
-					<span class="chip static">static</span>
+					<span class="chip static">Static</span>
 				} else {
-					<span class="chip dhcp">dhcp</span>
+					<span class="chip dhcp">DHCP</span>
 				}
 			}
 		</td>
 		<td class="col-status">
 			if row.Online {
-				<span class="status is-online">online</span>
+				<span class="status is-online">Online</span>
 			} else {
-				<span class="status is-offline">offline</span>
+				<span class="status is-offline">Offline</span>
 			}
 		</td>
 		<td class="col-kind">{ KindLabel(row.Kind) }</td>
@@ -241,9 +241,9 @@ templ DeviceList(username string, p DeviceListPage) {
 							@Icon("plus", "")
 							New device
 						</a>
-						<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">
+						<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" aria-label="Scan all subnets">
 							@Icon("radar", "")
-							Scan all
+							<span class="dl-scan-lbl">Scan all subnets</span>
 						</button>
 					}
 					<details class="dl-menu">
@@ -506,9 +506,9 @@ templ deviceTile(row store.DeviceRow) {
 		<div class="devtile-head">
 			@deviceIcon(row.Icon, row.Kind, "")
 			if row.Online {
-				<span class="status is-online">online</span>
+				<span class="status is-online">Online</span>
 			} else {
-				<span class="status is-offline">offline</span>
+				<span class="status is-offline">Offline</span>
 			}
 		</div>
 		<div class="nm" title={ row.Name }>{ row.Name }</div>
@@ -516,13 +516,13 @@ templ deviceTile(row store.DeviceRow) {
 			if ip := lowestIPStr(row.IPs); ip != "" {
 				{ ip }
 			} else {
-				<span class="muted">no IP</span>
+				<span class="muted">No IP</span>
 			}
 		</div>
 		<div class="devtile-foot">
 			<span class="muted">{ KindLabel(row.Kind) }</span>
 			if !row.Reviewed {
-				<span class="status is-new">new</span>
+				<span class="status is-new">New</span>
 			}
 			@missingUpstreamPill(row.Device)
 		</div>

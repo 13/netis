@@ -756,9 +756,9 @@ func IntegrationPanel(it Integration, values map[string]string, standalone bool)
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var34 string
-				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(it.Status.Detail)
+				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(Sentence(it.Status.Detail))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings_integrations.templ`, Line: 172, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings_integrations.templ`, Line: 172, Col: 37}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {

@@ -148,7 +148,7 @@ templ SettingsPage(username string, d SettingsData) {
 			<div class="settings-body">
 				<h1>{ settingsTitle(d.ActiveTab) }</h1>
 				if d.Error != "" {
-					<p class="form-error" role="alert">{ d.Error }</p>
+					<p class="form-error" role="alert">{ Sentence(d.Error) }</p>
 				}
 				switch d.ActiveTab {
 					case "sessions":

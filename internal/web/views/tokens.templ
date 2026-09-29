@@ -16,9 +16,9 @@ func tokenExpired(t store.APIToken) bool {
 // tokenExpiry says when a token stops working, or that it already did.
 templ tokenExpiry(t store.APIToken) {
 	if t.ExpiresAt == nil || *t.ExpiresAt == "" {
-		never
+		Never
 	} else if tokenExpired(t) {
-		expired{ " " }
+		Expired{ " " }
 		@Time(*t.ExpiresAt)
 	} else {
 		@Time(*t.ExpiresAt)
@@ -28,7 +28,7 @@ templ tokenExpiry(t store.APIToken) {
 // tokenLastUsed says when a token was last presented, to the minute.
 templ tokenLastUsed(t store.APIToken) {
 	if t.LastUsedAt == nil || *t.LastUsedAt == "" {
-		never
+		Never
 	} else {
 		@Time(*t.LastUsedAt)
 	}
@@ -61,7 +61,7 @@ templ tokensTab(d SettingsData) {
 			</div>
 		} else {
 			<div class="table-wrap">
-				<table>
+				<table class="table-stack">
 					<tr>
 						<th>Name</th>
 						if IsAdmin(ctx) {
@@ -70,23 +70,26 @@ templ tokensTab(d SettingsData) {
 						<th>Created</th>
 						<th>Last used</th>
 						<th>Expires</th>
-						<th></th>
+						<th><span class="sr-only">Actions</span></th>
 					</tr>
 					for _, t := range d.Tokens {
 						<tr>
-							<td>{ t.Name }</td>
+							<td data-label="Name">{ t.Name }</td>
 							if IsAdmin(ctx) {
-								<td>{ t.Username }</td>
+								<td data-label="Owner">{ t.Username }</td>
 							}
-							<td>@Time(t.CreatedAt)
-</td>
-							<td>@tokenLastUsed(t)
-</td>
-							<td>@tokenExpiry(t)
-</td>
-							<td>
+							<td data-label="Created">
+								@Time(t.CreatedAt)
+							</td>
+							<td data-label="Last used">
+								@tokenLastUsed(t)
+							</td>
+							<td data-label="Expires">
+								@tokenExpiry(t)
+							</td>
+							<td class="cell-actions">
 								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tokens/%d/delete", t.ID)) } class="inline" data-confirm={ "Revoke the token " + t.Name + "? Scripts using it stop working." }>
-									<button type="submit" class="btn btn-sm">revoke</button>
+									<button type="submit" class="btn btn-sm">Revoke</button>
 								</form>
 							</td>
 						</tr>

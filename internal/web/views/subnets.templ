@@ -13,7 +13,7 @@ templ SubnetsPage(username string, subnets []SubnetSummary) {
 				<div class="row">
 					<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="btn">
 						@Icon("radar", "")
-						Scan all
+						Scan all subnets
 					</button>
 					<a class="btn" href="/settings/network">
 						@Icon("settings", "")

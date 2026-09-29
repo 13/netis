@@ -115,7 +115,7 @@ func TestPrivateMACSurfaced(t *testing.T) {
 		t.Fatalf("private_mac not set: %s", body)
 	}
 	for _, path := range []string{"/devices", "/devices/" + itoa(devID)} {
-		if b := authedGet(t, srv, st, path).Body.String(); !strings.Contains(b, "private MAC") {
+		if b := authedGet(t, srv, st, path).Body.String(); !strings.Contains(b, "Private MAC") {
 			t.Errorf("%s: no private MAC badge", path)
 		}
 	}

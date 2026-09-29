@@ -115,7 +115,7 @@ func detectedSubnet(cidr, iface string) (store.Subnet, error) {
 
 func (s *Server) handleWelcomeSubnets(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "malformed form data", 400)
+		http.Error(w, "the form could not be read; reload the page and try again", 400)
 		return
 	}
 	// Validate everything first so a bad manual entry does not leave the

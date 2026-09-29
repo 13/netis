@@ -178,8 +178,8 @@ func TestEventsNameTheirDevice(t *testing.T) {
 		if !strings.Contains(body, `<a href="/devices/`+itoa(nas)+`">nas-box</a>`) {
 			t.Errorf("%s: device not named and linked", path)
 		}
-		if strings.Count(body, "deleted device") != 1 {
-			t.Errorf("%s: want one deleted device, got %d", path, strings.Count(body, "deleted device"))
+		if strings.Count(body, "Deleted device") != 1 {
+			t.Errorf("%s: want one deleted device, got %d", path, strings.Count(body, "Deleted device"))
 		}
 	}
 }

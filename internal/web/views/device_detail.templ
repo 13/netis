@@ -63,9 +63,9 @@ func anyOnline(ifds []IfaceDetail) bool {
 // onlineStatus is the status label for a device or interface.
 templ onlineStatus(online bool) {
 	if online {
-		<span class="status is-online">online</span>
+		<span class="status is-online">Online</span>
 	} else {
-		<span class="status is-offline">offline</span>
+		<span class="status is-offline">Offline</span>
 	}
 }
 
@@ -118,7 +118,7 @@ templ deviceHeader(d DeviceDetail) {
 			<div class="dd-meta">
 				@onlineStatus(anyOnline(d.Ifaces))
 				if !d.Device.Reviewed {
-					<span class="status is-new" title="Found by a scan and not reviewed yet">new</span>
+					<span class="status is-new" title="Found by a scan and not reviewed yet">New</span>
 				}
 				@missingUpstreamPill(d.Device)
 				if ip := d.primaryIP(); ip != "" {
@@ -129,15 +129,15 @@ templ deviceHeader(d DeviceDetail) {
 					<span class="muted">{ vm }</span>
 				}
 				if ps := d.proxmoxStatus(); ps != "" {
-					<span class="chip" title="State in Proxmox">{ ps }</span>
+					<span class="chip" title="State in Proxmox">{ Sentence(ps) }</span>
 				}
 				if d.hasPrivateMAC() {
-					<span class="chip" title={ privateMACTitle }>private MAC</span>
+					<span class="chip" title={ privateMACTitle }>Private MAC</span>
 				}
 				if d.AlertOffline {
 					<span class="chip" title="Offline and online changes are sent as notifications">
 						@Icon("bell", "")
-						offline alerts on
+						Offline alerts on
 					</span>
 				}
 			</div>
@@ -370,9 +370,9 @@ templ linksPanel(d DeviceDetail) {
 						</a>
 						<span class="muted dd-url">{ l.URL }</span>
 						if IsAdmin(ctx) {
-							<form method="post" action={ templ.SafeURL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Remove the link " + l.Label + "?" }>
+							<form method="post" action={ templ.SafeURL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Delete the link " + l.Label + "?" }>
 								<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
-								<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Remove link " + l.Label } title="Remove link">
+								<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Delete link " + l.Label } title="Delete link">
 									@Icon("x", "")
 								</button>
 							</form>
@@ -413,9 +413,9 @@ templ fieldsPanel(d DeviceDetail) {
 						<dd>
 							<span>{ f.Value }</span>
 							if IsAdmin(ctx) {
-								<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Remove the field " + f.Key + "?" }>
+								<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Delete the field " + f.Key + "?" }>
 									<input type="hidden" name="key" value={ f.Key }/>
-									<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Remove field " + f.Key } title="Remove field">
+									<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Delete field " + f.Key } title="Delete field">
 										@Icon("x", "")
 									</button>
 								</form>
@@ -457,7 +457,7 @@ templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
 				}
 			</h3>
 			if ifd.Iface.MAC != nil && macaddr.IsPrivate(*ifd.Iface.MAC) {
-				<span class="chip" title={ privateMACTitle }>private MAC</span>
+				<span class="chip" title={ privateMACTitle }>Private MAC</span>
 			}
 			if ifd.Iface.Hostname != nil && *ifd.Iface.Hostname != "" {
 				<span class="muted">{ *ifd.Iface.Hostname }</span>
@@ -482,7 +482,7 @@ templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
 					<p class="muted">No IP addresses.</p>
 				} else {
 					<div class="table-wrap">
-						<table>
+						<table class="table-stack table-stack-inline">
 							<thead>
 								<tr><th>IP</th><th>Subnet</th><th>Lease</th></tr>
 							</thead>
@@ -502,7 +502,7 @@ templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
 											if ip.SubnetID != 0 && IsAdmin(ctx) {
 												@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
 											} else {
-												<span class={ "chip", ip.Kind }>{ ip.Kind }</span>
+												<span class={ "chip", ip.Kind }>{ leaseLabel(ip.Kind) }</span>
 											}
 										</td>
 									</tr>
@@ -523,7 +523,7 @@ templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
 					</p>
 				} else {
 					<div class="table-wrap">
-						<table>
+						<table class="table-stack table-stack-inline">
 							<thead>
 								<tr><th>Port</th><th>Service</th><th>Last seen</th></tr>
 							</thead>
@@ -535,7 +535,7 @@ templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
 											if p.ServiceGuess != "" {
 												{ p.ServiceGuess }
 											} else {
-												<span class="muted">unknown</span>
+												<span class="muted">Unknown</span>
 											}
 										</td>
 										<td class="muted">

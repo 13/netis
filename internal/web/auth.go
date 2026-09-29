@@ -362,7 +362,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	note := auditNote(r)
 	if !s.limiter.reserve(ipKey) {
 		note.Detail = "rate limited"
-		http.Error(w, "too many attempts, wait a minute", http.StatusTooManyRequests)
+		http.Error(w, "too many sign-in attempts; wait a minute and try again", http.StatusTooManyRequests)
 		return
 	}
 	if !s.userLimiter.reserve(userKey) {
@@ -420,7 +420,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		note.Detail = "wrong password"
 	}
 	w.WriteHeader(http.StatusUnauthorized)
-	s.render(w, r, views.LoginPage("wrong username or password", s.loginOptions(r)))
+	s.render(w, r, views.LoginPage("wrong username or password; check both and try again", s.loginOptions(r)))
 }
 
 // startSession signs userID in on this browser: a new session row holding the

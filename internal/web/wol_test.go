@@ -114,15 +114,15 @@ func TestMissingUpstreamBadge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if body := authedGet(t, srv, st, fmt.Sprintf("/devices/%d", gone)).Body.String(); !strings.Contains(body, "missing upstream") ||
+	if body := authedGet(t, srv, st, fmt.Sprintf("/devices/%d", gone)).Body.String(); !strings.Contains(body, "Missing upstream") ||
 		!strings.Contains(body, "Proxmox no longer lists this device") {
 		t.Error("missing guest's page has no missing-upstream badge")
 	}
-	if body := authedGet(t, srv, st, fmt.Sprintf("/devices/%d", live)).Body.String(); strings.Contains(body, "missing upstream") {
+	if body := authedGet(t, srv, st, fmt.Sprintf("/devices/%d", live)).Body.String(); strings.Contains(body, "Missing upstream") {
 		t.Error("listed guest's page shows the missing-upstream badge")
 	}
 	list := authedGet(t, srv, st, "/devices").Body.String()
-	if n := strings.Count(list, ">missing upstream<"); n != 2 { // table row and tile
+	if n := strings.Count(list, ">Missing upstream<"); n != 2 { // table row and tile
 		t.Errorf("device list shows the badge %d times, want 2 (row and tile of the one missing guest)", n)
 	}
 }

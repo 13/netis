@@ -209,6 +209,8 @@
   .table-wrap { overflow-x:auto; max-width:100%; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
   .panel .table-wrap { background:none; border:0; border-radius:0; margin:0 calc(-1 * var(--sp-4)); max-width:none; }
   .panel .table-wrap + * { margin-top:var(--sp-3); }
+  .panel > .table-wrap:first-child { margin-top:calc(-1 * var(--sp-4)); border-radius:var(--r-panel) var(--r-panel) 0 0; }
+  .panel > .table-wrap:first-child:last-child { margin-bottom:calc(-1 * var(--sp-4)); border-radius:var(--r-panel); }
   .table-wrap + :is(h2, p, .panel) { margin-top:var(--sp-4); }
   td.num, th.num { text-align:right; }
   td.mono { font-size:var(--text-sm); white-space:nowrap; }
@@ -245,6 +247,7 @@
   .toast { display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); background:var(--surface);
            border:1px solid var(--border); border-radius:var(--r-panel); box-shadow:var(--overlay-shadow);
            font-size:var(--text-sm); color:var(--fg); cursor:pointer; animation:toastin .15s var(--ease); }
+  .toast.is-error { border-color:color-mix(in srgb, var(--fault) 45%, var(--border)); box-shadow:inset 3px 0 0 var(--fault), var(--overlay-shadow); }
   @keyframes toastin { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
 
   /* ---- dialog ----
@@ -308,6 +311,7 @@
   .tnum { font-variant-numeric:tabular-nums; }
   .text-xs { font-size:var(--text-xs); }
   .text-sm { font-size:var(--text-sm); }
+  .nowrap { white-space:nowrap; }
   .w-full { width:100%; }
   .m-0 { margin:0; }
   .row { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
@@ -321,7 +325,7 @@
 @layer pages {
   /* ---- app shell ----
      Desktop: a sidebar down the left (mark, search, sections; Settings and
-     the account menu at the bottom). 641-1023px: the sidebar folds to icons.
+     the account menu at the bottom). 641-1099px: the sidebar folds to icons.
      Phones: a top bar with the page title and search, and a tab bar along the
      bottom whose More opens a sheet with Settings and the account menu. */
   body.app { display:flex; min-height:100vh; }
@@ -334,8 +338,11 @@
            font-size:var(--text-md); text-decoration:none; }
   .brand .mark { display:block; width:28px; height:28px; flex:none; }
 
-  .sidebar { position:sticky; top:0; display:flex; flex-direction:column; gap:var(--sp-1); flex:none; width:224px; height:100vh;
-             padding:var(--sp-3); background:var(--surface); border-right:1px solid var(--border); z-index:20; }
+  /* The aside is the column and stretches with the page, so its background
+     and border run the full height; the inner box sticks to the window. */
+  .sidebar { flex:none; width:224px; background:var(--surface); border-right:1px solid var(--border); z-index:20; }
+  .sidebar-inner { position:sticky; top:0; display:flex; flex-direction:column; gap:var(--sp-1); height:100vh; height:100dvh;
+                   padding:var(--sp-3); overflow-y:auto; }
   .sidebar .brand { padding:var(--sp-1) var(--sp-2) var(--sp-3); }
   .sidebar nav { display:flex; flex-direction:column; gap:2px; margin-top:var(--sp-2); }
   .sidebar-foot { margin-top:auto; display:flex; flex-direction:column; gap:2px; padding-top:var(--sp-3); border-top:1px solid var(--border); }
@@ -383,8 +390,9 @@
   .page-head h1 { margin:0; }
 
   /* Icons only between phone and desktop widths. */
-  @media (min-width:641px) and (max-width:1023px) {
-    .sidebar { width:64px; padding:var(--sp-3) var(--sp-2); align-items:stretch; }
+  @media (min-width:641px) and (max-width:1099px) {
+    .sidebar { width:64px; }
+    .sidebar-inner { padding:var(--sp-3) var(--sp-2); align-items:stretch; }
     .sidebar .lbl { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
     .sidebar .brand { justify-content:center; padding:var(--sp-1) 0 var(--sp-3); }
     .sidebar .nav-item, .sidebar .search-btn { justify-content:center; padding:0; }
@@ -524,6 +532,7 @@
   .auth-card { display:flex; flex-direction:column; gap:var(--sp-3); width:340px; max-width:100%; padding:var(--sp-5);
                background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
   .auth-form { display:flex; flex-direction:column; gap:var(--sp-3); }
+  .auth-form label { margin:0; }
   .auth-card .btn { width:100%; }
 
   /* ---- onboarding ---- */
@@ -595,6 +604,49 @@
     .subnet-row .subnet-scan { margin-left:0; flex-basis:100%; padding-left:24px; }
     dialog.palette { margin:var(--sp-2) auto auto; max-height:calc(100vh - 80px); width:calc(100% - 16px); }
     .palette-foot { display:none; }
+
+    /* Touch: every control is at least 44px tall, and a field's text is
+       16px so iOS does not zoom the page when it takes focus. */
+    :root { --h-sm:44px; --h-md:44px; --h-lg:48px; }
+    input, select, textarea { font-size:var(--text-md); }
+    input[type="checkbox"], input[type="radio"] { width:20px; height:20px; }
+    .btn-icon, .btn-icon.btn-sm { width:44px; }
+    .seg button { height:38px; }
+    .menu-item { min-height:44px; }
+    .topbar .brand { width:44px; height:44px; justify-content:center; }
+    .subnav-links a { min-height:44px; display:flex; align-items:center; }
+    nav.tabs .tab { min-height:44px; display:inline-flex; align-items:center; }
+    .disclosure > summary, .subnet-row > summary { min-height:44px; }
+    .pager .btn, .panel-actions .btn { min-height:44px; }
+    label:has(> input[type="checkbox"]), label:has(> input[type="radio"]), label.chk { min-height:44px; }
+
+    /* Small targets that sit in text or rows (a device name, a lease chip,
+       a disclosure line) keep their look but take taps 44px tall. */
+    :is(.devtable .dev-name, .attn, .ev-dev, .table-stack td, .dd-back, .sn-name, .facts dd) a,
+    .dd-back, .sn-name, button.chip, .iconpick-disc > summary, .df-more > summary, .disclosure > summary { position:relative; }
+    :is(.devtable .dev-name, .attn, .ev-dev, .table-stack td, .facts dd) a::after, .dd-back::after, .sn-name::after,
+    button.chip::after, .iconpick-disc > summary::after, .df-more > summary::after {
+      content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+
+    /* Tables that remain become stacked rows: each row a block, each cell
+       a line with its column name in front (data-label). */
+    .table-stack thead, .table-stack tr:has(> th) { display:none; }
+    .table-stack, .table-stack tbody, .table-stack tr, .table-stack td { display:block; }
+    .table-stack tr { padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--border); }
+    .table-stack tr:last-child { border-bottom:0; }
+    .table-stack td { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; padding:2px 0; border:0; min-width:0; overflow-wrap:anywhere; }
+    .table-stack td[data-label] { flex-wrap:nowrap; align-items:baseline; }
+    .table-stack td[data-label]::before { content:attr(data-label); flex:0 0 6.5rem; color:var(--muted); font-family:var(--font-sans);
+                                          font-size:var(--text-sm); font-weight:var(--w-regular); }
+    .table-stack td:empty { display:none; }
+    .table-stack td.cell-actions { padding-top:var(--sp-2); }
+    .table-stack td.cell-actions form.inline { display:flex; flex-wrap:wrap; width:100%; margin:0 0 var(--sp-2); }
+    .table-stack td.cell-actions form.inline > :is(input, select) { flex:1 1 140px; min-width:0; }
+    .table-stack tbody tr:hover > td { background:none; }
+    .table-wrap:has(> .table-stack) { overflow-x:visible; }
+    /* Short rows (ports, addresses) keep their cells on one wrapping line. */
+    .table-stack-inline tr { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-1) var(--sp-3); padding:var(--sp-2) var(--sp-3); }
+    .table-stack-inline td { display:inline-flex; padding:0; }
   }
 }
 

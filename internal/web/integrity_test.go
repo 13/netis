@@ -61,7 +61,7 @@ func TestDeviceCreateValidatesMACAndIP(t *testing.T) {
 		c.form.Set("name", "x")
 		c.form.Set("kind", "other")
 		rec := authedPost(t, srv, st, "/devices", c.form)
-		if rec.Code != c.code || !strings.Contains(rec.Body.String(), c.msg) {
+		if rec.Code != c.code || !strings.Contains(strings.ToLower(rec.Body.String()), strings.ToLower(c.msg)) {
 			t.Errorf("%s: %d %q, want %d containing %q", c.name, rec.Code, rec.Body.String(), c.code, c.msg)
 		}
 		if after := deviceCount(t, st); after != before {

@@ -76,11 +76,26 @@ func (s *sender) post(req *http.Request) error {
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
 	}
-	err = fmt.Errorf("HTTP %d", resp.StatusCode)
+	err = statusError(resp.StatusCode)
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusTooManyRequests {
 		return permanentError{err}
 	}
 	return err
+}
+
+// statusError says in words why the receiving server turned a message down.
+func statusError(code int) error {
+	switch {
+	case code == http.StatusUnauthorized || code == http.StatusForbidden:
+		return errors.New("the server refused the credentials; check the token or header")
+	case code == http.StatusNotFound:
+		return errors.New("the server has nothing at that URL; check the address or topic")
+	case code == http.StatusTooManyRequests:
+		return errors.New("the server is rate limiting; try again in a minute")
+	case code >= 500:
+		return errors.New("the server had an error; try again later")
+	}
+	return fmt.Errorf("the server turned the message down (status %d)", code)
 }
 
 type webhookDevice struct {

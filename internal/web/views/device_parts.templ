@@ -90,8 +90,8 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 			hx-vals={ fmt.Sprintf(`{"subnet_id":"%d","ip":%q,"kind":%q}`, subnetID, ip, oppositeKind(kind)) }
 			hx-target="closest .lease-cell"
 			hx-swap="outerHTML"
-			title="toggle lease static/dhcp"
-		>{ kind }</button>
+			title="Switch the lease between static and DHCP"
+		>{ leaseLabel(kind) }</button>
 	</span>
 }
 
@@ -100,6 +100,6 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 // it is really gone.
 templ missingUpstreamPill(d store.Device) {
 	if d.UpstreamMissingSince != nil {
-		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (noticed " + relTime(*d.UpstreamMissingSince) + ")" }>missing upstream</span>
+		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (noticed " + relTime(*d.UpstreamMissingSince) + ")" }>Missing upstream</span>
 	}
 }

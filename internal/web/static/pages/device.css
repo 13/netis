@@ -150,7 +150,7 @@
     .dd-iface .panel-head > .text-sm { flex-basis:100%; }
     .dd-add { flex-wrap:wrap; }
     .dd-add label, .dd-add label.grow { flex:1 1 100%; }
-    .dd-add input { min-height:var(--h-lg); font-size:var(--text-base); }
+    .dd-add input { min-height:var(--h-lg); font-size:var(--text-md); }
     .dd-add .btn { height:var(--h-lg); }
     .dd-list li, .dd-fields > div { min-height:44px; }
     .dd-list .btn-icon, .dd-fields .btn-icon { width:44px; height:44px; }

@@ -46,3 +46,24 @@ func navActive(path, href string) bool {
 	}
 	return path == href || strings.HasPrefix(path, href+"/")
 }
+
+// roleLabel names a role for people: "Admin" or "Viewer".
+func roleLabel(role string) string {
+	switch role {
+	case "admin":
+		return "Admin"
+	case "viewer":
+		return "Viewer"
+	}
+	return role
+}
+
+// Sentence gives a message its sentence case: the first letter upper case.
+// Handler messages are written lower case, as Go errors are, and the API
+// sends them that way; a page shows them as the sentence they are.
+func Sentence(msg string) string {
+	for i, r := range msg {
+		return strings.ToUpper(string(r)) + msg[i+len(string(r)):]
+	}
+	return msg
+}

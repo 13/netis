@@ -28,8 +28,15 @@
                border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface);
                color:var(--muted); font-size:var(--text-sm); font-weight:var(--w-medium); white-space:nowrap; cursor:pointer; }
   .dl-toggle:hover { border-color:var(--border-strong); color:var(--fg); }
+  .dl-toggle:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
   .dl-toggle:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); color:var(--fg); }
-  .dl-more { flex:1 1 480px; min-width:0; }
+  /* Above phone width the disclosure and its box step aside, so the search,
+     the menus and the toggles are one row of controls that wraps from the
+     left edge, each line lined up under the search field. */
+  @media (min-width:641px) {
+    .dl-more, .dl-more[open], .dl-fields { display:contents; }
+    .dl-more::details-content { display:contents; }
+  }
   .dl-view { display:flex; align-items:center; gap:var(--sp-2); }
   .dl-summary .dl-view { margin-left:auto; }
   .dl-bulk:not([data-empty]) + .dl-view { margin-left:0; }
@@ -65,7 +72,7 @@
   .devtable .ip-line + .ip-line { margin-top:2px; }
   .devtable .col-lease .chip + .chip { margin-left:var(--sp-1); }
   .devtable .col-tags { max-width:220px; }
-  .devtable .col-seen, .devtable .col-status { white-space:nowrap; }
+  .devtable .col-seen, .devtable .col-status, .devtable td.col-kind { white-space:nowrap; }
   .devtable .col-tags .chip { margin:1px var(--sp-1) 1px 0; }
   .devtable td.col-tags { line-height:1.9; }
   /* With the optional columns on, the busiest cells give up room first. */
@@ -119,12 +126,13 @@
     .dl-bulk:not([data-empty]) { position:fixed; left:var(--sp-2); right:var(--sp-2); bottom:calc(64px + env(safe-area-inset-bottom));
       z-index:25; margin:0; padding:var(--sp-2) var(--sp-3); background:var(--surface); border:1px solid var(--border);
       border-radius:var(--r-panel); box-shadow:var(--overlay-shadow); }
-    .dl-tag input { width:96px; }
+    .dl-tag input { width:96px; font-size:var(--text-md); }
+    .dl-actions { flex-wrap:wrap; }
 
     .dl-table { background:var(--surface); }
     .devtable thead { display:none; }
     .devtable, .devtable tbody { display:block; }
-    .devtable tr { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; grid-template-areas:"sel dev status" "sel ip act";
+    .devtable tr { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; grid-template-areas:"sel dev status" "sel ip ip" "sel act act";
                    align-items:center; column-gap:var(--sp-2); row-gap:2px; padding:var(--sp-3); border-bottom:1px solid var(--border); }
     .devtable tr:last-child { border-bottom:0; }
     /* Doubled class: outranks the desktop column rules without !important. */
@@ -135,12 +143,19 @@
     .devtable td.col-dev { grid-area:dev; min-width:0; }
     .devtable td.col-status { grid-area:status; justify-self:end; }
     .devtable.devtable td.col-ip { grid-area:ip; padding-left:42px; min-width:0; }
-    .devtable td.col-act { grid-area:act; width:auto; }
+    .devtable.devtable td.col-act { grid-area:act; width:auto; padding-left:42px; text-align:left; }
+    .devtable td.col-act:empty { display:none; }
     .devtable.devtable.devtable :is(td.col-kind, td.col-seen, td.opt) { display:none; }
     .devtable .dev { min-width:0; }
     .devtable .dev-name a { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
     .devtable .tree-indent { width:8px; }
     .devtable.devtable tr.is-child td.col-ip { padding-left:58px; }
     .devgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+  }
+
+  /* The narrowest phones keep the header actions on one line: Scan all
+     subnets shows its icon only (its name stays as the aria-label). */
+  @media (max-width:360px) {
+    .dl-scan-lbl { display:none; }
   }
 }
