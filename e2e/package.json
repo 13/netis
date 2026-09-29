@@ -1,0 +1,13 @@
+{
+  "name": "netis-e2e",
+  "private": true,
+  "description": "Visual regression and accessibility smoke tests for the netis web UI. Run through `make e2e` so the browser and fonts match CI.",
+  "scripts": {
+    "test": "playwright test",
+    "update": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0"
+  }
+}

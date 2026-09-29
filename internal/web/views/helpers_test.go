@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"netis/internal/clock"
 	"netis/internal/store"
 )
 
@@ -67,5 +68,14 @@ func TestTimeComponent(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "—") {
 		t.Errorf("empty Time = %q, want a dash", b.String())
+	}
+}
+
+// Relative times are measured from the clock the UI reads, so the visual
+// regression fixture can freeze them.
+func TestRelTimeFollowsTheClock(t *testing.T) {
+	defer clock.Freeze(time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC))()
+	if got := relTime("2026-09-15T09:00:00Z"); got != "3h ago" {
+		t.Errorf("relTime = %q, want 3h ago", got)
 	}
 }

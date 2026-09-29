@@ -3,6 +3,8 @@ package views
 import (
 	"fmt"
 	"time"
+
+	"netis/internal/clock"
 )
 
 // relTime renders an RFC3339 timestamp as a short relative string: "5m ago"
@@ -13,7 +15,7 @@ func relTime(ts string) string {
 	if err != nil {
 		return ts
 	}
-	d := time.Since(t)
+	d := clock.Now().Sub(t)
 	if d < 0 {
 		d = -d
 		if d < time.Minute {

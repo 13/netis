@@ -1,4 +1,4 @@
-.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker
+.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker e2e e2e-update e2e-bin
 
 generate:
 	go tool templ generate
@@ -37,3 +37,22 @@ run: build
 
 docker:
 	docker build -t netis .
+
+# Visual regression and accessibility tests (e2e/). The fixture server is the
+# web package's test binary serving fixed data at a frozen clock; Playwright
+# runs in its pinned image, the same one CI uses, so fonts and rendering
+# match the committed baselines. Needs Docker.
+E2E_IMAGE := mcr.microsoft.com/playwright:v1.63.0-noble
+E2E_RUN := docker run --rm --ipc=host --user $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
+	-v "$(CURDIR)/e2e":/e2e -w /e2e $(E2E_IMAGE)
+
+e2e-bin: generate
+	CGO_ENABLED=0 go test -c -buildvcs=false -o e2e/.bin/netis-e2e ./internal/web
+
+e2e: e2e-bin
+	$(E2E_RUN) sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+
+# Regenerates the screenshot baselines after an intended change. Review the
+# new images in e2e/__screenshots__ before committing them.
+e2e-update: e2e-bin
+	$(E2E_RUN) sh -c 'npm ci --no-audit --no-fund && npx playwright test --update-snapshots'

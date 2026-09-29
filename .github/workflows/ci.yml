@@ -74,6 +74,40 @@ jobs:
       - name: build
         run: CGO_ENABLED=0 go build -ldflags="-s -w" ./cmd/netis
 
+  # Visual regression and accessibility smoke tests (e2e/). The fixture server
+  # is the web package's test binary (fixed data, frozen clock); Playwright
+  # runs in its pinned image so rendering matches the committed baselines,
+  # which `make e2e-update` generates in the same image.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: build the fixture server
+        run: CGO_ENABLED=0 go test -c -buildvcs=false -o e2e/.bin/netis-e2e ./internal/web
+
+      - name: playwright (visual + a11y)
+        run: |
+          docker run --rm --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=1 \
+            -v "$PWD/e2e":/e2e -w /e2e mcr.microsoft.com/playwright:v1.63.0-noble \
+            sh -c 'npm ci --no-audit --no-fund && npx playwright test'
+
+      # The HTML report holds the expected, actual and diff image of every
+      # screenshot that changed.
+      - name: upload the report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+
   docker:
     runs-on: ubuntu-latest
     steps:

@@ -10,15 +10,15 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import (
 	"fmt"
-	"time"
 
+	"netis/internal/clock"
 	"netis/internal/store"
 )
 
 // tokenExpired reports whether a token's expiry has passed.
 func tokenExpired(t store.APIToken) bool {
 	exp, ok := parseTS(orDash(t.ExpiresAt))
-	return ok && !exp.After(time.Now())
+	return ok && !exp.After(clock.Now())
 }
 
 // tokenExpiry says when a token stops working, or that it already did.

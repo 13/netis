@@ -54,12 +54,31 @@ them every 120s by default.
 | `make lint` | `go vet` and staticcheck |
 | `make vuln` | govulncheck |
 | `make docker` | `docker build -t netis .` |
+| `make e2e` | visual regression and accessibility tests in Docker (see below) |
+| `make e2e-update` | regenerate the screenshot baselines after an intended UI change |
 
 The app mark, favicons, home-screen icons and the web app manifest's icons
 are drawn once in `internal/web/gen_favicons.go` and committed. After changing
 the drawing, run `go run gen_favicons.go` from `internal/web` (it needs
 `rsvg-convert` and ImageMagick's `magick`, at build time only). The manifest
 lets a phone or desktop browser install netis as a standalone app.
+
+### Visual regression tests
+
+`e2e/` holds a Playwright suite that screenshots the dashboard, devices,
+a device, a subnet grid, events, the network settings and the sign-in page
+at 1440×900 and 390×844 in light and dark, and compares them with the
+baselines in `e2e/__screenshots__`. The same pages get an axe accessibility
+check that fails on serious or critical findings. The pages are served by
+the web package's test binary (`TestE2EServe`) from fixed data
+(`internal/web/testdata/e2e_seed.sql`) with the clock frozen, so relative
+times and availability bars render identically on every run.
+
+`make e2e` needs Docker only: it builds the fixture and runs the suite in the
+pinned `mcr.microsoft.com/playwright` image that CI uses, so fonts and
+rendering match. When a UI change is intended, run `make e2e-update`, look at
+the changed images and commit them with the change. On a CI failure the
+`e2e-report` artifact has the expected, actual and diff image of each page.
 
 ## Views
 

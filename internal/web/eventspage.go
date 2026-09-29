@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"netis/internal/clock"
 	"netis/internal/web/views"
 )
 
@@ -59,6 +60,6 @@ func (s *Server) handleEventsPage(w http.ResponseWriter, r *http.Request) {
 	if more && len(evs) > 0 {
 		d.Older = evs[len(evs)-1].ID
 	}
-	d.Days = views.GroupEventsByDay(evs, time.Now())
+	d.Days = views.GroupEventsByDay(evs, clock.Now())
 	s.render(w, r, views.EventsPage(d))
 }

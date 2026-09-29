@@ -16,6 +16,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"netis/internal/clock"
 	"netis/internal/macaddr"
 	"netis/internal/scan"
 	"netis/internal/store"
@@ -646,7 +647,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	now := time.Now()
+	now := clock.Now()
 	since := now.UTC().Add(-30 * 24 * time.Hour).Truncate(time.Hour).Format(time.RFC3339)
 	ifaceDetails := make([]views.IfaceDetail, 0, len(ifaces))
 	for _, f := range ifaces {
