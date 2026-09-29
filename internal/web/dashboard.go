@@ -199,13 +199,3 @@ func (s *Server) handleDashboardWidgets(w http.ResponseWriter, r *http.Request) 
 	}
 	s.render(w, r, views.DashboardBody(data))
 }
-
-func (s *Server) handleSubnetsIndex(w http.ResponseWriter, r *http.Request) {
-	rows, _, err := s.subnetRows(r.Context())
-	if err != nil {
-		s.fail(w, r, err)
-		return
-	}
-	u, _ := userFrom(r)
-	s.render(w, r, views.SubnetsPage(u.Username, rows))
-}

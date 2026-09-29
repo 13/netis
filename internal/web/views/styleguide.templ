@@ -371,15 +371,8 @@ templ StyleguidePage(username string, colors []ColorToken) {
 			</div>
 		}
 		@sgSection("Subnet grid ports") {
-			<div class="panel legend-sq">
-				<span class="sq online" aria-hidden="true"></span> online
-				<span class="sq offline" aria-hidden="true"></span> offline
-				<span class="sq reserved" aria-hidden="true"></span> reserved
-				<span class="sq" aria-hidden="true"></span> free
-				<span class="sq conflict" aria-hidden="true"></span> conflict
-				<span class="sq edge" aria-hidden="true"></span> network/broadcast
-				<span class="sq static" aria-hidden="true"></span> static
-				<span class="sq dhcp" aria-hidden="true"></span> dhcp
+			<div class="panel">
+				@gridLegend()
 			</div>
 		}
 	}

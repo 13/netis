@@ -25,7 +25,11 @@ type Scheduler struct {
 	running map[int64]bool
 	// queued holds the subnets waiting in trigger, so a repeat click does not
 	// fill the queue with copies of the same request.
-	queued  map[int64]bool
+	queued map[int64]bool
+	// done holds when each subnet's last scan finished and whether it
+	// worked, for the subnet pages. It lives in memory: after a restart the
+	// first periodic tick scans every subnet again within seconds.
+	done    map[int64]finished
 	sem     chan struct{}
 	wg      sync.WaitGroup
 	trigger chan int64
@@ -40,6 +44,7 @@ func NewScheduler(e *Engine, st *store.Store) *Scheduler {
 		lastRun: make(map[int64]time.Time),
 		running: make(map[int64]bool),
 		queued:  make(map[int64]bool),
+		done:    make(map[int64]finished),
 		sem:     make(chan struct{}, maxParallelScans),
 		trigger: make(chan int64, 256),
 	}
@@ -61,6 +66,29 @@ func (s *Scheduler) Trigger(subnetID int64) bool {
 	default:
 		return false
 	}
+}
+
+type finished struct {
+	at time.Time
+	ok bool
+}
+
+// Status is where a subnet's scanning stands: waiting in the queue, being
+// swept, and when the last sweep finished (zero when none has since netis
+// started) and whether it worked.
+type Status struct {
+	Queued   bool
+	Running  bool
+	LastDone time.Time
+	LastOK   bool
+}
+
+// Status reports where scanning of subnetID stands.
+func (s *Scheduler) Status(subnetID int64) Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d := s.done[subnetID]
+	return Status{Queued: s.queued[subnetID], Running: s.running[subnetID], LastDone: d.at, LastOK: d.ok}
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -178,5 +206,8 @@ func (s *Scheduler) run(ctx context.Context, sn store.Subnet, manual bool) {
 	if serr := s.store.SetIntegrationStatus(ctx, st); serr != nil {
 		slog.Error("scan status write", "err", serr)
 	}
+	s.mu.Lock()
+	s.done[sn.ID] = finished{at: time.Now(), ok: err == nil}
+	s.mu.Unlock()
 	s.engine.Broker.Publish("dashboard", "refresh")
 }
