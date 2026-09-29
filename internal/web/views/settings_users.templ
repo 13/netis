@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+
+	"netis/internal/store"
 )
 
 templ usersTab(d SettingsData) {
@@ -73,14 +75,14 @@ templ myAccount(d SettingsData) {
 				for _, sess := range d.Sessions {
 					<tr>
 						<td>
-							{ sessionStarted(sess) }
+							@sessionStarted(sess)
 							if sess.ID == d.CurrentSessionID {
 								<span class="chip">this browser</span>
 							}
 						</td>
 						<td>{ orDash(sess.IP) }</td>
 						<td>{ shortAgent(sess.UserAgent) }</td>
-						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
+						<td>@Time(sess.ExpiresAt)</td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
 								<button type="submit" class="btn btn-sm">revoke</button>
@@ -119,4 +121,14 @@ templ myAccount(d SettingsData) {
 			<button type="submit" class="btn btn-primary">Change password</button>
 		</form>
 	</div>
+}
+
+// sessionStarted says when a session began. Sessions predating the created_at
+// column have no answer, and saying so beats inventing one.
+templ sessionStarted(sess store.Session) {
+	if sess.CreatedAt == nil || *sess.CreatedAt == "" {
+		unknown
+	} else {
+		@Time(*sess.CreatedAt)
+	}
 }

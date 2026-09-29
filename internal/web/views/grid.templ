@@ -137,7 +137,11 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 						{ " " }<span class="mono muted">{ o.MAC }</span>
 					}
 				</p>
-				<p class="muted">Last seen: { o.LastSeen } · Lease: { o.Kind }</p>
+				<p class="muted">
+					Last seen{ " " }
+					@Time(o.LastSeen)
+					{ " · " }Lease: { o.Kind }
+				</p>
 			} else {
 				<p class="muted">Free — no assignment.</p>
 			}

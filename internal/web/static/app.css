@@ -84,6 +84,7 @@
   kbd { display:inline-block; min-width:1.6em; padding:0 var(--sp-1); border:1px solid var(--border); border-bottom-width:2px;
         border-radius:var(--r-control); background:var(--surface-2); color:var(--muted); font-size:var(--text-xs);
         line-height:1.5; text-align:center; }
+  time { white-space:nowrap; }
   hr { border:0; border-top:1px solid var(--border); margin:var(--sp-4) 0; }
   ::selection { background:var(--accent-soft); color:var(--fg); }
 

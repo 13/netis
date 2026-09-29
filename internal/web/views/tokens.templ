@@ -7,23 +7,31 @@ import (
 	"netis/internal/store"
 )
 
-// tokenExpiry describes when a token stops working.
-func tokenExpiry(t store.APIToken) string {
+// tokenExpired reports whether a token's expiry has passed.
+func tokenExpired(t store.APIToken) bool {
+	exp, ok := parseTS(orDash(t.ExpiresAt))
+	return ok && !exp.After(time.Now())
+}
+
+// tokenExpiry says when a token stops working, or that it already did.
+templ tokenExpiry(t store.APIToken) {
 	if t.ExpiresAt == nil || *t.ExpiresAt == "" {
-		return "never"
+		never
+	} else if tokenExpired(t) {
+		expired{ " " }
+		@Time(*t.ExpiresAt)
+	} else {
+		@Time(*t.ExpiresAt)
 	}
-	if exp, err := time.Parse(time.RFC3339, *t.ExpiresAt); err == nil && !exp.After(time.Now()) {
-		return "expired " + relTime(*t.ExpiresAt)
-	}
-	return relTime(*t.ExpiresAt)
 }
 
 // tokenLastUsed says when a token was last presented, to the minute.
-func tokenLastUsed(t store.APIToken) string {
+templ tokenLastUsed(t store.APIToken) {
 	if t.LastUsedAt == nil || *t.LastUsedAt == "" {
-		return "never"
+		never
+	} else {
+		@Time(*t.LastUsedAt)
 	}
-	return relTime(*t.LastUsedAt)
 }
 
 // tokensTab is the API tokens tab. Every role manages its own tokens here; an
@@ -64,9 +72,9 @@ templ tokensTab(d SettingsData) {
 						if IsAdmin(ctx) {
 							<td>{ t.Username }</td>
 						}
-						<td>{ relTime(t.CreatedAt) }</td>
-						<td>{ tokenLastUsed(t) }</td>
-						<td title={ orDash(t.ExpiresAt) }>{ tokenExpiry(t) }</td>
+						<td>@Time(t.CreatedAt)</td>
+						<td>@tokenLastUsed(t)</td>
+						<td>@tokenExpiry(t)</td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tokens/%d/delete", t.ID)) } class="inline" data-confirm={ "Revoke the token " + t.Name + "? Scripts using it stop working." }>
 								<button type="submit" class="btn btn-sm">revoke</button>

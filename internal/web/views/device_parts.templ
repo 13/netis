@@ -100,6 +100,6 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 // it is really gone.
 templ missingUpstreamPill(d store.Device) {
 	if d.UpstreamMissingSince != nil {
-		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")" }>missing upstream</span>
+		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (noticed " + relTime(*d.UpstreamMissingSince) + ")" }>missing upstream</span>
 	}
 }

@@ -46,7 +46,7 @@ func TestBackupStatusInAboutAndMetrics(t *testing.T) {
 	})
 	st.SetSetting(t.Context(), "onboarded", "1")
 	about := authedGet(t, srv, st, "/settings?tab=about").Body.String()
-	if !strings.Contains(about, "2026-09-28T03:00:00Z (netis-20260928-030000.db)") {
+	if !strings.Contains(about, `datetime="2026-09-28T03:00:00Z"`) || !strings.Contains(about, "(netis-20260928-030000.db)") {
 		t.Errorf("About tab does not show the last backup:\n%s", about)
 	}
 	metrics := authedGet(t, srv, st, "/metrics").Body.String()
@@ -66,7 +66,7 @@ func TestBackupFailureInAboutAndMetrics(t *testing.T) {
 	srv, st := testServerBackups(t, fixedBackups{LastAttempt: at, OK: false})
 	st.SetSetting(t.Context(), "onboarded", "1")
 	about := authedGet(t, srv, st, "/settings?tab=about").Body.String()
-	if !strings.Contains(about, "failed at 2026-09-28T03:00:00Z, see server log") {
+	if !strings.Contains(about, "see the server log: <time datetime=\"2026-09-28T03:00:00Z\"") {
 		t.Errorf("About tab does not show the failure:\n%s", about)
 	}
 	metrics := authedGet(t, srv, st, "/metrics").Body.String()

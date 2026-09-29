@@ -54,7 +54,7 @@ templ EventsPage(username string, evs []store.Event, typeFilter string) {
 				</tr>
 				for _, e := range evs {
 					<tr>
-						<td class="mono">{ e.TS }</td>
+						<td class="muted">@Time(e.TS)</td>
 						<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 						<td>
 							@eventDevice(e)

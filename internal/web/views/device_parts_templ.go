@@ -198,9 +198,9 @@ func missingUpstreamPill(d store.Device) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var6 string
-			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")")
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(upstreamName(d.Source) + " no longer lists this device (noticed " + relTime(*d.UpstreamMissingSince) + ")")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/device_parts.templ`, Line: 103, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/device_parts.templ`, Line: 103, Col: 148}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {

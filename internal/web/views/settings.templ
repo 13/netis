@@ -60,7 +60,18 @@ type AboutData struct {
 	Uptime  string
 	Backend string // "sqlite" or "postgres"
 	Now     string
-	Backup  string // scheduled backup status, one line
+	Backup  BackupView
+}
+
+// BackupView is the scheduled-backup line on the About tab. Note, when set,
+// is the whole story (backups off, unsupported, none yet); otherwise At is
+// when the last backup ran, File what it wrote, and Failed whether that run
+// failed.
+type BackupView struct {
+	Note   string
+	At     string
+	File   string
+	Failed bool
 }
 
 templ tabLink(active, tab, label string) {

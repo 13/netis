@@ -36,7 +36,10 @@ templ aboutTab(a AboutData) {
 							</td>
 						}
 					</tr>
-					@aboutRow("Built", a.Info.Date)
+					<tr>
+						<td class="muted">Built</td>
+						<td>@Time(a.Info.Date)</td>
+					</tr>
 				</tbody>
 			</table>
 		</div>
@@ -48,8 +51,14 @@ templ aboutTab(a AboutData) {
 					@aboutRow("Platform", a.Info.OS+"/"+a.Info.Arch)
 					@aboutRow("Database", a.Backend)
 					@aboutRow("Uptime", a.Uptime)
-					@aboutRow("Server time", a.Now)
-					@aboutRow("Last backup", a.Backup)
+					<tr>
+						<td class="muted">Server time</td>
+						<td>{ serverTime(a.Now) }</td>
+					</tr>
+					<tr>
+						<td class="muted">Last backup</td>
+						<td>@backupLine(a.Backup)</td>
+					</tr>
 				</tbody>
 			</table>
 		</div>
@@ -68,4 +77,25 @@ templ aboutTab(a AboutData) {
 			}
 		</div>
 	</div>
+}
+
+// serverTime is the server's clock as an absolute time, so a reader can spot
+// skew against their own.
+func serverTime(ts string) string {
+	if t, ok := parseTS(ts); ok {
+		return absTime(t)
+	}
+	return ts
+}
+
+// backupLine says how scheduled backups are doing.
+templ backupLine(b BackupView) {
+	if b.Note != "" {
+		{ b.Note }
+	} else if b.Failed {
+		Failed, see the server log:{ " " }
+		@Time(b.At)
+	} else {
+		@Time(b.At) <span class="muted">({ b.File })</span>
+	}
 }

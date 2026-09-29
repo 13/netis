@@ -229,14 +229,21 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 }
 
 // backupSummary is the About tab's line on scheduled backups.
-func (s *Server) backupSummary() string {
+func (s *Server) backupSummary() views.BackupView {
 	switch {
 	case s.backups != nil:
-		return s.backups.Status().Summary()
+		st := s.backups.Status()
+		switch {
+		case !st.LastAttempt.IsZero() && !st.OK:
+			return views.BackupView{Failed: true, At: st.LastAttempt.UTC().Format(time.RFC3339)}
+		case st.LastSuccess.IsZero():
+			return views.BackupView{Note: "none yet"}
+		}
+		return views.BackupView{At: st.LastSuccess.UTC().Format(time.RFC3339), File: st.File}
 	case s.store.Dialect() == store.Postgres:
-		return "not available on Postgres (use pg_dump)"
+		return views.BackupView{Note: "not available on Postgres (use pg_dump)"}
 	}
-	return "off (set NETIS_BACKUP_DIR)"
+	return views.BackupView{Note: "off (set NETIS_BACKUP_DIR)"}
 }
 
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {

@@ -83,7 +83,7 @@ templ DashboardBody(d DashboardData) {
 									<span class="status is-error">failing</span>
 								}
 							</td>
-							<td class="muted">{ relTime(it.LastRun) }</td>
+							<td class="muted">@Time(it.LastRun)</td>
 							<td>{ it.Detail }</td>
 						</tr>
 					}
@@ -133,7 +133,7 @@ templ DashboardBody(d DashboardData) {
 	<table>
 		for _, e := range d.Events {
 			<tr>
-				<td class="mono">{ e.TS }</td>
+				<td class="muted">@Time(e.TS)</td>
 				<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 				<td>
 					@eventDevice(e)

@@ -1,0 +1,52 @@
+package views
+
+import "time"
+
+// parseTS reads a stored timestamp. Every timestamp netis stores is RFC3339
+// UTC; anything else is reported as unparseable.
+func parseTS(ts string) (time.Time, bool) {
+	t, err := time.Parse(time.RFC3339, ts)
+	return t, err == nil
+}
+
+// absTime is the absolute form of t shown on hover before time.js replaces it
+// with the browser's local time, and for readers without JavaScript. The
+// server does not know the reader's time zone, so it says UTC.
+func absTime(t time.Time) string {
+	return t.UTC().Format("2 Jan 2006, 15:04 UTC")
+}
+
+// RelTime is relTime for handlers that put a time into an attribute, such as
+// a grid cell's title, where the Time component cannot go.
+func RelTime(ts string) string {
+	return relTime(ts)
+}
+
+// Time renders a stored RFC3339 timestamp the one way the UI shows times: the
+// relative time as text ("5m ago", "in 3d") and the absolute time on hover.
+// time.js keeps the text current and puts the reader's local time in the
+// title. An empty timestamp is an em dash; one that does not parse is shown
+// as stored rather than hidden.
+templ Time(ts string) {
+	if t, ok := parseTS(ts); ok {
+		<time datetime={ t.UTC().Format(time.RFC3339) } title={ absTime(t) }>{ relTime(ts) }</time>
+	} else if ts == "" {
+		<span class="muted">—</span>
+	} else {
+		{ ts }
+	}
+}
+
+// TimeAt is Time for a value already parsed.
+templ TimeAt(t time.Time) {
+	@Time(t.UTC().Format(time.RFC3339))
+}
+
+// TimePtr is Time for an optional timestamp.
+templ TimePtr(ts *string) {
+	if ts == nil {
+		@Time("")
+	} else {
+		@Time(*ts)
+	}
+}

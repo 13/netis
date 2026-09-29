@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"time"
 
 	"netis/internal/store"
 )
@@ -65,7 +64,7 @@ templ auditTab(a AuditData) {
 				<tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th><th>Status</th><th>IP</th></tr>
 				for _, e := range a.Entries {
 					<tr>
-						<td class="mono" title={ e.At.UTC().Format(time.RFC3339) }>{ relTime(e.At.UTC().Format(time.RFC3339)) }</td>
+						<td>@TimeAt(e.At)</td>
 						<td>
 							if e.Username == "" {
 								<span class="muted">—</span>

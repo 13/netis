@@ -149,7 +149,11 @@ templ DevicePage(username string, d DeviceDetail) {
 									<span class="status is-offline">offline</span>
 								}
 							</p>
-							<p class="muted">Last seen: <span class="mono">{ ifd.LastSeen }</span> · Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }</p>
+							<p class="muted">
+								Last seen{ " " }
+								@Time(ifd.LastSeen)
+								{ " · " }Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }
+							</p>
 							<table>
 								<tr>
 									<th>IP</th>
@@ -181,7 +185,7 @@ templ DevicePage(username string, d DeviceDetail) {
 											<td>{ fmt.Sprint(p.Port) }</td>
 											<td>{ p.Proto }</td>
 											<td>{ p.ServiceGuess }</td>
-											<td class="mono">{ p.LastSeen }</td>
+											<td>@Time(p.LastSeen)</td>
 										</tr>
 									}
 								</table>
@@ -274,7 +278,7 @@ templ DevicePage(username string, d DeviceDetail) {
 					<table>
 						for _, e := range d.Events {
 							<tr>
-								<td class="mono">{ e.TS }</td>
+								<td>@Time(e.TS)</td>
 								<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 								<td>{ e.Details }</td>
 							</tr>

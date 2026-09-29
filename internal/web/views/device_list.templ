@@ -139,9 +139,9 @@ templ deviceRow(row store.DeviceRow, depth int) {
 				<span class="chip">{ tn }</span>{ " " }
 			}
 		</td>
-		<td class="mono muted">
+		<td class="muted">
 			if row.LastSeen != nil {
-				{ *row.LastSeen }
+				@Time(*row.LastSeen)
 			}
 		</td>
 		<td>
