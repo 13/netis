@@ -267,7 +267,7 @@ func TestIntegrationStatusRendered(t *testing.T) {
 func TestWelcomeIntegrationsStillRenders(t *testing.T) {
 	srv, st := testServer(t)
 	body := authedGet(t, srv, st, "/welcome/integrations").Body.String()
-	for _, want := range []string{`name="proxmox_url"`, `name="wg_ssh_addr"`, `name="pihole_url"`, `class="panel integ"`} {
+	for _, want := range []string{`name="proxmox_url"`, `name="wg_ssh_addr"`, `name="pihole_url"`, `class="ob-service"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("welcome integrations missing %q", want)
 		}

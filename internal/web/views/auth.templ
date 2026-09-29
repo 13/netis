@@ -10,31 +10,34 @@ templ onboardBrand() {
 	</div>
 }
 
-templ onboardStep(n, cur int, label string) {
-	if n < cur {
-		<div class="step done">
-			<span class="num">
-				@Icon("check", "")
-			</span>
-			<span class="lbl">{ label }</span>
-		</div>
-	} else if n == cur {
-		<div class="step active"><span class="num">{ fmt.Sprint(n) }</span><span class="lbl">{ label }</span></div>
-	} else {
-		<div class="step"><span class="num">{ fmt.Sprint(n) }</span><span class="lbl">{ label }</span></div>
-	}
-}
+// onboardSteps are the first-run flow's steps, in order.
+var onboardSteps = []string{"Account", "Network", "Services", "Done"}
 
+// onboardStepper is the flow's step indicator: the steps done ticked, the
+// current one marked for screen readers too.
 templ onboardStepper(step int) {
-	<div class="stepper">
-		@onboardStep(1, step, "Account")
-		<i class="conn"></i>
-		@onboardStep(2, step, "Subnets")
-		<i class="conn"></i>
-		@onboardStep(3, step, "Integrations")
-	</div>
+	<ol class="stepper" aria-label="Setup steps">
+		for i, label := range onboardSteps {
+			if i+1 < step {
+				<li class="step done">
+					<span class="num">
+						@Icon("check", "")
+					</span>
+					<span class="lbl">{ label }</span>
+					<span class="sr-only">(done)</span>
+				</li>
+			} else if i+1 == step {
+				<li class="step active" aria-current="step"><span class="num">{ fmt.Sprint(i + 1) }</span><span class="lbl">{ label }</span></li>
+			} else {
+				<li class="step"><span class="num">{ fmt.Sprint(i + 1) }</span><span class="lbl">{ label }</span></li>
+			}
+		}
+	</ol>
 }
 
+// onboardShell is the minimal frame of the first-run flow: the mark, the
+// step indicator and one card. htmx and the toasts are there for the last
+// step's live scan count and Run now.
 templ onboardShell(title string, step int) {
 	<!DOCTYPE html>
 	<html lang="en">
@@ -45,14 +48,19 @@ templ onboardShell(title string, step int) {
 			@themeBootstrap()
 			@appIcons()
 			<link rel="stylesheet" href="/static/app.css"/>
+			<link rel="stylesheet" href="/static/pages/setup.css"/>
+			<script src="/static/htmx.min.js"></script>
+			<script src="/static/sse.js"></script>
 		</head>
 		<body class="onboard">
 			@onboardBrand()
 			@onboardStepper(step)
-			<div class="onboard-card">
+			<main class="onboard-card">
 				{ children... }
-			</div>
+			</main>
+			<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 			<script src="/static/theme.js"></script>
+			<script src="/static/toasts.js"></script>
 		</body>
 	</html>
 }
@@ -67,6 +75,7 @@ templ authShell(title string) {
 			@themeBootstrap()
 			@appIcons()
 			<link rel="stylesheet" href="/static/app.css"/>
+			<link rel="stylesheet" href="/static/pages/setup.css"/>
 		</head>
 		<body class="onboard">
 			{ children... }
@@ -112,16 +121,25 @@ templ LoginPage(errMsg string, o LoginOptions) {
 }
 
 templ SetupPage(errMsg string) {
-	@onboardShell("Setup", 1) {
+	@onboardShell("Create your account", 1) {
 		<h1>Create your admin account</h1>
-		<p class="muted">This is the login you'll use to manage netis.</p>
+		<p class="muted">The login you manage netis with. You stay signed in and carry on setting up.</p>
 		if errMsg != "" {
-			<p class="error">{ errMsg }</p>
+			<p class="form-error" role="alert">{ errMsg }</p>
 		}
 		<form method="post" action="/setup">
-			<input name="username" placeholder="username" autocomplete="username" autofocus required/>
-			<input name="password" type="password" placeholder="password (min 8 chars)" autocomplete="new-password" required minlength="8"/>
-			<button type="submit" class="btn btn-primary">Create account</button>
+			<label>
+				Username
+				<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required/>
+			</label>
+			<label>
+				Password
+				<input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="pw-help"/>
+			</label>
+			<p class="hint" id="pw-help">At least 8 characters.</p>
+			<div class="ob-actions">
+				<button type="submit" class="btn btn-primary">Create account</button>
+			</div>
 		</form>
 	}
 }

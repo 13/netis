@@ -1,0 +1,78 @@
+package views
+
+// ErrorPageData is an error page: the status, and who is signed in (the app
+// shell for them, the minimal shell for nobody).
+type ErrorPageData struct {
+	Code     int
+	SignedIn bool
+	Username string
+}
+
+// errorTitle is an error page's heading.
+func errorTitle(code int) string {
+	switch code {
+	case 403:
+		return "You can't open this page"
+	case 404:
+		return "Page not found"
+	case 503:
+		return "netis can't reach its database"
+	}
+	return "Something went wrong"
+}
+
+// errorText explains an error page in a sentence or two.
+func errorText(code int) string {
+	switch code {
+	case 403:
+		return "Your account can see the network but not change its settings. Ask an admin if you need this."
+	case 404:
+		return "Nothing lives at this address. It may have been deleted, or the link has a typo."
+	case 503:
+		return "The page works again as soon as the database answers. Try again in a moment."
+	}
+	return "netis hit an error while answering. It has been logged; try again, and if it keeps happening, check the server log."
+}
+
+// errorIcon is an error page's icon.
+func errorIcon(code int) string {
+	switch code {
+	case 403:
+		return "lock"
+	case 404:
+		return "search"
+	}
+	return "triangle-alert"
+}
+
+templ errorBody(d ErrorPageData) {
+	<div class="panel empty error-page">
+		@Icon(errorIcon(d.Code), "")
+		<h1>{ errorTitle(d.Code) }</h1>
+		<p>{ errorText(d.Code) }</p>
+		<div class="row">
+			if d.SignedIn {
+				<a class="btn btn-primary" href="/">Go to the dashboard</a>
+				if d.Code == 404 {
+					<a class="btn" href="/devices">Browse devices</a>
+				}
+			} else {
+				<a class="btn btn-primary" href="/">Go to netis</a>
+			}
+		</div>
+	</div>
+}
+
+// ErrorPage is a 403, 404, 500 or 503 as a browser sees it.
+templ ErrorPage(d ErrorPageData) {
+	if d.SignedIn {
+		@Layout(errorTitle(d.Code), d.Username) {
+			@errorBody(d)
+		}
+	} else {
+		@authShell(errorTitle(d.Code)) {
+			@onboardBrand()
+			@errorBody(d)
+		}
+	}
+}

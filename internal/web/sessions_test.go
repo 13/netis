@@ -73,7 +73,11 @@ func TestSettingsListsOwnSessionsOnly(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	addUser(t, st, "kim", "kim-password", "viewer", "kim-token")
-	// authedGet creates admin "ben" with session "testtok".
+	// authedGet creates admin "ben" with session "testtok"; a second one
+	// elsewhere makes signing out the others worth offering.
+	authedGet(t, srv, st, "/")
+	ben, _, _ := st.GetUserByName(t.Context(), "ben")
+	st.CreateSession(t.Context(), "ben-phone", ben.ID, "2099-01-01T00:00:00Z")
 	body := authedGet(t, srv, st, "/settings/sessions").Body.String()
 
 	if !strings.Contains(body, "this browser") {

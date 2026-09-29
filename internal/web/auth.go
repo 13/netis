@@ -323,6 +323,10 @@ func onboardingAllowed(path string) bool {
 // store failed, logging the real error.
 func (s *Server) unavailable(w http.ResponseWriter, r *http.Request, err error) {
 	slog.Error("authenticating request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	if wantsPage(r) {
+		s.errorPage(w, r, http.StatusServiceUnavailable)
+		return
+	}
 	http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 }
 
@@ -466,8 +470,10 @@ func clearSessionCookie(w http.ResponseWriter, secure bool) {
 }
 
 func (s *Server) handleSetupPage(w http.ResponseWriter, r *http.Request) {
+	// Once the admin exists there is nothing to set up: a stale bookmark or
+	// the back button lands on the app (or the login page) instead.
 	if n, _ := s.store.CountUsers(r.Context()); n > 0 {
-		http.Error(w, "already set up", http.StatusForbidden)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, views.SetupPage(""))
@@ -481,7 +487,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	username, password := r.FormValue("username"), r.FormValue("password")
 	if username == "" || len(password) < minPasswordLen {
 		w.WriteHeader(http.StatusBadRequest)
-		s.render(w, r, views.SetupPage("username required, password min "+strconv.Itoa(minPasswordLen)+" chars"))
+		s.render(w, r, views.SetupPage("Choose a username and a password of at least "+strconv.Itoa(minPasswordLen)+" characters."))
 		return
 	}
 	if len(password) > maxPasswordLen {

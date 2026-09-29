@@ -54,15 +54,26 @@ templ auditTab(a AuditData) {
 		@filterSelect("action", "Action", a.Action, a.Actions)
 		<noscript><button type="submit" class="btn">Filter</button></noscript>
 	</form>
-	if len(a.Entries) == 0 {
-		<p class="muted">No entries.</p>
+	if len(a.Entries) == 0 && (a.User != "" || a.Action != "") {
+		<div class="panel empty empty-compact">
+			@Icon("filter", "")
+			<h3>No entries match these filters</h3>
+			<a class="btn btn-sm" href="/settings/audit">Clear filters</a>
+		</div>
+	} else if len(a.Entries) == 0 {
+		<div class="panel empty empty-compact">
+			@Icon("list", "")
+			<h3>Nothing recorded yet</h3>
+			<p>Changes made through netis, like adding a device or a user, are listed here with who made them and when.</p>
+		</div>
 	} else {
 		<div class="table-wrap">
 			<table>
 				<tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th><th>Status</th><th>IP</th></tr>
 				for _, e := range a.Entries {
 					<tr>
-						<td>@TimeAt(e.At)</td>
+						<td>@TimeAt(e.At)
+</td>
 						<td>
 							if e.Username == "" {
 								<span class="muted">—</span>

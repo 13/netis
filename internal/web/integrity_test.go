@@ -124,7 +124,7 @@ func TestWelcomeSubnetsValidatesAndReports(t *testing.T) {
 		t.Fatalf("a rejected wizard page created %+v", subs)
 	}
 	rec = authedPost(t, srv, st, "/welcome/subnets", url.Values{"manual_cidr": {"not-a-cidr"}})
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid CIDR") {
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "is not a subnet") {
 		t.Fatalf("garbage CIDR = %d %q", rec.Code, rec.Body.String())
 	}
 	for i := 0; i < 2; i++ { // resubmitting is harmless

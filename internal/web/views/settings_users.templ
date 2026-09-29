@@ -53,6 +53,9 @@ templ usersTab(d SettingsData) {
 				</tbody>
 			</table>
 		</div>
+		if len(d.Users) <= 1 {
+			<p class="empty-note">Only you so far. Add a viewer for anyone who should see the network without changing it.</p>
+		}
 	</div>
 	<details class="panel disclosure">
 		<summary>
@@ -155,9 +158,13 @@ templ sessionsSection(d SettingsData) {
 				</tbody>
 			</table>
 		</div>
-		<form method="post" action="/settings/sessions/revoke-others" class="panel-actions" data-confirm="Sign out every other session?">
-			<button type="submit" class="btn">Sign out other sessions</button>
-		</form>
+		if len(d.Sessions) > 1 {
+			<form method="post" action="/settings/sessions/revoke-others" class="panel-actions" data-confirm="Sign out every other session?">
+				<button type="submit" class="btn">Sign out other sessions</button>
+			</form>
+		} else {
+			<p class="empty-note">This browser is the only place you are signed in.</p>
+		}
 	</div>
 }
 
