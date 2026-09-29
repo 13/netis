@@ -1,40 +1,293 @@
 package views
 
-import "netis/internal/netdetect"
+import (
+	"fmt"
 
-templ WelcomeSubnets(username string, detected []netdetect.Detected) {
-	@onboardShell("Welcome", 2) {
-		<h1>Which subnets should netis scan?</h1>
-		<p class="muted">Pick the networks to watch. You can change these later in Settings.</p>
+	"netis/internal/store"
+)
+
+// WelcomeNetworkData is step 2 of the first-run flow, Your network.
+type WelcomeNetworkData struct {
+	// Existing are the subnets netis already scans, shown when the admin
+	// comes back to this step.
+	Existing []store.Subnet
+	// Detected are the subnets found on this machine and not added yet.
+	Detected []DetectedSubnet
+	// Manual is the subnet typed under Add another, kept when the page is
+	// shown again with Error, what was wrong with it.
+	Manual string
+	Error  string
+}
+
+// DetectedSubnet is one subnet found on this machine. Hosts is how many
+// addresses a scan walks, 0 when the range is too large to scan at all.
+type DetectedSubnet struct {
+	CIDR, Iface string
+	Hosts       int
+	Checked     bool
+}
+
+// Sizes past which step 2 says a subnet is large: bigger than a /24 takes
+// longer to sweep, and past a /22 a sweep takes minutes.
+const (
+	largeSubnet     = 254
+	verylargeSubnet = 1022
+)
+
+// thousands writes n with a comma between each group of three digits.
+func thousands(n int) string {
+	s := fmt.Sprint(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
+// subnetSize is a detected subnet's size in words.
+func subnetSize(d DetectedSubnet) string {
+	if d.Iface == "" {
+		return thousands(d.Hosts) + " addresses"
+	}
+	return "The network on " + d.Iface + " · " + thousands(d.Hosts) + " addresses"
+}
+
+// subnetWarning is what step 2 says about a subnet's size, empty for the
+// usual home network.
+func subnetWarning(d DetectedSubnet) string {
+	switch {
+	case d.Hosts == 0:
+		return "Too large to scan. Add the part your devices use under Add another subnet."
+	case d.Hosts > verylargeSubnet:
+		return "A scan this size takes several minutes. If your devices use only part of it, add that part instead."
+	case d.Hosts > largeSubnet:
+		return "Larger than most home networks, so each scan takes a little longer."
+	}
+	return ""
+}
+
+// WelcomeNetwork is step 2: which subnets netis scans.
+templ WelcomeNetwork(d WelcomeNetworkData) {
+	@onboardShell("Your network", 2) {
+		<h1>Your network</h1>
+		<p class="muted">netis finds devices by scanning the subnets you pick here. You can change them later in Settings.</p>
 		<form method="post" action="/welcome/subnets">
-			if len(detected) == 0 {
-				<p class="muted">No subnets auto-detected. Add one manually below.</p>
-			} else {
-				for _, d := range detected {
-					<label class="toggle-row">
-						<input type="checkbox" name="subnet" value={ d.CIDR + "|" + d.Iface } checked/>
-						<span class="mono">{ d.CIDR }</span> <span class="muted">{ d.Iface }</span>
-					</label>
-				}
+			if len(d.Existing) > 0 {
+				<div class="ob-group">
+					<p class="ob-label">Already scanning</p>
+					<ul class="ob-list">
+						for _, sn := range d.Existing {
+							<li>
+								@Icon("check", "")
+								<span class="mono">{ sn.CIDR }</span>
+								if sn.Name != sn.CIDR {
+									<span class="muted">{ sn.Name }</span>
+								}
+							</li>
+						}
+					</ul>
+				</div>
 			}
-			<label>Add another CIDR <input type="text" name="manual_cidr" placeholder="192.168.1.0/24"/></label>
-			<button type="submit" class="btn btn-primary">Continue</button>
+			if len(d.Detected) > 0 {
+				<fieldset class="ob-group">
+					<legend class="ob-label">Found on this machine</legend>
+					for _, det := range d.Detected {
+						<label class="ob-choice">
+							<input type="checkbox" name="subnet" value={ det.CIDR + "|" + det.Iface } checked?={ det.Checked } disabled?={ det.Hosts == 0 }/>
+							<span class="ob-choice-body">
+								<span class="mono ob-choice-title">{ det.CIDR }</span>
+								if det.Hosts > 0 {
+									<span class="ob-choice-desc">{ subnetSize(det) }</span>
+								}
+								if w := subnetWarning(det); w != "" {
+									<span class="ob-warn">
+										@Icon("triangle-alert", "")
+										{ w }
+									</span>
+								}
+							</span>
+						</label>
+					}
+				</fieldset>
+			} else if len(d.Existing) == 0 {
+				<p class="ob-note">netis found no network on this machine, which is normal inside some containers. Add the subnet to scan below.</p>
+			}
+			<details class="ob-add" open?={ d.Manual != "" || d.Error != "" || (len(d.Detected) == 0 && len(d.Existing) == 0) }>
+				<summary>
+					@Icon("plus", "")
+					Add another subnet
+				</summary>
+				<div class="ob-add-body">
+					<label for="manual_cidr">Subnet</label>
+					<input
+						type="text"
+						id="manual_cidr"
+						name="manual_cidr"
+						class="mono"
+						value={ d.Manual }
+						placeholder="192.168.1.0/24"
+						pattern="\s*[0-9A-Fa-f:.]+/[0-9]{1,3}\s*"
+						title="An address and a prefix length, like 192.168.1.0/24"
+						autocomplete="off"
+						spellcheck="false"
+						aria-describedby="manual-help"
+						if d.Error != "" {
+							aria-invalid="true"
+							aria-errormessage="manual-err"
+						}
+					/>
+					if d.Error != "" {
+						<p class="field-error" id="manual-err" role="alert">{ d.Error }</p>
+					}
+					<p class="hint" id="manual-help">An address and a prefix length. A typical home network is a /24, like 192.168.1.0/24.</p>
+				</div>
+			</details>
+			<div class="ob-actions">
+				<button type="submit" class="btn btn-primary">Continue</button>
+				<button type="submit" class="btn btn-quiet" formaction="/welcome/skip" formnovalidate>Skip for now</button>
+			</div>
 		</form>
 	}
 }
 
-templ WelcomeIntegrations(username string, values map[string]string) {
-	@onboardShell("Welcome", 3) {
-		<h1>Connect an integration</h1>
-		<p class="muted">Optional — link Proxmox, WireGuard, or a DHCP server (Pi-hole, AdGuard Home, OPNsense). You can do this later in Settings.</p>
-		<form method="post" action="/welcome/integrations" class="integ-list">
-			for _, it := range Integrations(map[string]bool{}, nil) {
-				@IntegrationPanel(it, values, false)
+// WelcomeServicesData is step 3, Connect services: the stored integration
+// settings (never a secret) and which integrations are set up, plus Error
+// when the form just submitted was refused.
+type WelcomeServicesData struct {
+	Values     map[string]string
+	Configured map[string]bool
+	Error      string
+}
+
+// WelcomeIntegrations is step 3: the optional integrations, one closed
+// panel each, all in the step's single form.
+templ WelcomeIntegrations(d WelcomeServicesData) {
+	@onboardShell("Connect services", 3) {
+		<h1>Connect services</h1>
+		<p class="muted">Optional. A service fills in what a scan cannot see, like names, leases and virtual machines. You can do this later in Settings.</p>
+		if d.Error != "" {
+			<p class="form-error" role="alert">{ d.Error }</p>
+		}
+		<form method="post" action="/welcome/integrations">
+			<div class="ob-services">
+				for _, it := range Integrations(d.Configured, nil) {
+					<details class="ob-service">
+						<summary>
+							@Icon("chevron-right", "disc-chev")
+							<span class="ob-service-name">{ it.Label }</span>
+							<span class="ob-service-about">{ it.About }</span>
+							if it.Configured {
+								<span class="chip">Set up</span>
+							}
+						</summary>
+						<div class="ob-service-body">
+							@integrationFields(it.Name, d.Values)
+						</div>
+					</details>
+				}
+			</div>
+			<p class="hint">Services you fill in are tried within a minute. The next step can run them at once.</p>
+			<div class="ob-actions">
+				<button type="submit" class="btn btn-primary">Continue</button>
+				<button type="submit" class="btn btn-quiet" formaction="/welcome/skip" formnovalidate>Skip for now</button>
+			</div>
+		</form>
+	}
+}
+
+// WelcomeProgress is the first scan as the last step shows it: each swept
+// subnet's scan state and how many devices netis knows so far.
+type WelcomeProgress struct {
+	Subnets []ScanState
+	Devices int
+}
+
+// scanning reports whether any subnet is still waiting for or in its scan.
+func (p WelcomeProgress) scanning() bool {
+	for _, s := range p.Subnets {
+		if s.Queued || s.Running || s.LastDone == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// scanWord is one subnet's scan state in a word.
+func scanWord(s ScanState) string {
+	switch {
+	case s.Running:
+		return "Scanning"
+	case s.Queued:
+		return "Waiting"
+	case s.LastDone != "" && !s.LastOK:
+		return "Scan failed"
+	case s.LastDone != "":
+		return "Done"
+	}
+	return "Starting"
+}
+
+// WelcomeDone is step 4: the first scan under way and the way on.
+templ WelcomeDone(p WelcomeProgress, services []Integration) {
+	@onboardShell("You're set up", 4) {
+		<h1>You're set up</h1>
+		<div
+			class="ob-progress"
+			hx-ext="sse"
+			sse-connect="/events/stream"
+			hx-get="/welcome/progress"
+			hx-trigger="sse:dashboard, sse:events"
+			aria-live="polite"
+		>
+			@WelcomeProgressBody(p)
+		</div>
+		if len(services) > 0 {
+			<div class="ob-group">
+				<p class="ob-label">Connected services</p>
+				<ul class="ob-list ob-run">
+					for _, it := range services {
+						<li>
+							<span>{ it.Label }</span>
+							<span class="grow"></span>
+							<button type="button" class="btn btn-sm" hx-post={ "/settings/integrations/" + it.Name + "/run" } hx-target="#toasts" hx-swap="beforeend">
+								@Icon("refresh-cw", "")
+								Run now
+							</button>
+						</li>
+					}
+				</ul>
+			</div>
+		}
+		<div class="ob-actions">
+			<a class="btn btn-primary" href="/">Go to the dashboard</a>
+		</div>
+	}
+}
+
+// WelcomeProgressBody is the live part of step 4, swapped in again as scans
+// finish and devices turn up.
+templ WelcomeProgressBody(p WelcomeProgress) {
+	if len(p.Subnets) == 0 {
+		<p class="muted">There is no subnet to scan yet. Add one in Settings, under Network, and netis starts scanning it.</p>
+	} else {
+		<p class="ob-count">
+			if p.scanning() {
+				<span class="ob-led is-busy" aria-hidden="true"></span>
+				Scanning your network…
+			} else {
+				<span class="ob-led" aria-hidden="true"></span>
+				First scan finished
 			}
-			<button type="submit" class="btn btn-primary">Save &amp; finish</button>
-		</form>
-		<form method="post" action="/welcome/skip">
-			<button type="submit" class="btn btn-quiet">Skip for now</button>
-		</form>
+		</p>
+		<p class="ob-found"><span class="tnum">{ fmt.Sprint(p.Devices) }</span> { pluralWord(p.Devices, "device", "devices") } found so far</p>
+		<ul class="ob-list ob-scans">
+			for _, s := range p.Subnets {
+				<li>
+					<span class="mono">{ s.Subnet.CIDR }</span>
+					<span class="grow"></span>
+					<span class="muted">{ scanWord(s) }</span>
+				</li>
+			}
+		</ul>
+		<p class="hint">Scanning carries on in the background. You can leave this page at any time.</p>
 	}
 }

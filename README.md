@@ -30,11 +30,16 @@ NETIS_DB=/var/lib/netis/netis.db ./netis
 ```
 
 The server listens on `:8080` by default. On first run, visit `/setup` in
-a browser to create the initial admin account (username + password). After
-setup, log in at `/login`, then go to **Settings** and add your LAN's
-subnet (e.g. `192.168.1.0/24`) so netis knows what to scan. Use the
-**Scan now** button on the subnet page to run an immediate sweep, or wait
-for the background scan loop (every 120s by default).
+a browser. A short setup flow follows: create the admin account (you stay
+signed in), pick the subnets to scan (the ones this machine is on are
+found and preselected; add others such as `192.168.1.0/24` by hand),
+optionally connect Pi-hole, Proxmox and the other integrations, and the
+last step starts the first scan and counts devices as they turn up.
+**Skip for now** opens the app straight away; the dashboard then shows a
+Finish setup panel listing what is still missing (no subnets, no scan
+yet, no integrations) until it is done or dismissed. Afterwards subnets
+live under **Settings → Network**, and the background scan loop sweeps
+them every 120s by default.
 
 ## Make targets
 
@@ -403,8 +408,8 @@ guest or peer is not flagged until another one exists. Proxmox nodes are never
 marked, because netis only learns of nodes through their guests.
 
 Subnets (CIDR, kind, scan interval, scan enabled) are managed via
-Settings, not environment variables — add at least one subnet after
-first-run setup for scanning to do anything.
+Settings, not environment variables — add at least one subnet during or
+after first-run setup for scanning to do anything.
 
 ## JSON API and metrics
 

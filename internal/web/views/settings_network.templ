@@ -98,7 +98,11 @@ templ networkSection(d SettingsData) {
 			<span class="count">{ fmt.Sprint(len(d.Subnets)) }</span>
 		</div>
 		if len(d.Subnets) == 0 {
-			<p class="muted">No subnets yet. Add the networks netis should scan.</p>
+			<div class="empty empty-compact">
+				@Icon("network", "")
+				<h3>No subnets yet</h3>
+				<p>netis finds devices by scanning the networks you add here. Start with the one this machine is on.</p>
+			</div>
 		} else {
 			<div class="subnet-list">
 				for _, sn := range d.Subnets {
@@ -125,37 +129,47 @@ templ networkSection(d SettingsData) {
 				}
 			</div>
 		}
-		<details
-			class="disclosure"
-			if len(d.Subnets) == 0 {
-				open
-			}
-		>
-			<summary>
-				@Icon("plus", "")
-				Add subnet
-			</summary>
-			<form method="post" action="/settings/subnets">
-				<div class="field-grid">
-					<label>Name <input type="text" name="name" required/></label>
-					<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required class="mono"/></label>
-					@subnetKindSelect(settingOr(d.Values, "default_subnet_kind", "lan"))
-					<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
-				</div>
-				<label class="chk">
-					<input
-						type="checkbox"
-						name="scan_enabled"
-						if defaultScanEnabled(d.Values) {
-							checked
-						}
-					/>
-					Scan periodically
-				</label>
-				<button type="submit" class="btn btn-primary">Add subnet</button>
-			</form>
-		</details>
+		if len(d.Subnets) == 0 {
+			<h3>Add your first subnet</h3>
+			@subnetAddForm(d)
+		} else {
+			<details class="disclosure">
+				<summary>
+					@Icon("plus", "")
+					Add subnet
+				</summary>
+				@subnetAddForm(d)
+			</details>
+		}
 	</section>
+	@scanningForm(d)
+}
+
+// subnetAddForm adds a subnet, prefilled with the defaults for new subnets.
+templ subnetAddForm(d SettingsData) {
+	<form method="post" action="/settings/subnets">
+		<div class="field-grid">
+			<label>Name <input type="text" name="name" required/></label>
+			<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required class="mono"/></label>
+			@subnetKindSelect(settingOr(d.Values, "default_subnet_kind", "lan"))
+			<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
+		</div>
+		<label class="chk">
+			<input
+				type="checkbox"
+				name="scan_enabled"
+				if defaultScanEnabled(d.Values) {
+					checked
+				}
+			/>
+			Scan periodically
+		</label>
+		<button type="submit" class="btn btn-primary">Add subnet</button>
+	</form>
+}
+
+// scanningForm holds the scanning settings that apply to every subnet.
+templ scanningForm(d SettingsData) {
 	<form method="post" action="/settings/general" class="panel">
 		<input type="hidden" name="section" value="network"/>
 		<div class="panel-head"><h2>Scanning</h2></div>

@@ -89,7 +89,7 @@ func TestWelcomeSkipSetsOnboarded(t *testing.T) {
 func TestWelcomeOnboardingChrome(t *testing.T) {
 	srv, st := testServer(t)
 	sub := authedGet(t, srv, st, "/welcome").Body.String()
-	for _, want := range []string{`class="stepper"`, "Continue", "Which subnets"} {
+	for _, want := range []string{`class="stepper"`, "Continue", "Your network", "Skip for now"} {
 		if !strings.Contains(sub, want) {
 			t.Errorf("welcome subnets missing %q", want)
 		}

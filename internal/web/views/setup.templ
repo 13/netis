@@ -1,0 +1,66 @@
+package views
+
+// SetupStatus is what the dashboard's Finish setup panel lists as missing.
+type SetupStatus struct {
+	NoSubnets bool
+	// NoScan says no subnet has been scanned yet; Scanning that the first
+	// scan is queued or under way.
+	NoScan         bool
+	Scanning       bool
+	NoIntegrations bool
+}
+
+// setupPanel offers to finish the first-run flow after Skip for now: each
+// missing piece with the step that adds it. It stays until everything is in
+// place or the admin dismisses it.
+templ setupPanel(st SetupStatus) {
+	<section class="panel setup-panel" aria-labelledby="setup-h">
+		<div class="panel-head">
+			<h2 id="setup-h">Finish setup</h2>
+			<span class="spacer"></span>
+			<form method="post" action="/welcome/dismiss" class="inline">
+				<button type="submit" class="btn btn-quiet btn-sm btn-icon" aria-label="Dismiss" title="Dismiss">
+					@Icon("x", "")
+				</button>
+			</form>
+		</div>
+		<ul class="setup-list">
+			if st.NoSubnets {
+				<li>
+					@Icon("network", "icon-lg")
+					<div class="setup-body">
+						<p class="setup-h">Add the networks to scan</p>
+						<p class="muted">netis finds devices by scanning your subnets. Nothing is scanned until you add one.</p>
+					</div>
+					<a class="btn btn-sm btn-primary" href="/welcome">Add subnets</a>
+				</li>
+			}
+			if st.NoScan {
+				<li>
+					@Icon("radar", "icon-lg")
+					<div class="setup-body">
+						<p class="setup-h">Run the first scan</p>
+						if st.Scanning {
+							<p class="muted">The first scan is running. Devices show up as it finds them.</p>
+						} else {
+							<p class="muted">Your subnets have not been scanned yet.</p>
+						}
+					</div>
+					if !st.Scanning {
+						<button type="button" class="btn btn-sm" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan now</button>
+					}
+				</li>
+			}
+			if st.NoIntegrations {
+				<li>
+					@Icon("plug", "icon-lg")
+					<div class="setup-body">
+						<p class="setup-h">Connect a service <span class="muted">(optional)</span></p>
+						<p class="muted">Pi-hole, Proxmox and others fill in names, leases and virtual machines a scan cannot see.</p>
+					</div>
+					<a class="btn btn-sm" href="/welcome/integrations">Connect</a>
+				</li>
+			}
+		</ul>
+	</section>
+}

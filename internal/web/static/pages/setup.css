@@ -1,0 +1,119 @@
+/* First run and empty screens: the setup flow (views/welcome.templ,
+   views/auth.templ), the dashboard's Finish setup panel (views/setup.templ),
+   error pages (views/errors.templ) and the compact empty states in Settings. */
+@layer pages {
+  /* ---- setup flow ---- */
+  .onboard .onboard-card { max-width:520px; gap:var(--sp-4); }
+  .onboard .onboard-card > h1 + p { margin-top:calc(var(--sp-2) * -1); }
+
+  /* The step indicator: a real sequence, so numbered. */
+  .stepper { display:flex; align-items:center; gap:var(--sp-2); margin:0; padding:0; list-style:none; }
+  .stepper .step { display:flex; align-items:center; gap:var(--sp-2); color:var(--muted); font-size:var(--text-sm); font-weight:var(--w-medium); }
+  .stepper .step + .step::before { content:""; width:24px; height:1px; background:var(--border-strong); }
+  .stepper .num { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; font-size:var(--text-xs);
+                  background:var(--surface); border:1px solid var(--border-strong); color:var(--muted); }
+  .stepper .num .icon { width:13px; height:13px; }
+  .stepper .step.active { color:var(--fg); }
+  .stepper .step.active .num { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
+  .stepper .step.done .num { border-color:var(--accent); color:var(--accent); }
+
+  .ob-group { display:flex; flex-direction:column; gap:var(--sp-2); margin:0; padding:0; border:0; min-width:0; }
+  legend.ob-label { margin-bottom:var(--sp-2); }
+  .ob-label { margin:0; padding:0; font-size:var(--text-sm); font-weight:var(--w-medium); color:var(--fg); }
+  .ob-note { color:var(--muted); font-size:var(--text-sm); }
+  .ob-list { display:flex; flex-direction:column; gap:var(--sp-1); margin:0; padding:0; list-style:none; }
+  .ob-list li { display:flex; align-items:center; gap:var(--sp-2); min-height:32px; font-size:var(--text-sm); }
+  .ob-list li > .icon { color:var(--muted); }
+  .ob-list .grow { flex:1; }
+
+  /* A detected subnet to pick: the whole row is the checkbox's label. */
+  label.ob-choice { display:flex; flex-direction:row; align-items:flex-start; gap:var(--sp-3); margin:0; padding:var(--sp-3);
+                    border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface); cursor:pointer;
+                    font-weight:var(--w-regular); }
+  label.ob-choice:hover { border-color:var(--border-strong); }
+  label.ob-choice:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); }
+  label.ob-choice:has(input:disabled) { cursor:default; background:var(--surface-2); }
+  label.ob-choice input { margin-top:3px; }
+  .ob-choice-body { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .ob-choice-title { font-weight:var(--w-medium); }
+  .ob-choice-desc { color:var(--muted); font-size:var(--text-sm); }
+  .ob-warn { display:flex; align-items:flex-start; gap:var(--sp-1); margin-top:var(--sp-1); color:var(--muted); font-size:var(--text-sm); }
+  .ob-warn .icon { flex:none; margin-top:2px; color:var(--activity); }
+
+  .ob-add > summary { display:inline-flex; align-items:center; gap:var(--sp-2); min-height:32px; cursor:pointer; list-style:none;
+                      color:var(--accent); font-size:var(--text-sm); font-weight:var(--w-medium); }
+  .ob-add > summary::-webkit-details-marker { display:none; }
+  .ob-add[open] > summary { margin-bottom:var(--sp-2); }
+  .ob-add-body { display:flex; flex-direction:column; gap:var(--sp-1); }
+  .ob-add-body label { margin:0; }
+  .ob-add-body .hint { margin:0; }
+  .ob-add-body input[aria-invalid="true"], .ob-add-body input:user-invalid { border-color:var(--fault); }
+
+  /* Actions: the primary button first in the source (Enter submits it),
+     shown on the right; Skip for now quiet on the left. */
+  .ob-actions { display:flex; flex-direction:row-reverse; flex-wrap:wrap; align-items:center; justify-content:space-between;
+                gap:var(--sp-2); margin-top:var(--sp-2); }
+
+  /* Connect services: one closed row per service. */
+  .ob-services { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-control); }
+  .ob-service + .ob-service { border-top:1px solid var(--border); }
+  .ob-service > summary { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; column-gap:var(--sp-2); align-items:baseline;
+                          padding:var(--sp-3); cursor:pointer; list-style:none; }
+  .ob-service > summary::-webkit-details-marker { display:none; }
+  .ob-service > summary:hover { background:var(--surface-2); }
+  .ob-service > summary .disc-chev { grid-row:span 2; align-self:center; color:var(--muted); transition:transform .12s var(--ease); }
+  .ob-service[open] > summary .disc-chev { transform:rotate(90deg); }
+  .ob-service-name { font-weight:var(--w-medium); }
+  .ob-service-about { grid-column:2; color:var(--muted); font-size:var(--text-sm); }
+  .ob-service > summary .chip { grid-column:3; grid-row:1 / span 2; align-self:center; }
+  .ob-service-body { padding:0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 16px + var(--sp-2)); }
+  .ob-service-body .field-grid { grid-template-columns:minmax(0, 1fr); }
+
+  /* The live first scan. */
+  .ob-progress { display:flex; flex-direction:column; gap:var(--sp-2); padding:var(--sp-4); border:1px solid var(--border);
+                 border-radius:var(--r-control); background:var(--surface-2); }
+  .ob-count { display:flex; align-items:center; gap:var(--sp-2); font-weight:var(--w-medium); }
+  .ob-found { font-size:var(--text-xl); font-weight:var(--w-semibold); line-height:1.2; }
+  .ob-found .tnum { font-variant-numeric:tabular-nums; }
+  .ob-led { width:8px; height:8px; border-radius:50%; background:var(--link); flex:none; }
+  .ob-led.is-busy { background:var(--activity); animation:ob-blink 1.2s steps(2, jump-none) infinite; }
+  @keyframes ob-blink { from { opacity:1; } to { opacity:.35; } }
+  .ob-scans li { border-top:1px solid var(--border); }
+  .ob-progress .hint { margin:0; }
+
+  /* ---- Finish setup panel on the dashboard ---- */
+  .setup-panel { margin-bottom:var(--sp-4); }
+  .setup-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+  .setup-list li { display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-3) 0; }
+  .setup-list li + li { border-top:1px solid var(--border); }
+  .setup-list li > .icon { flex:none; color:var(--muted); }
+  .setup-body { flex:1; min-width:0; }
+  .setup-body p { margin:0; }
+  .setup-h { font-weight:var(--w-medium); }
+  .setup-body .muted { font-size:var(--text-sm); }
+  .setup-list li > .btn { flex:none; }
+
+  /* ---- error pages ---- */
+  .error-page { max-width:560px; margin:var(--sp-6) auto; }
+  .error-page h1 { margin:0; font-size:var(--text-lg); color:var(--fg); }
+  .error-page .row { justify-content:center; margin-top:var(--sp-2); }
+  .onboard .error-page { width:100%; margin:0 auto; }
+
+  /* ---- compact empty states and one-line notes (Settings) ---- */
+  .empty.empty-compact { padding:var(--sp-5) var(--sp-4); }
+  .settings-body > .panel.empty { margin-bottom:var(--sp-4); }
+  .empty-note { margin:var(--sp-3) 0 0; color:var(--muted); font-size:var(--text-sm); }
+
+  @media (max-width:640px) {
+    .onboard { padding:var(--sp-5) var(--sp-4); gap:var(--sp-4); }
+    .onboard .onboard-card { padding:var(--sp-4); }
+    .stepper .step:not(.active) .lbl { display:none; }
+    .stepper .step + .step::before { width:16px; }
+    .ob-actions { flex-direction:column; align-items:stretch; }
+    .ob-actions .btn { justify-content:center; min-height:44px; }
+    .ob-service-body { padding-left:var(--sp-3); }
+    .setup-list li { flex-wrap:wrap; align-items:flex-start; }
+    .setup-body { flex-basis:calc(100% - 20px - var(--sp-3) - 1px); }
+    .setup-list li > .btn { margin-left:calc(20px + var(--sp-3)); }
+  }
+}

@@ -53,38 +53,46 @@ templ tokensTab(d SettingsData) {
 		</div>
 	}
 	<div class="panel">
-		<div class="table-wrap">
-			<table>
-				<tr>
-					<th>Name</th>
-					if IsAdmin(ctx) {
-						<th>Owner</th>
-					}
-					<th>Created</th>
-					<th>Last used</th>
-					<th>Expires</th>
-					<th></th>
-				</tr>
-				for _, t := range d.Tokens {
-					<tr>
-						<td>{ t.Name }</td>
-						if IsAdmin(ctx) {
-							<td>{ t.Username }</td>
-						}
-						<td>@Time(t.CreatedAt)</td>
-						<td>@tokenLastUsed(t)</td>
-						<td>@tokenExpiry(t)</td>
-						<td>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tokens/%d/delete", t.ID)) } class="inline" data-confirm={ "Revoke the token " + t.Name + "? Scripts using it stop working." }>
-								<button type="submit" class="btn btn-sm">revoke</button>
-							</form>
-						</td>
-					</tr>
-				}
-			</table>
-		</div>
 		if len(d.Tokens) == 0 {
-			<p class="muted">No tokens yet.</p>
+			<div class="empty empty-compact">
+				@Icon("key", "")
+				<h3>No API tokens</h3>
+				<p>Create one below to let a script read the inventory, or change it if you are an admin.</p>
+			</div>
+		} else {
+			<div class="table-wrap">
+				<table>
+					<tr>
+						<th>Name</th>
+						if IsAdmin(ctx) {
+							<th>Owner</th>
+						}
+						<th>Created</th>
+						<th>Last used</th>
+						<th>Expires</th>
+						<th></th>
+					</tr>
+					for _, t := range d.Tokens {
+						<tr>
+							<td>{ t.Name }</td>
+							if IsAdmin(ctx) {
+								<td>{ t.Username }</td>
+							}
+							<td>@Time(t.CreatedAt)
+</td>
+							<td>@tokenLastUsed(t)
+</td>
+							<td>@tokenExpiry(t)
+</td>
+							<td>
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tokens/%d/delete", t.ID)) } class="inline" data-confirm={ "Revoke the token " + t.Name + "? Scripts using it stop working." }>
+									<button type="submit" class="btn btn-sm">revoke</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</table>
+			</div>
 		}
 	</div>
 	<div class="panel">

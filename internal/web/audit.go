@@ -24,6 +24,7 @@ var auditActions = map[string]string{
 	"POST /welcome/subnets":                  "welcome.subnets",
 	"POST /welcome/integrations":             "welcome.integrations",
 	"POST /welcome/skip":                     "welcome.skip",
+	"POST /welcome/dismiss":                  "welcome.dismiss",
 	"POST /scan":                             "scan.all",
 	"POST /subnets/{id}/scan":                "scan.subnet",
 	"POST /subnets/{id}/cell":                "ip.kind",

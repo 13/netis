@@ -538,17 +538,6 @@
   .onboard-card p { margin:0; }
   .onboard-card form { display:flex; flex-direction:column; gap:var(--sp-3); margin:0; }
   .onboard-card label, .onboard-card fieldset { margin:0; }
-  .stepper { display:flex; align-items:center; gap:var(--sp-2); }
-  .stepper .step { display:flex; align-items:center; gap:var(--sp-2); color:var(--muted); font-size:var(--text-sm); font-weight:var(--w-medium); }
-  .stepper .step .num { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; font-size:var(--text-xs);
-                        background:var(--surface); border:1px solid var(--border-strong); color:var(--muted); }
-  .stepper .step.active { color:var(--fg); }
-  .stepper .step.active .num { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
-  .stepper .step.done .num { border-color:var(--accent); color:var(--accent); }
-  .stepper .conn { display:inline-block; width:24px; height:1px; background:var(--border-strong); }
-  .toggle-row { flex-direction:row; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); margin:0;
-                border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface-2); font-weight:var(--w-regular); }
-  .toggle-row:hover { border-color:var(--border-strong); }
 
   /* ---- style guide ---- */
   .sg-section { margin-bottom:var(--sp-6); }

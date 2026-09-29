@@ -113,6 +113,8 @@ func TestViewerSettingsHideAdminConfig(t *testing.T) {
 	if !strings.Contains(account, `action="/settings/password"`) {
 		t.Error("viewer account page missing the password form")
 	}
+	eve, _, _ := st.GetUserByName(t.Context(), "eve")
+	st.CreateSession(t.Context(), "eve-phone", eve.ID, "2099-01-01T00:00:00Z")
 	if sessions := viewerGet(t, srv, st, "/settings/sessions"); !strings.Contains(sessions, "/settings/sessions/revoke-others") {
 		t.Error("viewer sessions page missing sign out other sessions")
 	}

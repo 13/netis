@@ -165,7 +165,7 @@ func TestSetupOnboardingChrome(t *testing.T) {
 		t.Fatalf("setup code=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{`name="username"`, `name="password"`, `class="stepper"`, "onboard-brand", "Integrations"} {
+	for _, want := range []string{`name="username"`, `name="password"`, `class="stepper"`, "onboard-brand", "Services"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("setup page missing %q", want)
 		}

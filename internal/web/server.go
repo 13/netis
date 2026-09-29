@@ -125,6 +125,9 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("GET /welcome/integrations", s.handleWelcomeIntegrationsPage)
 	s.mux.HandleFunc("POST /welcome/integrations", s.requireAdmin(s.handleWelcomeIntegrations))
 	s.mux.HandleFunc("POST /welcome/skip", s.requireAdmin(s.handleWelcomeSkip))
+	s.mux.HandleFunc("GET /welcome/done", s.handleWelcomeDone)
+	s.mux.HandleFunc("GET /welcome/progress", s.handleWelcomeProgress)
+	s.mux.HandleFunc("POST /welcome/dismiss", s.requireAdmin(s.handleSetupDismiss))
 	s.mux.HandleFunc("GET /{$}", s.handleDashboard)
 	s.mux.HandleFunc("GET /dashboard/widgets", s.handleDashboardWidgets)
 	s.mux.HandleFunc("GET /subnets", s.handleSubnetsIndex)
@@ -211,7 +214,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 
 func (s *Server) Handler() http.Handler {
 	cop := http.NewCrossOriginProtection()
-	app := s.requireAuth(limitBody(s.audit(s.mux)))
+	app := s.requireAuth(limitBody(s.audit(s.errorPages(s.mux))))
 	browser := checkOrigin(cop.Handler(app))
 	return securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// An API request carrying a bearer token skips the cross-origin

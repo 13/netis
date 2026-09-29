@@ -161,13 +161,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		values[k] = v
 	}
 
-	configured := map[string]bool{
-		"proxmox":   values["proxmox_url"] != "",
-		"wireguard": values["wg_ssh_addr"] != "",
-		"pihole":    values["pihole_url"] != "",
-		"adguard":   values["adguard_url"] != "",
-		"opnsense":  values["opnsense_url"] != "",
-	}
+	configured := configuredIntegrations(values)
 	if !admin {
 		values = map[string]string{}
 	}
@@ -443,16 +437,6 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 type badInput struct{ msg string }
 
 func (e badInput) Error() string { return e.msg }
-
-// failSave answers an error from saveIntegrationSettings.
-func (s *Server) failSave(w http.ResponseWriter, r *http.Request, err error) {
-	var bad badInput
-	if errors.As(err, &bad) {
-		http.Error(w, bad.msg, http.StatusBadRequest)
-		return
-	}
-	s.fail(w, r, err)
-}
 
 func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveIntegrationSettings(r); err != nil {

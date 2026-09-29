@@ -25,7 +25,23 @@ templ secretState(stored bool) {
 	}
 }
 
+// keepHint is a credential field's placeholder: a stored value is never shown,
+// so the field says a blank keeps it; with nothing stored it says nothing.
+func keepHint(stored bool) string {
+	if stored {
+		return "Stored. Leave blank to keep it"
+	}
+	return ""
+}
+
 templ notificationsTab(n NotifyData) {
+	if n.WebhookURL == "" && n.NtfyURL == "" {
+		<div class="panel empty empty-compact">
+			@Icon("bell", "")
+			<h3>No notifications set up</h3>
+			<p>netis can tell you when a device goes offline, something new joins the network or an address is claimed twice. Add a webhook or an ntfy topic below.</p>
+		</div>
+	}
 	<p class="muted">
 		Events are collected for 30 seconds and sent together, so a scan that finds
 		many devices sends one message. Offline and online alerts are sent only for
@@ -36,7 +52,7 @@ templ notificationsTab(n NotifyData) {
 			<div class="panel-head"><h3>Webhook</h3></div>
 			<div class="field-grid">
 				<label>URL <input type="url" name="notify_webhook_url" value={ n.WebhookURL } placeholder="https://example.lan/hooks/netis"/></label>
-				<label>Authorization header <input type="password" name="notify_webhook_auth" placeholder="leave blank to keep current value" autocomplete="off"/></label>
+				<label>Authorization header <input type="password" name="notify_webhook_auth" placeholder={ keepHint(n.HasWebhookAuth) } autocomplete="off"/></label>
 			</div>
 			<p class="hint">
 				Stored header:{ " " }
@@ -51,7 +67,7 @@ templ notificationsTab(n NotifyData) {
 			<div class="panel-head"><h3>ntfy</h3></div>
 			<div class="field-grid">
 				<label>Topic URL <input type="url" name="notify_ntfy_url" value={ n.NtfyURL } placeholder="https://ntfy.sh/my-netis-topic"/></label>
-				<label>Access token <input type="password" name="notify_ntfy_token" placeholder="leave blank to keep current token" autocomplete="off"/></label>
+				<label>Access token <input type="password" name="notify_ntfy_token" placeholder={ keepHint(n.HasNtfyToken) } autocomplete="off"/></label>
 			</div>
 			<p class="hint">
 				Stored token:{ " " }

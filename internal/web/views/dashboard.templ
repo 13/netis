@@ -92,17 +92,19 @@ func attentionLabel(kind string) string {
 }
 
 type DashboardData struct {
-	Username     string
-	Health       DashHealth
-	Attention    []AttentionItem
+	Username  string
+	Health    DashHealth
+	Attention []AttentionItem
 	// MoreNew counts the unreviewed devices beyond those listed.
-	MoreNew      int
+	MoreNew int
 	// ConflictHref is where the conflicts count leads: the grid of the one
 	// conflict, or the attention list when there are several.
 	ConflictHref string
 	Integrations []store.IntegrationStatus
 	Rows         []DashRow
 	Days         []EventDay
+	// Setup is the Finish setup panel, nil when it is not shown.
+	Setup *SetupStatus
 }
 
 // attentionCount is how many items need the user, the unlisted new devices
@@ -136,6 +138,9 @@ templ Dashboard(d DashboardData) {
 }
 
 templ DashboardBody(d DashboardData) {
+	if d.Setup != nil {
+		@setupPanel(*d.Setup)
+	}
 	@healthStrip(d)
 	<div class="dash-cols">
 		<div class="dash-main">

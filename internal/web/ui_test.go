@@ -55,6 +55,9 @@ func TestDestructiveFormsAskForConfirmation(t *testing.T) {
 	st.SetCustomField(t.Context(), devID, "rack", "a1")
 	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
 	userID := addUser(t, st, "carol", "longenough1", "viewer", "caroltok")
+	authedGet(t, srv, st, "/")
+	ben, _, _ := st.GetUserByName(t.Context(), "ben")
+	st.CreateSession(t.Context(), "ben-phone", ben.ID, "2099-01-01T00:00:00Z")
 
 	device := authedGet(t, srv, st, "/devices/"+itoa(devID)).Body.String()
 	subnets := authedGet(t, srv, st, "/settings/network").Body.String()

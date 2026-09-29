@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"netis/internal/scan"
+	"netis/internal/store"
 	"netis/internal/web/views"
 )
 
@@ -123,6 +124,13 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 		return data, err
 	}
 	data.Rows = rows
+	subnets := make([]store.Subnet, len(rows))
+	for i, row := range rows {
+		subnets[i] = row.Subnet
+	}
+	if data.Setup, err = s.setupStatus(r, subnets); err != nil {
+		return data, err
+	}
 	sort.Slice(found, func(i, j int) bool { return found[i].IP < found[j].IP })
 	for _, c := range found {
 		href := fmt.Sprintf("/subnets/%d?ip=%s", c.SubnetID, url.QueryEscape(c.IP))

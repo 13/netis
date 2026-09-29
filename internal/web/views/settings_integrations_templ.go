@@ -457,11 +457,11 @@ type Integration struct {
 // with whether each is configured and how its last run went.
 func Integrations(configured map[string]bool, statuses map[string]store.IntegrationStatus) []Integration {
 	out := []Integration{
-		{Name: "proxmox", Label: "Proxmox", About: "VMs, containers and the nodes they run on."},
-		{Name: "wireguard", Label: "WireGuard", About: "Peers on a WireGuard server, read over SSH."},
-		{Name: "pihole", Label: "Pi-hole", About: "Names and leases from Pi-hole v6 DHCP."},
-		{Name: "adguard", Label: "AdGuard Home", About: "Names and leases from AdGuard Home DHCP."},
-		{Name: "opnsense", Label: "OPNsense", About: "Names and leases from OPNsense DHCP."},
+		{Name: "proxmox", Label: "Proxmox", About: "VMs and containers from your Proxmox hosts, with the node each runs on."},
+		{Name: "wireguard", Label: "WireGuard", About: "Peers on your WireGuard server, read over SSH."},
+		{Name: "pihole", Label: "Pi-hole", About: "Names and DHCP leases from your Pi-hole (v6)."},
+		{Name: "adguard", Label: "AdGuard Home", About: "Names and DHCP leases from your AdGuard Home."},
+		{Name: "opnsense", Label: "OPNsense", About: "Names and DHCP leases from your OPNsense firewall."},
 	}
 	for i := range out {
 		out[i].Configured = configured[out[i].Name]
