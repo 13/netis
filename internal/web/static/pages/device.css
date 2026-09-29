@@ -50,6 +50,19 @@
   .dd-facts { font-size:var(--text-sm); }
   .dd-facts + .hint { margin-top:var(--sp-3); }
   .dd-tags { display:inline-flex; flex-wrap:wrap; gap:var(--sp-1); }
+  .chip-detected { margin-left:var(--sp-2); }
+  /* What netis detected: a closed disclosure across the grid, right under
+     About; the row beside About fills in from the next panel. */
+  .dd-grid { grid-auto-flow:row dense; }
+  .dd-grid > .dd-detected { grid-column:1 / -1; display:block; }
+  .dd-detected > summary { display:flex; align-items:center; gap:var(--sp-2); cursor:pointer; list-style:none; }
+  .dd-detected > summary::-webkit-details-marker { display:none; }
+  .dd-detected > summary h3 { margin:0; }
+  .dd-detected .disc-chev { color:var(--muted); transition:transform .12s var(--ease); }
+  .dd-detected[open] .disc-chev { transform:rotate(90deg); }
+  .dd-detected[open] > summary { margin-bottom:var(--sp-3); }
+  .dd-detected .table-wrap { margin-bottom:calc(-1 * var(--sp-4)); }
+  .dd-detected td .mono { display:block; font-size:var(--text-xs); }
   .dd-sub { margin:0 0 var(--sp-1); color:var(--muted); font-size:var(--text-sm); display:flex; align-items:center; gap:var(--sp-2); }
   .dd-sub + ul { margin-bottom:var(--sp-3); }
   .dd-sub + ul:last-child { margin-bottom:0; }

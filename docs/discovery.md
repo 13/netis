@@ -50,6 +50,24 @@ printers and Avahi hosts name themselves. Lookups run 16 at a time; an address
 that returned no name is retried after 30 minutes. A discovered name only fills
 an interface hostname that is empty.
 
+## Filling in device details
+
+netis fills in vendor, model, kind, icon, function and tags from what it can
+see: the maker registered for the MAC address (the IEEE registry, built in),
+the hostname (`BRW3C2AF4A1B2C3` is a Brother printer, `Galaxy-S23` a Samsung
+phone) and open ports found by a port scan (9100 is a printer, 8006 Proxmox).
+
+It only fills a field that is empty (kind counts as empty while it is Other),
+and it never changes a value you set: once you edit or clear a value netis
+filled, that field is yours. A tag you remove stays removed. On a device's
+page, **Detected** marks values netis filled, and **What netis detected**
+lists every clue and whether it was used.
+
+Turn it off under Settings, Network, "Fill in device details automatically".
+Every change is recorded in the audit log as user `netis`.
+
+The MAC registry is refreshed with `make oui`.
+
 ## Limitations
 
 - A subnet may hold at most 65,536 addresses (an IPv4 `/16`, an IPv6 `/112`).

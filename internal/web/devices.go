@@ -17,6 +17,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"netis/internal/autofill"
 	"netis/internal/clock"
 	"netis/internal/macaddr"
 	"netis/internal/scan"
@@ -706,6 +707,26 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	hints, err := s.store.ListHints(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	recs, err := s.store.ListAutofill(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	tagNames := make([]string, len(tags))
+	for i, t := range tags {
+		tagNames[i] = t.Name
+	}
+	autofilled := map[string]store.AutofillRecord{}
+	for _, rec := range recs {
+		if rec.State == store.AutofillApplied {
+			autofilled[rec.Field] = rec
+		}
+	}
 	fields, err := s.store.ListCustomFields(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -758,6 +779,8 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		Availability: views.BuildAvailability(hours, now, views.AvailabilityDays),
 		AlertOffline: alert,
 		Back:         s.deviceBackLink(r),
+		Detected:     autofill.Explain(d, tagNames, recs, hints),
+		Autofilled:   autofilled,
 	}))
 }
 

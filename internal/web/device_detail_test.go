@@ -237,3 +237,62 @@ func TestDeviceActionsLeaveToasts(t *testing.T) {
 		t.Error("toasts.js does not show the flashed message as text")
 	}
 }
+
+// The device page marks the values netis filled in and lists every clue it
+// has, with what became of each.
+func TestDevicePageShowsDetected(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "printer", Kind: "other", Source: "scan"})
+	st.ReplaceHints(ctx, id, "hostname", []store.Hint{
+		{Field: "kind", Value: "printer", Confidence: 80, Detail: "hostname BRW3C2AF4A1B2C3", SeenAt: "2026-09-29T00:00:00Z"},
+		{Field: "vendor", Value: "Brother", Confidence: 80, Detail: "hostname BRW3C2AF4A1B2C3", SeenAt: "2026-09-29T00:00:00Z"},
+	})
+	st.ReplaceHints(ctx, id, "oui", []store.Hint{
+		{Field: "kind", Value: "iot", Confidence: 40, Detail: "MAC 00:1b:a9:00:00:01", SeenAt: "2026-09-29T00:00:00Z"},
+	})
+	if _, _, err := st.ApplyAutofill(ctx, id, store.AutofillChanges{Writes: []store.AutofillWrite{
+		{Field: "kind", Value: "printer", Source: "hostname", Expect: "other"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	body := authedGet(t, srv, st, "/devices/"+itoa(id)).Body.String()
+	for _, want := range []string{
+		"What netis detected",
+		"hostname BRW3C2AF4A1B2C3",
+		"Detected from the hostname", // badge title on Kind
+		"Suggestion",                 // the 40-confidence oui hint
+		"Not used yet",               // vendor: resolved but pending (kept)
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+
+	// A clue for a field or tag a person already filled was not needed.
+	set, _ := st.CreateDevice(ctx, store.Device{Name: "nas", Kind: "server", Vendor: "Synology", Source: "manual"})
+	st.SetDeviceTags(ctx, set, []string{"media"})
+	st.ReplaceHints(ctx, set, "oui", []store.Hint{
+		{Field: "vendor", Value: "Synology", Confidence: 90, Detail: "MAC 00:11:32:50:60:05", SeenAt: "2026-09-29T00:00:00Z"},
+	})
+	st.ReplaceHints(ctx, set, "ports", []store.Hint{
+		{Field: "tag", Value: "media", Confidence: 60, Detail: "port 32400 open", SeenAt: "2026-09-29T00:00:00Z"},
+	})
+	body = authedGet(t, srv, st, "/devices/"+itoa(set)).Body.String()
+	if n := strings.Count(body, "Not used: already set"); n != 2 {
+		t.Errorf("want both clues already set, got %d", n)
+	}
+	if strings.Contains(body, "chip-detected") {
+		t.Error("a value a person set is marked Detected")
+	}
+
+	// A device with no clues shows neither the panel nor a badge.
+	bare, _ := st.CreateDevice(ctx, store.Device{Name: "bare", Kind: "other", Source: "manual"})
+	body = authedGet(t, srv, st, "/devices/"+itoa(bare)).Body.String()
+	for _, absent := range []string{"What netis detected", "chip-detected"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("device without hints shows %q", absent)
+		}
+	}
+}

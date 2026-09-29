@@ -127,11 +127,20 @@ INSERT INTO open_port (iface_id, port, proto, service_guess, first_seen, last_se
   (5, 22, 'tcp', 'ssh', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z'),
   (5, 80, 'tcp', 'http', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z'),
   (5, 443, 'tcp', 'https', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z'),
-  (5, 445, 'tcp', 'smb', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z');
+  (5, 445, 'tcp', 'smb', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z'),
+  (5, 32400, 'tcp', 'plex', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z');
 
 INSERT INTO tag (id, name, color) VALUES (1, 'infra', '#1f5fd1'), (2, 'media', '#888888');
 INSERT INTO device_tag (device_id, tag_id) VALUES (1, 1), (2, 1), (4, 1), (5, 1), (5, 2), (14, 2);
 INSERT INTO custom_field (device_id, key, value) VALUES (6, 'proxmox_status', 'running'), (7, 'proxmox_status', 'running');
+-- What autofill found for the nas: it filled the vendor from the MAC; the
+-- function and tag the open Plex port suggest were already set.
+INSERT INTO device_hint (device_id, source, field, value, confidence, detail, seen_at) VALUES
+  (5, 'oui', 'vendor', 'Synology', 90, 'MAC 00:11:32:50:60:05', '2026-09-15T12:00:00Z'),
+  (5, 'ports', 'function', 'Plex', 70, 'port 32400 open', '2026-09-15T12:00:00Z'),
+  (5, 'ports', 'tag', 'media', 60, 'port 32400 open', '2026-09-15T12:00:00Z');
+INSERT INTO device_autofill (device_id, field, value, source, state, updated_at) VALUES
+  (5, 'vendor', 'Synology', 'oui', 'applied', '2026-09-15T12:00:00Z');
 INSERT INTO device_link (device_id, label, url) VALUES (5, 'DSM', 'https://nas.home.arpa:5001');
 
 INSERT INTO integration_status (name, last_run, ok, detail, item_count) VALUES
