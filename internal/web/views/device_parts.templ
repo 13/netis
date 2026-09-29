@@ -1,0 +1,105 @@
+package views
+
+import (
+	"fmt"
+	"net/netip"
+	"strings"
+	
+	"netis/internal/store"
+)
+
+const privateMACTitle = "Randomized (locally administered) MAC: may be a phone with Private Wi-Fi Address, and may change"
+
+// deviceKinds is the fixed set of device kinds accepted by the schema's
+// CHECK constraint (see the latest device-table migration,
+// internal/store/migrations/0005_device_model_function.sql), in the
+// order shown in kind <select> elements.
+var deviceKinds = []string{"computer", "switch", "router", "modem", "phone", "server", "printer",
+	"iot", "vm", "lxc", "wg-peer", "other"}
+
+// lowestIPStr returns the numerically-lowest parseable IP among ips (the
+// same order the list view's "ip" sort uses), so the grid tile shows the
+// same address a user would expect from the sorted list. Falls back to the
+// first raw value when none parse, or "" when there are no IPs at all.
+func lowestIPStr(ips []store.IPInfo) string {
+	var best netip.Addr
+	found := false
+	var bestStr string
+	for _, ip := range ips {
+		a, err := netip.ParseAddr(ip.IP)
+		if err != nil {
+			continue
+		}
+		if !found || a.Compare(best) < 0 {
+			best, bestStr, found = a, ip.IP, true
+		}
+	}
+	if !found {
+		if len(ips) > 0 {
+			return ips[0].IP
+		}
+		return ""
+	}
+	return bestStr
+}
+
+// joinNonEmpty joins the non-empty parts with sep, used for the device's
+// vendor/model/function facts line.
+func joinNonEmpty(sep string, parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, sep)
+}
+
+// upstreamName names the integration behind a device source, for the
+// missing-upstream pill.
+func upstreamName(source string) string {
+	switch source {
+	case "proxmox":
+		return "Proxmox"
+	case "wireguard":
+		return "The WireGuard server"
+	}
+	return "Its integration"
+}
+
+// oppositeKind returns the other lease kind, for the toggle's next click.
+func oppositeKind(kind string) string {
+	if kind == "static" {
+		return "dhcp"
+	}
+	return "static"
+}
+
+// LeaseToggle renders an IP's lease as a clickable chip that flips
+// static<->dhcp in place (POST /devices/{devID}/ip/kind, htmx outerHTML swap).
+templ LeaseToggle(devID, subnetID int64, ip, kind string) {
+	<span class="lease-cell">
+		<button
+			type="button"
+			if kind == "static" {
+				class="chip static"
+			} else {
+				class="chip dhcp"
+			}
+			hx-post={ fmt.Sprintf("/devices/%d/ip/kind", devID) }
+			hx-vals={ fmt.Sprintf(`{"subnet_id":"%d","ip":%q,"kind":%q}`, subnetID, ip, oppositeKind(kind)) }
+			hx-target="closest .lease-cell"
+			hx-swap="outerHTML"
+			title="toggle lease static/dhcp"
+		>{ kind }</button>
+	</span>
+}
+
+// missingUpstreamPill marks a Proxmox guest or WireGuard peer that its
+// integration no longer lists. The device is kept; the user decides whether
+// it is really gone.
+templ missingUpstreamPill(d store.Device) {
+	if d.UpstreamMissingSince != nil {
+		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")" }>missing upstream</span>
+	}
+}

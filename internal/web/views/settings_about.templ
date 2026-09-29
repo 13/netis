@@ -1,0 +1,71 @@
+package views
+
+// aboutRow renders one label/value pair, blanking out anything unknown so an
+// unstamped local build shows an em dash rather than an empty cell.
+templ aboutRow(label, value string) {
+	<tr>
+		<td class="muted">{ label }</td>
+		if value == "" {
+			<td class="mono">—</td>
+		} else {
+			<td class="mono">{ value }</td>
+		}
+	</tr>
+}
+
+templ aboutTab(a AboutData) {
+	<div class="cards">
+		<div class="panel">
+			<h3>Build</h3>
+			<table>
+				<tbody>
+					@aboutRow("Version", a.Info.Label())
+					@aboutRow("Build number", a.Info.Build)
+					<tr>
+						<td class="muted">Commit</td>
+						if a.Info.Commit == "" {
+							<td class="mono">—</td>
+						} else {
+							<td class="mono">
+								<a href={ templ.URL(a.Info.CommitURL()) } target="_blank" rel="noreferrer noopener">
+									{ a.Info.ShortCommit() }
+								</a>
+								if a.Info.Modified {
+									<span class="muted">(dirty tree)</span>
+								}
+							</td>
+						}
+					</tr>
+					@aboutRow("Built", a.Info.Date)
+				</tbody>
+			</table>
+		</div>
+		<div class="panel">
+			<h3>Runtime</h3>
+			<table>
+				<tbody>
+					@aboutRow("Go", a.Info.GoVersion)
+					@aboutRow("Platform", a.Info.OS+"/"+a.Info.Arch)
+					@aboutRow("Database", a.Backend)
+					@aboutRow("Uptime", a.Uptime)
+					@aboutRow("Server time", a.Now)
+					@aboutRow("Last backup", a.Backup)
+				</tbody>
+			</table>
+		</div>
+		<div class="panel">
+			<h3>Dependencies</h3>
+			if len(a.Info.Deps) == 0 {
+				<p class="muted">Not recorded in this binary.</p>
+			} else {
+				<table>
+					<tbody>
+						for _, dep := range a.Info.Deps {
+							@aboutRow(dep.Path, dep.Version)
+						}
+					</tbody>
+				</table>
+			}
+		</div>
+	</div>
+}

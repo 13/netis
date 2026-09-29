@@ -1,0 +1,289 @@
+package views
+
+import (
+	"fmt"
+	"net/url"
+	
+	"netis/internal/macaddr"
+	"netis/internal/store"
+)
+
+// DeviceGroupRow is a device row plus its nesting depth for the tree list.
+type DeviceGroupRow struct {
+	Row   store.DeviceRow
+	Depth int
+}
+
+// GroupByParent reorders rows so each child immediately follows its parent,
+// indented one level deeper, while preserving the incoming sort within each
+// sibling set. A child whose parent is absent from rows is treated as a root
+// (never dropped); a cyclic parent_device_id is broken by the visited guard.
+func GroupByParent(rows []store.DeviceRow) []DeviceGroupRow {
+	present := make(map[int64]bool, len(rows))
+	for _, r := range rows {
+		present[r.ID] = true
+	}
+	byParent := make(map[int64][]store.DeviceRow)
+	var roots []store.DeviceRow
+	for _, r := range rows {
+		if r.ParentDeviceID != nil && present[*r.ParentDeviceID] {
+			byParent[*r.ParentDeviceID] = append(byParent[*r.ParentDeviceID], r)
+		} else {
+			roots = append(roots, r)
+		}
+	}
+	out := make([]DeviceGroupRow, 0, len(rows))
+	visited := make(map[int64]bool, len(rows))
+	var walk func(r store.DeviceRow, depth int)
+	walk = func(r store.DeviceRow, depth int) {
+		if visited[r.ID] {
+			return
+		}
+		visited[r.ID] = true
+		out = append(out, DeviceGroupRow{Row: r, Depth: depth})
+		for _, c := range byParent[r.ID] {
+			walk(c, depth+1)
+		}
+	}
+	for _, r := range roots {
+		walk(r, 0)
+	}
+	// Any rows unreached (e.g. a cycle among non-roots) are appended flat.
+	for _, r := range rows {
+		if !visited[r.ID] {
+			out = append(out, DeviceGroupRow{Row: r, Depth: 0})
+		}
+	}
+	return out
+}
+
+templ sortHeader(label, col, curSort, curDir, q, base string) {
+	<th>
+		<a href={ templ.URL(sortURL(base, q, col, curSort, curDir)) }>
+			{ label }
+			if curSort == col {
+				if curDir == "asc" {
+					{ " ▲" }
+				} else {
+					{ " ▼" }
+				}
+			}
+		</a>
+	</th>
+}
+
+templ deviceRow(row store.DeviceRow, depth int) {
+	<tr>
+		<td>
+			<div class="dev">
+				for i := 0; i < depth; i++ {
+					<span class="tree-indent"></span>
+				}
+				if depth > 0 {
+					<span class="tree-branch">↳</span>
+				}
+				@deviceIcon(row.Icon, row.Kind, "")
+				<div>
+					<div>
+						<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
+						if row.Reviewed {
+							<span class="muted" title="reviewed">
+								@Icon("check", "")
+							</span>
+						} else {
+							<span class="status is-new">new</span>
+						}
+						@missingUpstreamPill(row.Device)
+					</div>
+					for i, mac := range row.MACs {
+						if i == 0 {
+							<div class="mono muted sub">
+								{ mac }
+								if macaddr.AnyPrivate(row.MACs) {
+									<span class="chip" title={ privateMACTitle }>private MAC</span>
+								}
+							</div>
+						}
+					}
+					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
+						<div class="muted sub">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
+					}
+				</div>
+			</div>
+		</td>
+		<td class="mono">
+			for _, ip := range row.IPs {
+				<span>{ ip.IP }</span>{ " " }
+			}
+		</td>
+		<td>
+			for _, ip := range row.IPs {
+				if ip.Kind == "static" {
+					<span class="chip static">static</span>{ " " }
+				} else {
+					<span class="chip dhcp">dhcp</span>{ " " }
+				}
+			}
+		</td>
+		<td>
+			if row.Online {
+				<span class="status is-online">online</span>
+			} else {
+				<span class="status is-offline">offline</span>
+			}
+		</td>
+		<td>{ row.Kind }</td>
+		<td>{ row.Function }</td>
+		<td>
+			for _, tn := range row.TagNames {
+				<span class="chip">{ tn }</span>{ " " }
+			}
+		</td>
+		<td class="mono muted">
+			if row.LastSeen != nil {
+				{ *row.LastSeen }
+			}
+		</td>
+		<td>
+			if !row.Reviewed && IsAdmin(ctx) {
+				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
+					<button type="submit" class="btn btn-sm">Approve</button>
+				</form>
+			}
+		</td>
+	</tr>
+}
+
+// deviceTable renders the sortable devices table. `base` is the page hosting
+// the table (its sort links point there); when `grouped`, child rows are nested
+// under their parent.
+templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped bool) {
+	<table>
+		<thead>
+			<tr>
+				@sortHeader("Device", "name", sortKey, dir, q, base)
+				@sortHeader("IP", "ip", sortKey, dir, q, base)
+				<th>Lease</th>
+				@sortHeader("Status", "status", sortKey, dir, q, base)
+				@sortHeader("Kind", "kind", sortKey, dir, q, base)
+				<th>Function</th>
+				<th>Tags</th>
+				@sortHeader("Last seen", "seen", sortKey, dir, q, base)
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			if grouped {
+				for _, g := range GroupByParent(rows) {
+					@deviceRow(g.Row, g.Depth)
+				}
+			} else {
+				for _, row := range rows {
+					@deviceRow(row, 0)
+				}
+			}
+		</tbody>
+	</table>
+}
+
+// DeviceList renders the devices page. total is how many devices matched before
+// the handler capped the rows it sends, so the page can say when it is showing
+// a prefix rather than silently presenting a truncated list as the whole fleet.
+templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string, total int) {
+	@Layout("Devices", username) {
+		<h1>Devices</h1>
+		if total > len(rows) {
+			<p class="muted">
+				Showing { fmt.Sprint(len(rows)) } of { fmt.Sprint(total) } matching devices. Narrow the filter to see the rest.
+			</p>
+		}
+		<div class="toolbar">
+			<form method="get" action="/devices" class="grow" role="search">
+				<input type="hidden" name="sort" value={ sortKey }/>
+				<input type="hidden" name="dir" value={ dir }/>
+				<input
+					type="search"
+					name="q"
+					value={ q }
+					placeholder="filter devices, IP, MAC, tag…"
+					aria-label="Filter devices"
+					hx-get="/devices"
+					hx-trigger="input changed delay:300ms"
+					hx-target="body"
+					hx-push-url="true"
+					hx-vals={ fmt.Sprintf(`{"sort":%q,"dir":%q}`, sortKey, dir) }
+				/>
+			</form>
+			<div class="seg" id="dev-view">
+				<button type="button" data-view="list">
+					@Icon("list", "")
+					List
+				</button>
+				<button type="button" data-view="grid">
+					@Icon("layout-grid", "")
+					Grid
+				</button>
+			</div>
+			if IsAdmin(ctx) {
+				<a class="btn btn-primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">
+					@Icon("plus", "")
+					New device
+				</a>
+				<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("radar", "")
+					Scan all
+				</button>
+				<a class="btn btn-quiet" href="/devices/import">
+					@Icon("upload", "")
+					Import CSV
+				</a>
+			}
+			<a class="btn btn-quiet" href="/api/export/devices.csv" download>
+				@Icon("download", "")
+				Export CSV
+			</a>
+			<a class="btn btn-quiet" href="/api/export/devices.json" download>JSON</a>
+		</div>
+		<div id="dev-list" class="table-wrap">
+			@deviceTable(rows, q, sortKey, dir, "/devices", true)
+		</div>
+		<div id="dev-grid" class="devgrid" hidden>
+			for _, row := range rows {
+				<a class="panel devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
+					<span class="st">
+						if row.Online {
+							<span class="dot is-online" role="img" aria-label="online"></span>
+						} else {
+							<span class="dot" role="img" aria-label="offline"></span>
+						}
+					</span>
+					@deviceIcon(row.Icon, row.Kind, "")
+					<div class="nm">
+						{ row.Name }
+						if !row.Reviewed {
+							<span class="status is-new">new</span>
+						}
+						@missingUpstreamPill(row.Device)
+					</div>
+					<div class="ip mono">
+						{ lowestIPStr(row.IPs) }
+					</div>
+				</a>
+			}
+		</div>
+		<script src="/static/devices.js"></script>
+	}
+}
+
+func nextDir(col, curSort, curDir string) string {
+	if curSort == col && curDir == "asc" {
+		return "desc"
+	}
+	return "asc"
+}
+
+// sortURL builds a link on `base` that preserves the filter (URL-encoded) and
+// toggles the sort direction for the clicked column.
+func sortURL(base, q, col, curSort, curDir string) string {
+	return base + "?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
+}

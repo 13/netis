@@ -1,0 +1,122 @@
+package views
+
+import (
+	"fmt"
+)
+
+templ usersTab(d SettingsData) {
+	<h2>Users</h2>
+	<div class="panel">
+		<div class="table-wrap">
+			<table>
+				<tr><th>Username</th><th>Role</th><th></th></tr>
+				for _, u := range d.Users {
+					<tr>
+						<td>{ u.Username }</td>
+						<td><span class="chip">{ u.Role }</span></td>
+						<td>
+							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
+								<select name="role" aria-label={ "Role for " + u.Username }>
+									for _, role := range []string{"viewer", "admin"} {
+										if role == u.Role {
+											<option value={ role } selected>{ role }</option>
+										} else {
+											<option value={ role }>{ role }</option>
+										}
+									}
+								</select>
+								<button type="submit" class="btn btn-sm">set role</button>
+							</form>
+							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
+								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
+								<button type="submit" class="btn btn-sm">reset password</button>
+							</form>
+							if u.ID != d.CurrentUserID {
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
+									<button type="submit" class="btn btn-danger btn-sm">delete</button>
+								</form>
+							}
+						</td>
+					</tr>
+				}
+			</table>
+		</div>
+	</div>
+	@myAccount(d)
+	<div class="panel">
+		<div class="panel-head"><h3>Add user</h3></div>
+		<form method="post" action="/settings/users">
+			<div class="field-grid">
+				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
+				<label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" required/></label>
+				<label>
+					Role
+					<select name="role">
+						<option value="viewer">viewer</option>
+						<option value="admin">admin</option>
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="btn btn-primary">Add user</button>
+		</form>
+	</div>
+}
+
+// myAccount is the part of the users tab about the signed-in user's own
+// account: sessions and password, which every role manages for itself.
+templ myAccount(d SettingsData) {
+	<div class="panel">
+		<div class="panel-head"><h3>My sessions</h3></div>
+		<div class="table-wrap">
+			<table>
+				<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
+				for _, sess := range d.Sessions {
+					<tr>
+						<td>
+							{ sessionStarted(sess) }
+							if sess.ID == d.CurrentSessionID {
+								<span class="chip">this browser</span>
+							}
+						</td>
+						<td>{ orDash(sess.IP) }</td>
+						<td>{ shortAgent(sess.UserAgent) }</td>
+						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
+						<td>
+							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
+								<button type="submit" class="btn btn-sm">revoke</button>
+							</form>
+						</td>
+					</tr>
+				}
+			</table>
+		</div>
+		<form method="post" action="/settings/sessions/revoke-others" class="inline" data-confirm="Sign out every other session?">
+			<button type="submit" class="btn">Sign out other sessions</button>
+		</form>
+	</div>
+	if d.SSO.Enabled {
+		<div class="panel">
+			<div class="panel-head"><h3>Single sign-on</h3></div>
+			if d.SSO.Linked {
+				<p class="hint">This account is linked to an SSO account. Linking again replaces the link.</p>
+			} else {
+				<p class="hint">Link this account to your SSO account to sign in with it.</p>
+			}
+			<form method="post" action="/settings/sso/link" class="inline">
+				<button type="submit" class="btn">Link SSO account</button>
+			</form>
+		</div>
+	}
+	<div class="panel">
+		<div class="panel-head"><h3>Change my password</h3></div>
+		<form method="post" action="/settings/password">
+			<div class="field-grid">
+				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
+				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
+				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
+			</div>
+			<p class="hint">Your other sessions are signed out when the password changes.</p>
+			<button type="submit" class="btn btn-primary">Change password</button>
+		</form>
+	</div>
+}

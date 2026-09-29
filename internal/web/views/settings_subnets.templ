@@ -1,0 +1,157 @@
+package views
+
+import (
+	"fmt"
+	
+	"netis/internal/store"
+)
+
+// subnetsListTab is the read-only subnet list a viewer sees.
+// scanEvery describes a subnet's periodic scan for the read-only list.
+func scanEvery(sn store.Subnet) string {
+	if !sn.ScanEnabled {
+		return "off"
+	}
+	switch sec := sn.ScanIntervalSec; {
+	case sec > 0 && sec%3600 == 0:
+		return fmt.Sprintf("every %dh", sec/3600)
+	case sec > 0 && sec%60 == 0:
+		return fmt.Sprintf("every %dm", sec/60)
+	default:
+		return fmt.Sprintf("every %ds", sec)
+	}
+}
+
+// subnetsListTab is the viewer's Subnets tab: the subnets as a read-only
+// table, each linked to its grid.
+templ subnetsListTab(d SettingsData) {
+	<h2>Subnets</h2>
+	if len(d.Subnets) == 0 {
+		<p class="muted">No subnets configured.</p>
+	} else {
+		<div class="panel">
+			<div class="table-wrap">
+				<table>
+					<tr><th>Name</th><th>CIDR</th><th>Kind</th><th>Auto-scan</th></tr>
+					for _, sn := range d.Subnets {
+						<tr>
+							<td><a href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a></td>
+							<td class="mono">{ sn.CIDR }</td>
+							<td><span class="chip">{ sn.Kind }</span></td>
+							<td>{ scanEvery(sn) }</td>
+						</tr>
+					}
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ subnetsTab(d SettingsData) {
+	<h2>Subnets</h2>
+	for _, sn := range d.Subnets {
+		<div class="panel">
+			<div class="panel-head">
+				<h3>{ sn.Name }</h3>
+				<span class="mono muted">{ sn.CIDR }</span>
+				<span class="chip">{ sn.Kind }</span>
+				if sn.ScanEnabled {
+					<span class="chip">auto-scan on</span>
+				} else {
+					<span class="chip">auto-scan off</span>
+				}
+			</div>
+			<form id={ fmt.Sprintf("sn-edit-%d", sn.ID) } method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
+				<div class="field-grid">
+					<label>CIDR <input type="text" name="cidr" value={ sn.CIDR } placeholder="192.168.1.0/24" required/></label>
+					<label>Name <input type="text" name="name" value={ sn.Name } required/></label>
+					<label>
+						Kind
+						<select name="kind">
+							for _, k := range subnetKinds {
+								if k == sn.Kind {
+									<option value={ k } selected>{ k }</option>
+								} else {
+									<option value={ k }>{ k }</option>
+								}
+							}
+						</select>
+					</label>
+					<label>Interval (s) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
+					<label class="chk"><input
+	type="checkbox"
+	name="scan_enabled"
+	if sn.ScanEnabled {
+		checked
+	}
+/> Auto-scan (periodic)</label>
+				</div>
+			</form>
+			<div class="row">
+				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="btn btn-primary">Save</button>
+				if sn.Kind != "wireguard" {
+					<button type="button" class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
+						@Icon("radar", "")
+						Scan
+					</button>
+				}
+				<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline" data-confirm={ "Delete the subnet " + sn.CIDR + " and its IP assignments?" }>
+					<button type="submit" class="btn btn-danger">
+						@Icon("trash-2", "")
+						Delete
+					</button>
+				</form>
+			</div>
+		</div>
+	}
+	<h3>Detected subnets</h3>
+	if len(d.Detected) == 0 {
+		<p class="muted">no new subnets detected</p>
+	} else {
+		<div class="chips">
+			for _, det := range d.Detected {
+				<form method="post" action="/settings/subnets" class="inline">
+					<input type="hidden" name="cidr" value={ det.CIDR }/>
+					<input type="hidden" name="name" value={ det.Iface }/>
+					<input type="hidden" name="kind" value="lan"/>
+					<input type="hidden" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/>
+					<input type="hidden" name="scan_enabled" value="on"/>
+					<button type="submit" class="chip">
+						@Icon("plus", "")
+						<span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span>
+					</button>
+				</form>
+			}
+		</div>
+	}
+	<div class="panel">
+		<div class="panel-head"><h3>Add subnet</h3></div>
+		<form method="post" action="/settings/subnets">
+			<div class="field-grid">
+				<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required/></label>
+				<label>Name <input type="text" name="name" required/></label>
+				<label>
+					Kind
+					<select name="kind">
+						for _, k := range subnetKinds {
+							if k == settingOr(d.Values, "default_subnet_kind", "lan") {
+								<option value={ k } selected>{ k }</option>
+							} else {
+								<option value={ k }>{ k }</option>
+							}
+						}
+					</select>
+				</label>
+				<label>Interval (s) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
+				<label class="chk"><input
+	type="checkbox"
+	name="scan_enabled"
+	if defaultScanEnabled(d.Values) {
+		checked
+	}
+/> Auto-scan (periodic)</label>
+			</div>
+			<button type="submit" class="btn btn-primary">Add subnet</button>
+		</form>
+	</div>
+}
