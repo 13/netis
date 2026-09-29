@@ -1,4 +1,4 @@
-.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker e2e e2e-update e2e-bin
+.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker e2e e2e-update e2e-bin screenshots
 
 generate:
 	go tool templ generate
@@ -56,3 +56,16 @@ e2e: e2e-bin
 # new images in e2e/__screenshots__ before committing them.
 e2e-update: e2e-bin
 	$(E2E_RUN) sh -c 'npm ci --no-audit --no-fund && npx playwright test --update-snapshots'
+
+# Retakes the README and docs/ screenshots in docs/images from the same
+# fixture, then shrinks them to a 256-colour palette with pngquant, or
+# ImageMagick when pngquant is missing (neither is needed to take them).
+screenshots: e2e-bin
+	docker run --rm --ipc=host --user $$(id -u):$$(id -g) -e HOME=/tmp -e SHOTS_DIR=/images \
+		-v "$(CURDIR)/e2e":/e2e -v "$(CURDIR)/docs/images":/images -w /e2e $(E2E_IMAGE) \
+		sh -c 'npm ci --no-audit --no-fund && npx playwright test -c screenshots.config.ts'
+	@if command -v pngquant >/dev/null; then \
+		pngquant --force --skip-if-larger --strip --quality 70-95 --ext .png docs/images/*.png; \
+	elif command -v magick >/dev/null; then \
+		for f in docs/images/*.png; do magick "$$f" -strip -dither None -colors 256 "PNG8:$$f"; done; \
+	else echo "pngquant and magick not found: images left uncompressed"; fi
