@@ -62,7 +62,7 @@ func tokensTab(d SettingsData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if d.NewToken != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"setting-card\" role=\"status\"><div class=\"sc-head\"><h3>New token</h3></div><p>Copy it now. It is not stored and will not be shown again.</p><div class=\"toolbar\"><input type=\"text\" id=\"new-token\" readonly value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"panel\" role=\"status\"><div class=\"panel-head\"><h3>New token</h3></div><p>Copy it now. It is not stored and will not be shown again.</p><div class=\"toolbar\"><input type=\"text\" id=\"new-token\" readonly value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -75,12 +75,12 @@ func tokensTab(d SettingsData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" aria-label=\"New API token\" data-select-all class=\"mono grow\"> <button type=\"button\" class=\"primary\" data-copy=\"new-token\" hidden>Copy</button></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" aria-label=\"New API token\" data-select-all class=\"mono grow\"> <button type=\"button\" class=\"btn btn-primary\" data-copy=\"new-token\" hidden>Copy</button></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"setting-card\"><div class=\"table-wrap\"><table><tr><th>Name</th>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"panel\"><div class=\"table-wrap\"><table><tr><th>Name</th>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -209,7 +209,7 @@ func tokensTab(d SettingsData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"><button type=\"submit\" class=\"ghost\">revoke</button></form></td></tr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"><button type=\"submit\" class=\"btn btn-sm\">revoke</button></form></td></tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -224,7 +224,7 @@ func tokensTab(d SettingsData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div><div class=\"setting-card\"><div class=\"sc-head\"><h3>Create a token</h3></div><form method=\"post\" action=\"/settings/tokens\"><div class=\"field-grid\"><label>Name <input type=\"text\" name=\"name\" maxlength=\"100\" placeholder=\"backup script\" required></label> <label>Expires after (days) <input type=\"number\" name=\"expires_days\" min=\"0\" max=\"3650\" value=\"90\"></label></div><p class=\"muted\" style=\"margin:6px 0 4px\">0 means the token never expires.</p><button type=\"submit\" class=\"primary\">Create token</button></form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div><div class=\"panel\"><div class=\"panel-head\"><h3>Create a token</h3></div><form method=\"post\" action=\"/settings/tokens\"><div class=\"field-grid\"><label>Name <input type=\"text\" name=\"name\" maxlength=\"100\" placeholder=\"backup script\" required></label> <label>Expires after (days) <input type=\"number\" name=\"expires_days\" min=\"0\" max=\"3650\" value=\"90\"></label></div><p class=\"hint\">0 means the token never expires.</p><button type=\"submit\" class=\"btn btn-primary\">Create token</button></form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

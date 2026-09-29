@@ -187,7 +187,7 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 			if kind == "static" {
 				class="chip static"
 			} else {
-				class="chip"
+				class="chip dhcp"
 			}
 			hx-post={ fmt.Sprintf("/devices/%d/ip/kind", devID) }
 			hx-vals={ fmt.Sprintf(`{"subnet_id":"%d","ip":%q,"kind":%q}`, subnetID, ip, oppositeKind(kind)) }
@@ -203,7 +203,7 @@ templ LeaseToggle(devID, subnetID int64, ip, kind string) {
 // it is really gone.
 templ missingUpstreamPill(d store.Device) {
 	if d.UpstreamMissingSince != nil {
-		<span class="pill bad" title={ upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")" }><span class="d"></span>missing upstream</span>
+		<span class="status is-missing" title={ upstreamName(d.Source) + " no longer lists this device (since " + *d.UpstreamMissingSince + ")" }>missing upstream</span>
 	}
 }
 
@@ -217,20 +217,22 @@ templ deviceRow(row store.DeviceRow, depth int) {
 				if depth > 0 {
 					<span class="tree-branch">↳</span>
 				}
-				<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
+				@deviceIcon(row.Icon, row.Kind, "")
 				<div>
 					<div>
 						<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
 						if row.Reviewed {
-							<span class="muted" title="reviewed">✓</span>
+							<span class="muted" title="reviewed">
+								@Icon("check", "")
+							</span>
 						} else {
-							<span class="pill reserved"><span class="d"></span>new</span>
+							<span class="status is-new">new</span>
 						}
 						@missingUpstreamPill(row.Device)
 					</div>
 					for i, mac := range row.MACs {
 						if i == 0 {
-							<div class="mono muted" style="font-size:11.5px">
+							<div class="mono muted sub">
 								{ mac }
 								if macaddr.AnyPrivate(row.MACs) {
 									<span class="chip" title={ privateMACTitle }>private MAC</span>
@@ -239,7 +241,7 @@ templ deviceRow(row store.DeviceRow, depth int) {
 						}
 					}
 					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
-						<div class="muted" style="font-size:11.5px">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
+						<div class="muted sub">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
 					}
 				</div>
 			</div>
@@ -254,22 +256,22 @@ templ deviceRow(row store.DeviceRow, depth int) {
 				if ip.Kind == "static" {
 					<span class="chip static">static</span>{ " " }
 				} else {
-					<span class="chip">dhcp</span>{ " " }
+					<span class="chip dhcp">dhcp</span>{ " " }
 				}
 			}
 		</td>
 		<td>
 			if row.Online {
-				<span class="pill online"><span class="d"></span>online</span>
+				<span class="status is-online">online</span>
 			} else {
-				<span class="pill offline"><span class="d"></span>offline</span>
+				<span class="status is-offline">offline</span>
 			}
 		</td>
 		<td>{ row.Kind }</td>
 		<td>{ row.Function }</td>
 		<td>
 			for _, tn := range row.TagNames {
-				<span class="tag">{ tn }</span>{ " " }
+				<span class="chip">{ tn }</span>{ " " }
 			}
 		</td>
 		<td class="mono muted">
@@ -280,7 +282,7 @@ templ deviceRow(row store.DeviceRow, depth int) {
 		<td>
 			if !row.Reviewed && IsAdmin(ctx) {
 				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
-					<button type="submit">Approve</button>
+					<button type="submit" class="btn btn-sm">Approve</button>
 				</form>
 			}
 		</td>
@@ -348,35 +350,53 @@ templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string
 				/>
 			</form>
 			<div class="seg" id="dev-view">
-				<button type="button" data-view="list">List</button>
-				<button type="button" data-view="grid">Grid</button>
+				<button type="button" data-view="list">
+					@Icon("list", "")
+					List
+				</button>
+				<button type="button" data-view="grid">
+					@Icon("layout-grid", "")
+					Grid
+				</button>
 			</div>
 			if IsAdmin(ctx) {
-				<a class="btn primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">New device</a>
-				<button type="button" class="ghost" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">Scan all</button>
-				<a class="btn ghost" href="/devices/import">Import CSV</a>
+				<a class="btn btn-primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">
+					@Icon("plus", "")
+					New device
+				</a>
+				<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("radar", "")
+					Scan all
+				</button>
+				<a class="btn btn-quiet" href="/devices/import">
+					@Icon("upload", "")
+					Import CSV
+				</a>
 			}
-			<a class="btn ghost" href="/api/export/devices.csv" download>Export CSV</a>
-			<a class="btn ghost" href="/api/export/devices.json" download>JSON</a>
+			<a class="btn btn-quiet" href="/api/export/devices.csv" download>
+				@Icon("download", "")
+				Export CSV
+			</a>
+			<a class="btn btn-quiet" href="/api/export/devices.json" download>JSON</a>
 		</div>
 		<div id="dev-list" class="table-wrap">
 			@deviceTable(rows, q, sortKey, dir, "/devices", true)
 		</div>
-		<div id="dev-grid" class="devgrid" style="display:none">
+		<div id="dev-grid" class="devgrid" hidden>
 			for _, row := range rows {
-				<a class="devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
+				<a class="panel devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
 					<span class="st">
 						if row.Online {
-							<span class="pill online"><span class="d"></span></span>
+							<span class="dot is-online" role="img" aria-label="online"></span>
 						} else {
-							<span class="pill offline"><span class="d"></span></span>
+							<span class="dot" role="img" aria-label="offline"></span>
 						}
 					</span>
-					<span class="ic">{ DeviceIcon(row.Icon, row.Kind) }</span>
+					@deviceIcon(row.Icon, row.Kind, "")
 					<div class="nm">
 						{ row.Name }
 						if !row.Reviewed {
-							<span class="pill reserved" style="margin-left:4px"><span class="d"></span>new</span>
+							<span class="status is-new">new</span>
 						}
 						@missingUpstreamPill(row.Device)
 					</div>
@@ -458,7 +478,9 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 	<div class="dh">
 		<h3 id="dlg-title">{ f.title() }</h3>
 		if modal {
-			<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
+			<button type="button" class="btn btn-quiet btn-icon btn-sm" data-close aria-label="Close">
+					@Icon("x", "")
+				</button>
 		}
 	</div>
 	<form
@@ -494,9 +516,13 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 				<div class="iconpick" data-kind-default={ KindIcon(f.Device.Kind) }>
 					for _, ic := range IconChoices {
 						if ic == DeviceIcon(f.Device.Icon, f.Device.Kind) {
-							<button type="button" class="ic-swatch selected" data-icon={ ic } aria-label={ "Icon " + ic } aria-pressed="true">{ ic }</button>
+							<button type="button" class="ic-swatch selected" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="true">
+								@Icon(ic, "icon-lg")
+							</button>
 						} else {
-							<button type="button" class="ic-swatch" data-icon={ ic } aria-label={ "Icon " + ic } aria-pressed="false">{ ic }</button>
+							<button type="button" class="ic-swatch" data-icon={ ic } aria-label={ "Icon " + iconLabel(ic) } title={ iconLabel(ic) } aria-pressed="false">
+								@Icon(ic, "icon-lg")
+							</button>
 						}
 					}
 				</div>
@@ -566,14 +592,14 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 		</div>
 		<div class="df">
 			if modal {
-				<button type="button" class="theme-toggle" data-close>Cancel</button>
+				<button type="button" class="btn" data-close>Cancel</button>
 			} else {
 				<a class="btn" href={ templ.URL(f.cancelURL()) }>Cancel</a>
 			}
 			if f.IsEdit {
-				<button type="submit" class="primary">Save</button>
+				<button type="submit" class="btn btn-primary">Save</button>
 			} else {
-				<button type="submit" class="primary">Create device</button>
+				<button type="submit" class="btn btn-primary">Create device</button>
 			}
 		</div>
 	</form>
@@ -627,28 +653,31 @@ func anyOnline(ifds []IfaceDetail) bool {
 
 templ DevicePage(username string, d DeviceDetail) {
 	@Layout(d.Device.Name, username) {
-		<div class="dev-hero card">
+		<div class="dev-hero panel">
 			<div class="dev-hero-main">
-				<span class="ic ic-lg">{ DeviceIcon(d.Device.Icon, d.Device.Kind) }</span>
+				@deviceIcon(d.Device.Icon, d.Device.Kind, "ic-lg")
 				<div class="dev-hero-head">
 					<h1>
 						{ d.Device.Name }
-						<span class="badge">{ d.Device.Kind }</span>
+						<span class="chip">{ d.Device.Kind }</span>
 						if d.Device.Kind == "vm" || d.Device.Kind == "lxc" {
 							for _, f := range d.Fields {
 								if f.Key == "proxmox_status" {
-									<span class="badge">{ f.Value }</span>
+									<span class="chip">{ f.Value }</span>
 								}
 							}
 						}
 						if anyOnline(d.Ifaces) {
-							<span class="pill online"><span class="d"></span>online</span>
+							<span class="status is-online">online</span>
 						} else {
-							<span class="pill offline"><span class="d"></span>offline</span>
+							<span class="status is-offline">offline</span>
 						}
 						@missingUpstreamPill(d.Device)
 						if d.AlertOffline {
-							<span class="badge" title="Offline and online changes are sent as notifications">offline alerts on</span>
+							<span class="chip" title="Offline and online changes are sent as notifications">
+								@Icon("bell", "")
+								offline alerts on
+							</span>
 						}
 					</h1>
 					if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
@@ -661,22 +690,34 @@ templ DevicePage(username string, d DeviceDetail) {
 			</div>
 			if IsAdmin(ctx) {
 				<div class="dev-hero-actions">
-					<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</a>
+					<a class="btn btn-primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">
+							@Icon("pencil", "")
+							Edit
+						</a>
 					if d.HasMAC() {
 						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
-							<button type="submit">Wake on LAN</button>
+							<button type="submit" class="btn">
+									@Icon("power", "")
+									Wake on LAN
+								</button>
 						</form>
 					}
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
-						<button type="submit">Scan ports</button>
+						<button type="submit" class="btn">
+								@Icon("radar", "")
+								Scan ports
+							</button>
 					</form>
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/alert", d.Device.ID)) } class="inline">
 						if d.AlertOffline {
 							<input type="hidden" name="alert_offline" value="0"/>
-							<button type="submit">Stop offline alerts</button>
+							<button type="submit" class="btn">Stop offline alerts</button>
 						} else {
 							<input type="hidden" name="alert_offline" value="1"/>
-							<button type="submit" title="Send a notification when this device goes offline or comes back">Alert when offline</button>
+							<button type="submit" class="btn" title="Send a notification when this device goes offline or comes back">
+									@Icon("bell", "")
+									Alert when offline
+								</button>
 						}
 					</form>
 				</div>
@@ -684,7 +725,7 @@ templ DevicePage(username string, d DeviceDetail) {
 		</div>
 		<div class="dev-cols">
 			<div class="dev-main">
-				<div class="card">
+				<div class="panel">
 					<h2>Interfaces</h2>
 					for _, ifd := range d.Ifaces {
 						<div class="iface">
@@ -700,9 +741,9 @@ templ DevicePage(username string, d DeviceDetail) {
 									{ " " } { *ifd.Iface.Hostname }
 								}
 								if ifd.Online {
-									<span class="pill online"><span class="d"></span>online</span>
+									<span class="status is-online">online</span>
 								} else {
-									<span class="pill offline"><span class="d"></span>offline</span>
+									<span class="status is-offline">offline</span>
 								}
 							</p>
 							<p class="muted">Last seen: <span class="mono">{ ifd.LastSeen }</span> · Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }</p>
@@ -718,7 +759,7 @@ templ DevicePage(username string, d DeviceDetail) {
 											if ip.SubnetID != 0 && IsAdmin(ctx) {
 												@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
 											} else {
-												<span class="chip">{ ip.Kind }</span>
+												<span class={ "chip", ip.Kind }>{ ip.Kind }</span>
 											}
 										</td>
 									</tr>
@@ -747,15 +788,15 @@ templ DevicePage(username string, d DeviceDetail) {
 				</div>
 			</div>
 			<div class="dev-aside">
-				<div class="card">
+				<div class="panel">
 					<h2>Tags</h2>
 					<p>
 						for _, t := range d.Tags {
-							<span class="tag">{ t.Name }</span>{ " " }
+							<span class="chip">{ t.Name }</span>{ " " }
 						}
 					</p>
 				</div>
-				<div class="card">
+				<div class="panel">
 					<h2>Links</h2>
 					<ul class="linklist">
 						for _, l := range d.Links {
@@ -764,7 +805,7 @@ templ DevicePage(username string, d DeviceDetail) {
 								if IsAdmin(ctx) {
 									<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Remove the link " + l.Label + "?" }>
 										<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
-										<button type="submit">remove</button>
+										<button type="submit" class="btn btn-quiet btn-sm">remove</button>
 									</form>
 								}
 							</li>
@@ -774,11 +815,11 @@ templ DevicePage(username string, d DeviceDetail) {
 						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="rowform">
 							<input type="text" name="label" placeholder="label" required/>
 							<input type="text" name="url" placeholder="https://…" required/>
-							<button type="submit">Add link</button>
+							<button type="submit" class="btn">Add link</button>
 						</form>
 					}
 				</div>
-				<div class="card">
+				<div class="panel">
 					<h2>Custom fields</h2>
 					<table>
 						<tr>
@@ -794,7 +835,7 @@ templ DevicePage(username string, d DeviceDetail) {
 									if IsAdmin(ctx) {
 										<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Remove the field " + f.Key + "?" }>
 											<input type="hidden" name="key" value={ f.Key }/>
-											<button type="submit">remove</button>
+											<button type="submit" class="btn btn-quiet btn-sm">remove</button>
 										</form>
 									}
 								</td>
@@ -805,11 +846,11 @@ templ DevicePage(username string, d DeviceDetail) {
 						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="rowform">
 							<input type="text" name="key" placeholder="key" required/>
 							<input type="text" name="value" placeholder="value"/>
-							<button type="submit">Set field</button>
+							<button type="submit" class="btn">Set field</button>
 						</form>
 					}
 				</div>
-				<div class="card">
+				<div class="panel">
 					<h2>Parent / children</h2>
 					if d.Parent != nil {
 						<p>Parent: <a href={ templ.URL(fmt.Sprintf("/devices/%d", d.Parent.ID)) }>{ d.Parent.Name }</a></p>
@@ -825,23 +866,26 @@ templ DevicePage(username string, d DeviceDetail) {
 						<p class="muted">No parent or children.</p>
 					}
 				</div>
-				<div class="card">
+				<div class="panel">
 					<h2>Event history</h2>
 					<table>
 						for _, e := range d.Events {
 							<tr>
 								<td class="mono">{ e.TS }</td>
-								<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+								<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 								<td>{ e.Details }</td>
 							</tr>
 						}
 					</table>
 				</div>
 				if IsAdmin(ctx) {
-					<div class="card">
+					<div class="panel">
 						<h2>Danger zone</h2>
 						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) } data-confirm={ "Delete " + d.Device.Name + " and everything recorded about it?" }>
-							<button type="submit">Delete device</button>
+							<button type="submit" class="btn btn-danger">
+									@Icon("trash-2", "")
+									Delete device
+								</button>
 						</form>
 					</div>
 				}

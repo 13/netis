@@ -55,7 +55,7 @@ templ auditTab(a AuditData) {
 		<input type="hidden" name="tab" value="audit"/>
 		@filterSelect("user", "User", a.User, a.Users)
 		@filterSelect("action", "Action", a.Action, a.Actions)
-		<noscript><button type="submit">Filter</button></noscript>
+		<noscript><button type="submit" class="btn">Filter</button></noscript>
 	</form>
 	if len(a.Entries) == 0 {
 		<p class="muted">No entries.</p>
@@ -86,9 +86,9 @@ templ auditTab(a AuditData) {
 						<td>{ e.Detail }</td>
 						<td>
 							if e.Status >= 400 {
-								<span class="badge offline">{ strconv.Itoa(e.Status) }</span>
+								<span class="status is-error">{ strconv.Itoa(e.Status) }</span>
 							} else {
-								<span class="badge">{ strconv.Itoa(e.Status) }</span>
+								<span class="chip">{ strconv.Itoa(e.Status) }</span>
 							}
 						</td>
 						<td class="mono">{ e.IP }</td>

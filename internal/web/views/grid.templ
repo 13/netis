@@ -45,7 +45,10 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 	@Layout(sn.Name, username) {
 		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
 		if sn.Kind != "wireguard" && IsAdmin(ctx) {
-			<button hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan now</button>
+			<button class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
+				@Icon("radar", "")
+				Scan now
+			</button>
 		}
 		<div
 			id="grid"
@@ -70,7 +73,10 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		<h2>
 			{ "Devices in this subnet (" + fmt.Sprint(len(devices)) + ")" }
 			if IsAdmin(ctx) {
-				<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d", sn.ID)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">New device</a>
+				<a class="btn btn-primary btn-sm" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d", sn.ID)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">
+					@Icon("plus", "")
+					New device
+				</a>
 			}
 		</h2>
 		if len(devices) == 0 {
@@ -119,7 +125,9 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 	<dialog class="dialog" aria-labelledby="dlg-title">
 		<div class="dh">
 			<h3 id="dlg-title">{ ip }</h3>
-			<button type="button" class="theme-toggle" data-close aria-label="Close">✕</button>
+			<button type="button" class="btn btn-quiet btn-icon btn-sm" data-close aria-label="Close">
+				@Icon("x", "")
+			</button>
 		</div>
 		<div class="db">
 			if o.DeviceID > 0 {
@@ -136,9 +144,9 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 		</div>
 		if o.DeviceID > 0 {
 			<div class="df">
-				<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
+				<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
 				if IsAdmin(ctx) {
-					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", o.DeviceID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</a>
+					<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", o.DeviceID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</a>
 					@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
 					@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
 				}
@@ -149,11 +157,11 @@ templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
 
 templ kindButton(subnetID int64, ip, kind, label, current string) {
 	if kind == current {
-		<button type="button" class="primary" disabled>{ label }</button>
+		<button type="button" class="btn btn-primary btn-sm" disabled>{ label }</button>
 	} else {
 		<button
 			type="button"
-			class="ghost"
+			class="btn btn-sm"
 			hx-post={ fmt.Sprintf("/subnets/%d/cell", subnetID) }
 			hx-vals={ fmt.Sprintf(`{"ip":%q,"kind":%q}`, ip, kind) }
 			hx-target="#toasts"

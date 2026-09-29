@@ -297,7 +297,7 @@ func TestSettingsTabsRender(t *testing.T) {
 	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanEnabled: true, ScanIntervalSec: 120})
 
 	subnets := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
-	if !strings.Contains(subnets, "10.0.0.0/24") || !strings.Contains(subnets, "setting-card") {
+	if !strings.Contains(subnets, "10.0.0.0/24") || !strings.Contains(subnets, `class="panel"`) {
 		t.Error("subnets tab should render the subnet as a card")
 	}
 	if !strings.Contains(subnets, `hx-post="/subnets/1/scan"`) {

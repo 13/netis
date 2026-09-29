@@ -1,0 +1,15 @@
+package views
+
+// Icon draws one symbol from the sprite at /static/icons.svg (see icons.go).
+// It is decorative: the control or text beside it carries the meaning.
+templ Icon(name, class string) {
+	<svg class={ "icon", class } aria-hidden="true" focusable="false"><use href={ "/static/icons.svg#" + name }></use></svg>
+}
+
+// deviceIcon is a device's icon in its tile, the unknown icon muted. size is
+// an extra class for the tile ("ic-lg" on the detail page).
+templ deviceIcon(icon, kind, size string) {
+	<span class={ "ic", size }>
+		@Icon(DeviceIcon(icon, kind), iconTone(DeviceIcon(icon, kind)))
+	</span>
+}

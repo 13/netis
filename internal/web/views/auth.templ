@@ -12,7 +12,12 @@ templ onboardBrand() {
 
 templ onboardStep(n, cur int, label string) {
 	if n < cur {
-		<div class="step done"><span class="num">✓</span><span class="lbl">{ label }</span></div>
+		<div class="step done">
+			<span class="num">
+				@Icon("check", "")
+			</span>
+			<span class="lbl">{ label }</span>
+		</div>
 	} else if n == cur {
 		<div class="step active"><span class="num">{ fmt.Sprint(n) }</span><span class="lbl">{ label }</span></div>
 	} else {
@@ -82,10 +87,10 @@ templ LoginPage(errMsg string, o LoginOptions) {
 		@onboardBrand()
 		<div class="auth-card">
 			if errMsg != "" {
-				<p class="error">{ errMsg }</p>
+				<p class="form-error" role="alert">{ errMsg }</p>
 			}
 			if o.SSO {
-				<a href="/auth/oidc/login" class="btn primary sso-button">Sign in with SSO</a>
+				<a href="/auth/oidc/login" class="btn btn-primary sso-button">Sign in with SSO</a>
 			}
 			if o.HidePassword {
 				<a href="/login?local=1" class="muted">Sign in with a local account</a>
@@ -94,9 +99,9 @@ templ LoginPage(errMsg string, o LoginOptions) {
 					<input name="username" placeholder="username" autocomplete="username" autofocus?={ !o.SSO } required/>
 					<input name="password" type="password" placeholder="password" autocomplete="current-password" required/>
 					if o.SSO {
-						<button type="submit">Sign in with password</button>
+						<button type="submit" class="btn">Sign in with password</button>
 					} else {
-						<button type="submit" class="primary">Sign in</button>
+						<button type="submit" class="btn btn-primary">Sign in</button>
 					}
 				</form>
 			}
@@ -114,7 +119,7 @@ templ SetupPage(errMsg string) {
 		<form method="post" action="/setup">
 			<input name="username" placeholder="username" autocomplete="username" autofocus required/>
 			<input name="password" type="password" placeholder="password (min 8 chars)" autocomplete="new-password" required minlength="8"/>
-			<button type="submit" class="primary">Create account</button>
+			<button type="submit" class="btn btn-primary">Create account</button>
 		</form>
 	}
 }

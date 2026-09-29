@@ -28,14 +28,10 @@ type ImportRow struct {
 
 func importBadge(action string) string {
 	switch action {
-	case "create":
-		return "badge online"
-	case "update":
-		return "badge ip_changed"
 	case "error":
-		return "badge offline"
+		return "status is-error"
 	}
-	return "badge"
+	return "chip"
 }
 
 templ importSummary(v ImportView) {
@@ -86,33 +82,33 @@ templ ImportPage(username string, v ImportView) {
 		} else if v.Committed {
 			@importSummary(v)
 			@importTable(v)
-			<p><a class="btn primary" href="/devices">Back to devices</a></p>
+			<p><a class="btn btn-primary" href="/devices">Back to devices</a></p>
 		} else if len(v.Rows) > 0 {
 			@importSummary(v)
 			@importTable(v)
 			<form method="post" action="/devices/import" enctype="multipart/form-data" class="inline">
 				<input type="hidden" name="csv" value={ v.CSV }/>
 				<input type="hidden" name="commit" value="1"/>
-				<button type="submit" class="primary" disabled?={ v.Creates+v.Updates == 0 }>Import</button>
+				<button type="submit" class="btn btn-primary" disabled?={ v.Creates+v.Updates == 0 }>Import</button>
 			</form>
-			<a class="btn ghost" href="/devices/import">Choose another file</a>
+			<a class="btn btn-quiet" href="/devices/import">Choose another file</a>
 		} else {
-			<div class="setting-card">
+			<div class="panel">
 				<form method="post" action="/devices/import" enctype="multipart/form-data">
 					<label>CSV file <input type="file" name="file" accept=".csv,text/csv" required/></label>
-					<p class="muted" style="margin:6px 0 4px">
+					<p class="hint">
 						Devices are matched by MAC address. The first row names the columns:
 						<span class="mono">mac</span> (required), and any of
 						<span class="mono">name, kind, ip, tags, notes, vendor, model, function</span>.
 						An <a href="/api/export/devices.csv">export</a> can be edited and imported as it is.
 					</p>
-					<p class="muted" style="margin:6px 0 4px">
+					<p class="hint">
 						A new MAC creates a manual device (it needs a name; an IP must fall in a configured
 						subnet). A known MAC only fills in what the device is missing: notes, vendor, model
 						and function where empty, and tags are added. Names and kinds change only on
 						unreviewed scan discoveries; devices from integrations and reviewed devices keep theirs.
 					</p>
-					<button type="submit" class="primary">Preview import</button>
+					<button type="submit" class="btn btn-primary">Preview import</button>
 				</form>
 			</div>
 		}
