@@ -15,7 +15,10 @@ var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 // opnsense_secret) — those fields always render blank so the stored secrets
 // are never echoed back.
 type SettingsData struct {
-	Subnets []store.Subnet
+	// CurrentUserID is the signed-in user, whose own row on the users tab
+	// offers no delete.
+	CurrentUserID int64
+	Subnets       []store.Subnet
 	Users   []store.User
 	// Sessions are the signed-in user's own sessions, newest first, and
 	// CurrentSessionID names the one that asked for this page.
@@ -394,9 +397,11 @@ templ usersTab(d SettingsData) {
 								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
 								<button type="submit" class="ghost">reset password</button>
 							</form>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
-								<button type="submit" class="ghost">delete</button>
-							</form>
+							if u.ID != d.CurrentUserID {
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
+									<button type="submit" class="ghost">delete</button>
+								</form>
+							}
 						</td>
 					</tr>
 				}
