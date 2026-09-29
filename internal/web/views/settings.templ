@@ -441,7 +441,7 @@ templ myAccount(d SettingsData) {
 						</td>
 						<td>{ orDash(sess.IP) }</td>
 						<td>{ shortAgent(sess.UserAgent) }</td>
-						<td>{ relTime(sess.ExpiresAt) }</td>
+						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
 								<button type="submit" class="ghost">revoke</button>

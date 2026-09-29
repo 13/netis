@@ -40,7 +40,8 @@ templ notificationsTab(n NotifyData) {
 				<label>Authorization header <input type="password" name="notify_webhook_auth" placeholder="leave blank to keep current value" autocomplete="off"/></label>
 			</div>
 			<p class="muted" style="margin:0 0 6px">
-				Stored header: @secretState(n.HasWebhookAuth)
+				Stored header:
+				@secretState(n.HasWebhookAuth)
 				if n.HasWebhookAuth {
 					<label class="chk"><input type="checkbox" name="notify_webhook_auth_clear"/> clear</label>
 				}
@@ -54,7 +55,8 @@ templ notificationsTab(n NotifyData) {
 				<label>Access token <input type="password" name="notify_ntfy_token" placeholder="leave blank to keep current token" autocomplete="off"/></label>
 			</div>
 			<p class="muted" style="margin:0">
-				Stored token: @secretState(n.HasNtfyToken)
+				Stored token:
+				@secretState(n.HasNtfyToken)
 				if n.HasNtfyToken {
 					<label class="chk"><input type="checkbox" name="notify_ntfy_token_clear"/> clear</label>
 				}

@@ -136,3 +136,19 @@ func TestDeviceAlertToggle(t *testing.T) {
 		t.Fatalf("missing device: code=%d, want 404", rec.Code)
 	}
 }
+
+// The stored-credential state renders as markup, not as the templ call that
+// produces it.
+func TestNotificationsTabRendersSecretState(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.SetSetting(t.Context(), notify.KeyNtfyToken, "tk")
+
+	body := authedGet(t, srv, st, "/settings?tab=notifications").Body.String()
+	if strings.Contains(body, "@secretState") {
+		t.Fatal("raw templ call rendered into the page")
+	}
+	if !strings.Contains(body, `<span class="muted">none</span>`) || !strings.Contains(body, `<span class="badge">stored</span>`) {
+		t.Fatal("stored-credential state missing")
+	}
+}
