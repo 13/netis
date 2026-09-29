@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
+	"netis/internal/clock"
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -178,7 +178,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	if err != nil {
 		return data, err
 	}
-	data.Days = views.GroupEventsByDay(evs, time.Now())
+	data.Days = views.GroupEventsByDay(evs, clock.Now())
 	return data, nil
 }
 

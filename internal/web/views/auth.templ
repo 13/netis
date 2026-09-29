@@ -2,12 +2,14 @@ package views
 
 import "fmt"
 
+// onboardBrand is the mark above the sign-in and first-run cards, in a
+// header so that everything on those pages sits in a landmark.
 templ onboardBrand() {
-	<div class="onboard-brand">
+	<header class="onboard-brand">
 		<img class="mark" src="/static/icon.svg" width="44" height="44" alt=""/>
 		<div class="wm">netis</div>
 		<div class="tag">Your home network, organized.</div>
-	</div>
+	</header>
 }
 
 // onboardSteps are the first-run flow's steps, in order.
@@ -96,7 +98,8 @@ type LoginOptions struct {
 templ LoginPage(errMsg string, o LoginOptions) {
 	@authShell("Sign in") {
 		@onboardBrand()
-		<div class="auth-card">
+		<main class="auth-card">
+			<h1 class="sr-only">Sign in to netis</h1>
 			if errMsg != "" {
 				<p class="form-error" role="alert">{ Sentence(errMsg) }</p>
 			}
@@ -122,7 +125,7 @@ templ LoginPage(errMsg string, o LoginOptions) {
 					}
 				</form>
 			}
-		</div>
+		</main>
 	}
 }
 
