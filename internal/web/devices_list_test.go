@@ -325,6 +325,21 @@ func TestDeviceBulkActionsAdminOnly(t *testing.T) {
 	}
 }
 
+// A row's Approve comes back to the list as it was filtered, and on the
+// subnet page to the subnet.
+func TestDeviceListApproveReturnsToFilter(t *testing.T) {
+	srv, st := testServer(t)
+	fx := seedDeviceList(t, st)
+	body := authedGet(t, srv, st, "/devices?new=1").Body.String()
+	if !strings.Contains(body, `<input type="hidden" name="next" value="/devices?new=1">`) {
+		t.Error("row Approve does not carry the filtered list as next")
+	}
+	sub := "/subnets/" + itoa(fx.lan)
+	if body := authedGet(t, srv, st, sub).Body.String(); !strings.Contains(body, `name="next" value="`+sub+`"`) {
+		t.Error("subnet page Approve does not come back to the subnet")
+	}
+}
+
 func mustID(t *testing.T, s string) int64 {
 	t.Helper()
 	n, err := strconv.ParseInt(s, 10, 64)

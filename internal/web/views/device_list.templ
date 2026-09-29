@@ -161,6 +161,9 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 		<td class="col-act">
 			if !row.Reviewed && IsAdmin(ctx) {
 				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
+					if o.Next != "" {
+						<input type="hidden" name="next" value={ o.Next }/>
+					}
 					<button type="submit" class="btn btn-sm">
 						@Icon("check", "")
 						Approve
@@ -175,7 +178,7 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 // the table (its sort links point there, keeping q); when `grouped`, child
 // rows are nested under their parent. The subnet page uses this form.
 templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped bool) {
-	@deviceTableWith(rows, deviceTableOpts{Base: base, Keep: keepQ(q), Sort: sortKey, Dir: dir, Grouped: grouped})
+	@deviceTableWith(rows, deviceTableOpts{Base: base, Keep: keepQ(q), Sort: sortKey, Dir: dir, Grouped: grouped, Next: base})
 }
 
 // deviceTableWith is the devices table with every option. Default columns
@@ -439,7 +442,7 @@ templ DeviceResults(p DeviceListPage) {
 				<div id="dev-list" class="dl-table">
 					@deviceTableWith(p.Rows, deviceTableOpts{
 						Base: "/devices", Keep: p.Filter.Values(), Sort: sortMark(p), Dir: p.Dir,
-						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts,
+						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts, Next: ReturnURL(bulkReturn(p)),
 					})
 				</div>
 				<div id="dev-grid" class="devgrid" hidden>

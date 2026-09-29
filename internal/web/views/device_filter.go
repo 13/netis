@@ -98,6 +98,8 @@ type deviceTableOpts struct {
 	// Bulk adds the selection checkboxes (admins, devices page).
 	Bulk      bool
 	Conflicts map[string]bool
+	// Next is where a row's Approve sends the browser back to.
+	Next string
 }
 
 // sortLink is the header link for col: the page with its other parameters
