@@ -184,3 +184,22 @@ func TestSystemRetentionSavesAlone(t *testing.T) {
 		t.Errorf("offline_after = %q, want it left alone", v)
 	}
 }
+
+// On a phone the page names itself once, in its h1; the top bar carries the
+// mark and search, not the page title again.
+func TestTopbarDoesNotRepeatThePageTitle(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	body := authedGet(t, srv, st, "/events").Body.String()
+	start := strings.Index(body, `<header class="topbar">`)
+	end := strings.Index(body[start:], `</header>`)
+	if start < 0 || end < 0 {
+		t.Fatal("no top bar")
+	}
+	if bar := body[start : start+end]; strings.Contains(bar, "Events") {
+		t.Errorf("top bar repeats the page title: %s", bar)
+	}
+	if !strings.Contains(body, "<h1>Events</h1>") {
+		t.Error("page lost its h1")
+	}
+}

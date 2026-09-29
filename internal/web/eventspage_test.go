@@ -118,3 +118,22 @@ func mkDevice(t *testing.T, st *store.Store, name string) int64 {
 	}
 	return id
 }
+
+// Every event row has the same four cells, so an event without a device
+// keeps its details in the details column instead of sliding into the
+// device's (on the events page and the dashboard alike).
+func TestEventRowsKeepTheirColumns(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	st.AddEvent(t.Context(), "scan_error", nil, "Subnet 10.0.0.0/24: boom")
+	for _, path := range []string{"/events", "/"} {
+		body := authedGet(t, srv, st, path).Body.String()
+		if !strings.Contains(body, `<span class="ev-dev"></span> <span class="ev-detail">Subnet 10.0.0.0/24: boom</span>`) {
+			t.Errorf("%s: device-less event row does not keep an empty device cell", path)
+		}
+	}
+	css := authedGet(t, srv, st, "/static/pages/events.css").Body.String()
+	if strings.Contains(css, "grid-column:2 / 4") {
+		t.Error("events.css still spans details over the device column")
+	}
+}
