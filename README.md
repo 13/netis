@@ -50,6 +50,12 @@ for the background scan loop (every 120s by default).
 | `make vuln` | govulncheck |
 | `make docker` | `docker build -t netis .` |
 
+The app mark, favicons, home-screen icons and the web app manifest's icons
+are drawn once in `internal/web/gen_favicons.go` and committed. After changing
+the drawing, run `go run gen_favicons.go` from `internal/web` (it needs
+`rsvg-convert` and ImageMagick's `magick`, at build time only). The manifest
+lets a phone or desktop browser install netis as a standalone app.
+
 ## Views
 
 - **Dashboard** — per-subnet online/total counts, recent events, quick

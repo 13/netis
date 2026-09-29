@@ -247,7 +247,7 @@ var dummyHash = sync.OnceValue(func() []byte {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/login" || r.URL.Path == "/setup" ||
-			strings.HasPrefix(r.URL.Path, "/static/") || oidcPublicPath(r.URL.Path) {
+			r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/static/") || oidcPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
