@@ -139,6 +139,57 @@ func TestKickCoalescesAndStartStops(t *testing.T) {
 	})
 }
 
+// TestSecondPassSkipsUnchangedHints guards against a pass rewriting hints
+// (and their seen_at) when the source's content has not changed, which would
+// cost 3 write transactions per device per pass for nothing and compete with
+// sweeps on SQLite.
+func TestSecondPassSkipsUnchangedHints(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		ctx := t.Context()
+		svc := New(st)
+		id := discovered(t, st, "BRW3C2AF4A1B2C3", "00:1b:a9:00:00:01", "BRW3C2AF4A1B2C3", "10.0.0.5")
+
+		first := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		svc.now = func() time.Time { return first }
+		if err := svc.Run(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		hints, err := st.ListHints(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hints) == 0 {
+			t.Fatal("no hints after first pass")
+		}
+		seenAt := map[string]string{}
+		for _, h := range hints {
+			seenAt[h.Source+"/"+h.Field+"/"+h.Value] = h.SeenAt
+		}
+
+		second := first.Add(time.Hour)
+		svc.now = func() time.Time { return second }
+		if err := svc.Run(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		hints2, err := st.ListHints(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hints2) != len(hints) {
+			t.Fatalf("hint count changed across an unchanged pass: %d -> %d", len(hints), len(hints2))
+		}
+		for _, h := range hints2 {
+			want, ok := seenAt[h.Source+"/"+h.Field+"/"+h.Value]
+			if !ok {
+				t.Fatalf("hint appeared that was not there before: %+v", h)
+			}
+			if h.SeenAt != want {
+				t.Fatalf("seen_at moved for %s/%s/%s though nothing changed: %s -> %s", h.Source, h.Field, h.Value, want, h.SeenAt)
+			}
+		}
+	})
+}
+
 // TestRunSerialisesConcurrentPasses guards against the same device being
 // autofilled by two overlapping Run calls at once (e.g. Start's background
 // pass and a direct Run from the web port-scan handler), which could

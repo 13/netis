@@ -131,6 +131,11 @@ func TestDecideRules(t *testing.T) {
 			fields: map[string]Candidate{"name": cand("Living room TV", "mdns")},
 		},
 		{
+			name:   "empty kind already at the empty value: no write",
+			dev:    store.Device{Kind: "other"},
+			fields: map[string]Candidate{"kind": cand("other", "hostname")},
+		},
+		{
 			name: "tags: add new, skip present, removed becomes owned, owned skipped",
 			dev:  store.Device{Kind: "other"},
 			tags: []string{"media", "mine"},
@@ -153,10 +158,15 @@ func TestDecideRules(t *testing.T) {
 }
 
 func TestExplain(t *testing.T) {
-	d := store.Device{Kind: "printer", Vendor: "Mine", Model: "HL"}
+	d := store.Device{Kind: "printer", Vendor: "Mine", Model: "HL", Function: ""}
 	recs := []store.AutofillRecord{
 		{Field: "kind", Value: "printer", Source: "hostname", State: store.AutofillApplied},
 		{Field: "vendor", Value: "Brother", State: store.AutofillOwned},
+		// A person cleared the function field after autofill wrote it; no
+		// pass has run since to flip the record to owned.
+		{Field: "function", Value: "Proxmox VE", Source: "ports", State: store.AutofillApplied},
+		// A person removed the "media" tag after autofill applied it.
+		{Field: "tag:media", Value: "media", Source: "mdns", State: store.AutofillApplied},
 	}
 	hints := []store.Hint{
 		h("hostname", "kind", "printer", 80),
@@ -164,6 +174,8 @@ func TestExplain(t *testing.T) {
 		h("ports", "kind", "server", 60),
 		h("oui", "vendor", "Brother", 90),
 		h("hostname", "model", "HL-L2350", 60),
+		h("ports", "function", "Proxmox VE", 70),
+		h("mdns", "tag", "media", 60),
 	}
 	got := map[string]string{}
 	for _, e := range Explain(d, nil, recs, hints) {
@@ -175,6 +187,8 @@ func TestExplain(t *testing.T) {
 		"ports/kind":     StatusOutranked,
 		"oui/vendor":     StatusOwned,
 		"hostname/model": StatusKept,
+		"ports/function": StatusOwned,
+		"mdns/tag":       StatusOwned,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Explain = %v, want %v", got, want)

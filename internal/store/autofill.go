@@ -16,6 +16,10 @@ type Hint struct {
 	Confidence int
 	// Detail is the evidence, for people: "MAC 3c:07:54:…", "hostname BRW…".
 	Detail string
+	// SeenAt is when this (field, value, confidence, detail) content was
+	// first observed, not when a pass last confirmed it: a pass that finds a
+	// source's hints unchanged skips the write (and the seen_at bump) rather
+	// than paying a transaction to restate the same content.
 	SeenAt string
 }
 

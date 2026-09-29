@@ -26,11 +26,13 @@ type Service struct {
 	// web port-scan handler can overlap, and interleaved ReplaceHints calls
 	// for the same device can hit a primary-key conflict on Postgres.
 	mu sync.Mutex
+	// now is a test hook for the seen_at timestamp; defaults to time.Now.
+	now func() time.Time
 }
 
 // New returns a service over st. Call Start to serve Kick.
 func New(st *store.Store) *Service {
-	return &Service{st: st, kick: make(chan struct{}, 1), interval: 10 * time.Second}
+	return &Service{st: st, kick: make(chan struct{}, 1), interval: 10 * time.Second, now: time.Now}
 }
 
 // Enabled reports whether the admin left autofill on (the default).
@@ -136,7 +138,17 @@ func (s *Service) runOne(ctx context.Context, id int64) error {
 			ports = append(ports, p.Port)
 		}
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
+	existing, err := s.st.ListHints(ctx, id)
+	if err != nil {
+		return err
+	}
+	existingBySource := map[string][]store.Hint{}
+	for _, h := range existing {
+		existingBySource[h.Source] = append(existingBySource[h.Source], h)
+	}
+
+	now := s.now().UTC().Format(time.RFC3339)
+	var hints []store.Hint
 	for _, src := range []struct {
 		name  string
 		hints []store.Hint
@@ -146,17 +158,24 @@ func (s *Service) runOne(ctx context.Context, id int64) error {
 		{"ports", portHints(ports)},
 	} {
 		for i := range src.hints {
-			src.hints[i].DeviceID, src.hints[i].Source, src.hints[i].SeenAt = id, src.name, now
+			src.hints[i].DeviceID, src.hints[i].Source = id, src.name
+		}
+		if hintsEqual(existingBySource[src.name], src.hints) {
+			// Unchanged from last pass: skip the write (and the seen_at
+			// bump) rather than paying a transaction to restate the same
+			// content, and keep resolving from what is already stored.
+			hints = append(hints, existingBySource[src.name]...)
+			continue
+		}
+		for i := range src.hints {
+			src.hints[i].SeenAt = now
 		}
 		if err := s.st.ReplaceHints(ctx, id, src.name, src.hints); err != nil {
 			return err
 		}
+		hints = append(hints, src.hints...)
 	}
 
-	hints, err := s.st.ListHints(ctx, id)
-	if err != nil {
-		return err
-	}
 	tagRows, err := s.st.DeviceTags(ctx, id)
 	if err != nil {
 		return err
@@ -185,6 +204,32 @@ func (s *Service) runOne(ctx context.Context, id int64) error {
 		Username: "netis", Action: "device.autofill",
 		Target: fmt.Sprintf("device %d", id), Detail: auditDetail(writes, added), Status: 200,
 	})
+}
+
+// hintsEqual reports whether a and b hold the same (field, value,
+// confidence, detail) content, as a set (seen_at and device/source, which
+// the caller already holds constant, are ignored).
+func hintsEqual(a, b []store.Hint) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	type key struct {
+		field, value, detail string
+		confidence           int
+	}
+	counts := make(map[key]int, len(a))
+	for _, h := range a {
+		counts[key{h.Field, h.Value, h.Detail, h.Confidence}]++
+	}
+	for _, h := range b {
+		counts[key{h.Field, h.Value, h.Detail, h.Confidence}]--
+	}
+	for _, c := range counts {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // auditDetail says what a pass changed and from where:

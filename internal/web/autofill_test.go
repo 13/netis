@@ -40,6 +40,17 @@ func TestAutofillSettingSavesAndKicks(t *testing.T) {
 	if bad.Code != 400 {
 		t.Fatalf("bad value status = %d", bad.Code)
 	}
+	if v, _ := st.GetSetting(t.Context(), "autofill_enabled"); v != "off" {
+		t.Fatalf("bad value changed the setting: %q", v)
+	}
+}
+
+// TestPortScanRunsAutofill would assert that the port-scan handler calls
+// autofill.Run with the scanned device's id, but the handler dials real TCP
+// ports (scan.PortScan against the device's live IP) before it gets there,
+// which is not practical to exercise in this unit test package.
+func TestPortScanRunsAutofill(t *testing.T) {
+	t.Skip("handlePortScan dials real ports; not exercised here")
 }
 
 func TestDeviceCreateKicksAutofill(t *testing.T) {

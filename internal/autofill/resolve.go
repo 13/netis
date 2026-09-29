@@ -142,7 +142,7 @@ func decide(d store.Device, tags []string, recs []store.AutofillRecord, fields m
 			continue
 		}
 		switch {
-		case isEmpty(d, f, cur):
+		case isEmpty(d, f, cur) && c.Value != cur:
 			ch.Writes = append(ch.Writes, store.AutofillWrite{Field: f, Value: c.Value, Source: c.Source,
 				Expect: cur, Unreviewed: f == FieldName})
 		case has && !d.Reviewed && c.Value != cur:
@@ -203,6 +203,13 @@ func Explain(d store.Device, tags []string, recs []store.AutofillRecord, hints [
 		var st string
 		switch {
 		case has && rec.State == store.AutofillOwned:
+			st = StatusOwned
+		// A person cleared or changed the value the record applied, but no
+		// pass has run since to mark the record owned: treat it as theirs
+		// now, not as a hint autofill still owns.
+		case h.Field != FieldTag && has && rec.State == store.AutofillApplied && cur != rec.Value:
+			st = StatusOwned
+		case h.Field == FieldTag && has && rec.State == store.AutofillApplied && !have[h.Value]:
 			st = StatusOwned
 		case h.Confidence < Threshold:
 			st = StatusLow
