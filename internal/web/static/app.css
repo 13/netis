@@ -438,9 +438,7 @@
   /* ---- onboarding ---- */
   .onboard { min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:var(--sp-5); padding:var(--sp-7) var(--sp-4); }
   .onboard-brand { display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
-  .onboard-brand .mark { display:grid; place-items:center; width:44px; height:44px; border-radius:var(--r-panel);
-                         background:var(--surface); border:1px solid var(--border); }
-  .onboard-brand .mark .dot { width:14px; height:14px; background:var(--accent); box-shadow:0 0 0 5px var(--accent-soft); }
+  .onboard-brand .mark { display:block; width:44px; height:44px; }
   .onboard-brand .wm { font-size:var(--text-lg); font-weight:var(--w-semibold); }
   .onboard-brand .tag { color:var(--muted); font-size:var(--text-sm); }
   .onboard-card { display:flex; flex-direction:column; gap:var(--sp-3); width:100%; max-width:440px; padding:var(--sp-5);

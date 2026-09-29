@@ -4,7 +4,7 @@ import "fmt"
 
 templ onboardBrand() {
 	<div class="onboard-brand">
-		<span class="mark"><span class="dot"></span></span>
+		<img class="mark" src="/static/icon.svg" width="44" height="44" alt=""/>
 		<div class="wm">netis</div>
 		<div class="tag">Your home network, organized.</div>
 	</div>
@@ -43,6 +43,7 @@ templ onboardShell(title string, step int) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } — netis</title>
 			@themeBootstrap()
+			@appIcons()
 			<link rel="stylesheet" href="/static/app.css"/>
 		</head>
 		<body class="onboard">
@@ -64,6 +65,7 @@ templ authShell(title string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } — netis</title>
 			@themeBootstrap()
+			@appIcons()
 			<link rel="stylesheet" href="/static/app.css"/>
 		</head>
 		<body class="onboard">

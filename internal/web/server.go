@@ -107,7 +107,9 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		oidc:           newOIDCAuth(o.OIDC),
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
-	s.mux.Handle("GET /static/", staticHandler())
+	static := staticHandler()
+	s.mux.Handle("GET /static/", static)
+	s.mux.Handle("GET /favicon.ico", faviconHandler(static))
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("POST /login", s.handleLogin)
 	s.mux.HandleFunc("POST /logout", s.handleLogout)
