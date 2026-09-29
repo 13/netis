@@ -73,7 +73,7 @@ templ tabLink(active, tab, label string) {
 templ proxmoxFields(values map[string]string) {
 	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
 	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-	<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>Secret <input type="password" name="proxmox_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -96,7 +96,7 @@ templ wireguardFields(values map[string]string) {
 
 templ piholeFields(values map[string]string) {
 	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-	<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
+	<label>App password <input type="password" name="pihole_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -112,7 +112,7 @@ templ piholeFields(values map[string]string) {
 templ adguardFields(values map[string]string) {
 	<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
 	<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
-	<label>Password <input type="password" name="adguard_password" placeholder="leave blank to keep current password"/></label>
+	<label>Password <input type="password" name="adguard_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -128,7 +128,7 @@ templ adguardFields(values map[string]string) {
 templ opnsenseFields(values map[string]string) {
 	<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
 	<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
-	<label>API secret <input type="password" name="opnsense_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>API secret <input type="password" name="opnsense_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -391,7 +391,7 @@ templ usersTab(d SettingsData) {
 								<button type="submit" class="ghost">set role</button>
 							</form>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
-								<input type="password" name="new_password" placeholder="new password" minlength="8" required/>
+								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
 								<button type="submit" class="ghost">reset password</button>
 							</form>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
@@ -408,8 +408,8 @@ templ usersTab(d SettingsData) {
 		<div class="sc-head"><h3>Add user</h3></div>
 		<form method="post" action="/settings/users">
 			<div class="field-grid">
-				<label>Username <input type="text" name="username" required/></label>
-				<label>Password <input type="password" name="password" minlength="8" required/></label>
+				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
+				<label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" required/></label>
 				<label>
 					Role
 					<select name="role">
@@ -472,9 +472,9 @@ templ myAccount(d SettingsData) {
 		<div class="sc-head"><h3>Change my password</h3></div>
 		<form method="post" action="/settings/password">
 			<div class="field-grid">
-				<label>Current password <input type="password" name="current_password" required/></label>
-				<label>New password <input type="password" name="new_password" minlength="8" required/></label>
-				<label>Confirm new password <input type="password" name="confirm_password" minlength="8" required/></label>
+				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
+				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
+				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
 			</div>
 			<p class="muted" style="margin:6px 0 4px">Your other sessions are signed out when the password changes.</p>
 			<button type="submit" class="primary">Change password</button>

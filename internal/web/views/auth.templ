@@ -61,7 +61,7 @@ templ authShell(title string) {
 			@themeBootstrap()
 			<link rel="stylesheet" href="/static/app.css"/>
 		</head>
-		<body class="auth">
+		<body class="onboard">
 			{ children... }
 			<script src="/static/theme.js"></script>
 		</body>
@@ -91,8 +91,8 @@ templ LoginPage(errMsg string, o LoginOptions) {
 				<a href="/login?local=1" class="muted">Sign in with a local account</a>
 			} else {
 				<form method="post" action="/login" class="auth-form">
-					<input name="username" placeholder="username" autofocus?={ !o.SSO } required/>
-					<input name="password" type="password" placeholder="password" required/>
+					<input name="username" placeholder="username" autocomplete="username" autofocus?={ !o.SSO } required/>
+					<input name="password" type="password" placeholder="password" autocomplete="current-password" required/>
 					if o.SSO {
 						<button type="submit">Sign in with password</button>
 					} else {
@@ -112,8 +112,8 @@ templ SetupPage(errMsg string) {
 			<p class="error">{ errMsg }</p>
 		}
 		<form method="post" action="/setup">
-			<input name="username" placeholder="username" autofocus required/>
-			<input name="password" type="password" placeholder="password (min 8 chars)" required minlength="8"/>
+			<input name="username" placeholder="username" autocomplete="username" autofocus required/>
+			<input name="password" type="password" placeholder="password (min 8 chars)" autocomplete="new-password" required minlength="8"/>
 			<button type="submit" class="primary">Create account</button>
 		</form>
 	}

@@ -205,7 +205,7 @@ func proxmoxFields(values map[string]string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\"></label> <label>Secret <input type=\"password\" name=\"proxmox_secret\" placeholder=\"leave blank to keep current secret\"></label> <label><input type=\"checkbox\" name=\"proxmox_insecure\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\"></label> <label>Secret <input type=\"password\" name=\"proxmox_secret\" autocomplete=\"off\" placeholder=\"leave blank to keep current secret\"></label> <label><input type=\"checkbox\" name=\"proxmox_insecure\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -351,7 +351,7 @@ func piholeFields(values map[string]string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" placeholder=\"https://pi.hole\"></label> <label>App password <input type=\"password\" name=\"pihole_password\" placeholder=\"leave blank to keep current password\"></label> <label><input type=\"checkbox\" name=\"pihole_insecure\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" placeholder=\"https://pi.hole\"></label> <label>App password <input type=\"password\" name=\"pihole_password\" autocomplete=\"off\" placeholder=\"leave blank to keep current password\"></label> <label><input type=\"checkbox\" name=\"pihole_insecure\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -416,7 +416,7 @@ func adguardFields(values map[string]string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "\"></label> <label>Password <input type=\"password\" name=\"adguard_password\" placeholder=\"leave blank to keep current password\"></label> <label><input type=\"checkbox\" name=\"adguard_insecure\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "\"></label> <label>Password <input type=\"password\" name=\"adguard_password\" autocomplete=\"off\" placeholder=\"leave blank to keep current password\"></label> <label><input type=\"checkbox\" name=\"adguard_insecure\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -481,7 +481,7 @@ func opnsenseFields(values map[string]string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"></label> <label>API secret <input type=\"password\" name=\"opnsense_secret\" placeholder=\"leave blank to keep current secret\"></label> <label><input type=\"checkbox\" name=\"opnsense_insecure\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"></label> <label>API secret <input type=\"password\" name=\"opnsense_secret\" autocomplete=\"off\" placeholder=\"leave blank to keep current secret\"></label> <label><input type=\"checkbox\" name=\"opnsense_insecure\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1587,7 +1587,7 @@ func usersTab(d SettingsData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 135, "\" class=\"inline\"><input type=\"password\" name=\"new_password\" placeholder=\"new password\" minlength=\"8\" required> <button type=\"submit\" class=\"ghost\">reset password</button></form><form method=\"post\" action=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 135, "\" class=\"inline\"><input type=\"password\" name=\"new_password\" placeholder=\"new password\" autocomplete=\"new-password\" minlength=\"8\" required> <button type=\"submit\" class=\"ghost\">reset password</button></form><form method=\"post\" action=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1626,7 +1626,7 @@ func usersTab(d SettingsData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "<div class=\"setting-card\"><div class=\"sc-head\"><h3>Add user</h3></div><form method=\"post\" action=\"/settings/users\"><div class=\"field-grid\"><label>Username <input type=\"text\" name=\"username\" required></label> <label>Password <input type=\"password\" name=\"password\" minlength=\"8\" required></label> <label>Role <select name=\"role\"><option value=\"viewer\">viewer</option> <option value=\"admin\">admin</option></select></label></div><button type=\"submit\" class=\"primary\">Add user</button></form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 139, "<div class=\"setting-card\"><div class=\"sc-head\"><h3>Add user</h3></div><form method=\"post\" action=\"/settings/users\"><div class=\"field-grid\"><label>Username <input type=\"text\" name=\"username\" autocomplete=\"off\" required></label> <label>Password <input type=\"password\" name=\"password\" autocomplete=\"new-password\" minlength=\"8\" required></label> <label>Role <select name=\"role\"><option value=\"viewer\">viewer</option> <option value=\"admin\">admin</option></select></label></div><button type=\"submit\" class=\"primary\">Add user</button></form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1780,7 +1780,7 @@ func myAccount(d SettingsData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 155, "<div class=\"setting-card\"><div class=\"sc-head\"><h3>Change my password</h3></div><form method=\"post\" action=\"/settings/password\"><div class=\"field-grid\"><label>Current password <input type=\"password\" name=\"current_password\" required></label> <label>New password <input type=\"password\" name=\"new_password\" minlength=\"8\" required></label> <label>Confirm new password <input type=\"password\" name=\"confirm_password\" minlength=\"8\" required></label></div><p class=\"muted\" style=\"margin:6px 0 4px\">Your other sessions are signed out when the password changes.</p><button type=\"submit\" class=\"primary\">Change password</button></form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 155, "<div class=\"setting-card\"><div class=\"sc-head\"><h3>Change my password</h3></div><form method=\"post\" action=\"/settings/password\"><div class=\"field-grid\"><label>Current password <input type=\"password\" name=\"current_password\" autocomplete=\"current-password\" required></label> <label>New password <input type=\"password\" name=\"new_password\" autocomplete=\"new-password\" minlength=\"8\" required></label> <label>Confirm new password <input type=\"password\" name=\"confirm_password\" autocomplete=\"new-password\" minlength=\"8\" required></label></div><p class=\"muted\" style=\"margin:6px 0 4px\">Your other sessions are signed out when the password changes.</p><button type=\"submit\" class=\"primary\">Change password</button></form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
