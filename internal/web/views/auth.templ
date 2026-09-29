@@ -94,11 +94,11 @@ type LoginOptions struct {
 }
 
 templ LoginPage(errMsg string, o LoginOptions) {
-	@authShell("Login") {
+	@authShell("Sign in") {
 		@onboardBrand()
 		<div class="auth-card">
 			if errMsg != "" {
-				<p class="form-error" role="alert">{ errMsg }</p>
+				<p class="form-error" role="alert">{ Sentence(errMsg) }</p>
 			}
 			if o.SSO {
 				<a href="/auth/oidc/login" class="btn btn-primary sso-button">Sign in with SSO</a>
@@ -107,8 +107,14 @@ templ LoginPage(errMsg string, o LoginOptions) {
 				<a href="/login?local=1" class="muted">Sign in with a local account</a>
 			} else {
 				<form method="post" action="/login" class="auth-form">
-					<input name="username" placeholder="username" autocomplete="username" autofocus?={ !o.SSO } required/>
-					<input name="password" type="password" placeholder="password" autocomplete="current-password" required/>
+					<label>
+						Username
+						<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus?={ !o.SSO } required/>
+					</label>
+					<label>
+						Password
+						<input name="password" type="password" autocomplete="current-password" required/>
+					</label>
 					if o.SSO {
 						<button type="submit" class="btn">Sign in with password</button>
 					} else {
@@ -125,7 +131,7 @@ templ SetupPage(errMsg string) {
 		<h1>Create your admin account</h1>
 		<p class="muted">The login you manage netis with. You stay signed in and carry on setting up.</p>
 		if errMsg != "" {
-			<p class="form-error" role="alert">{ errMsg }</p>
+			<p class="form-error" role="alert">{ Sentence(errMsg) }</p>
 		}
 		<form method="post" action="/setup">
 			<label>

@@ -11,28 +11,28 @@ import (
 templ usersTab(d SettingsData) {
 	<div class="panel">
 		<div class="table-wrap">
-			<table>
+			<table class="table-stack">
 				<thead>
-					<tr><th>Username</th><th>Role</th><th></th></tr>
+					<tr><th>Username</th><th>Role</th><th><span class="sr-only">Actions</span></th></tr>
 				</thead>
 				<tbody>
 					for _, u := range d.Users {
 						<tr>
-							<td>
+							<td data-label="Username">
 								{ u.Username }
 								if u.ID == d.CurrentUserID {
-									<span class="chip">you</span>
+									<span class="chip">You</span>
 								}
 							</td>
-							<td><span class="chip">{ u.Role }</span></td>
-							<td>
+							<td data-label="Role"><span class="chip">{ roleLabel(u.Role) }</span></td>
+							<td class="cell-actions">
 								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
 									<select name="role" aria-label={ "Role for " + u.Username }>
 										for _, role := range []string{"viewer", "admin"} {
 											if role == u.Role {
-												<option value={ role } selected>{ role }</option>
+												<option value={ role } selected>{ roleLabel(role) }</option>
 											} else {
-												<option value={ role }>{ role }</option>
+												<option value={ role }>{ roleLabel(role) }</option>
 											}
 										}
 									</select>
@@ -69,8 +69,8 @@ templ usersTab(d SettingsData) {
 				<label>
 					Role
 					<select name="role">
-						<option value="viewer">viewer</option>
-						<option value="admin">admin</option>
+						<option value="viewer">Viewer</option>
+						<option value="admin">Admin</option>
 					</select>
 				</label>
 			</div>
@@ -125,32 +125,32 @@ templ accountSection(username string, d SettingsData) {
 }
 
 // sessionsSection lists where the signed-in user is signed in, each with a
-// revoke, and signs out everywhere else at once.
+// sign out, and signs out everywhere else at once.
 templ sessionsSection(d SettingsData) {
-	<p class="muted">Where your account is signed in. Revoke a session you do not recognise.</p>
+	<p class="muted">Where your account is signed in. Sign out any session you do not recognise.</p>
 	<div class="panel">
 		<div class="table-wrap">
-			<table>
+			<table class="table-stack">
 				<thead>
-					<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
+					<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th><span class="sr-only">Actions</span></th></tr>
 				</thead>
 				<tbody>
 					for _, sess := range d.Sessions {
 						<tr>
-							<td>
+							<td data-label="Signed in">
 								@sessionStarted(sess)
 								if sess.ID == d.CurrentSessionID {
-									<span class="chip">this browser</span>
+									<span class="chip">This browser</span>
 								}
 							</td>
-							<td class="mono">{ orDash(sess.IP) }</td>
-							<td>{ shortAgent(sess.UserAgent) }</td>
-							<td>
+							<td class="mono" data-label="From">{ orDash(sess.IP) }</td>
+							<td data-label="Browser">{ shortAgent(sess.UserAgent) }</td>
+							<td data-label="Expires">
 								@Time(sess.ExpiresAt)
 							</td>
-							<td>
-								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
-									<button type="submit" class="btn btn-sm">Revoke</button>
+							<td class="cell-actions">
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Sign out this session?">
+									<button type="submit" class="btn btn-sm">Sign out</button>
 								</form>
 							</td>
 						</tr>
@@ -172,7 +172,7 @@ templ sessionsSection(d SettingsData) {
 // column have no answer, and saying so beats inventing one.
 templ sessionStarted(sess store.Session) {
 	if sess.CreatedAt == nil || *sess.CreatedAt == "" {
-		unknown
+		Unknown
 	} else {
 		@Time(*sess.CreatedAt)
 	}

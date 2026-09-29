@@ -739,7 +739,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<div class=\"panel\"><div class=\"sg-row\"><span class=\"chip\">homelab</span> <span class=\"chip\">server</span> <span class=\"chip static\">static</span> <span class=\"chip dhcp\">dhcp</span> <span class=\"chip\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<div class=\"panel\"><div class=\"sg-row\"><span class=\"chip\">homelab</span> <span class=\"chip\">server</span> <span class=\"chip static\">Static</span> <span class=\"chip dhcp\">DHCP</span> <span class=\"chip\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -747,7 +747,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "offline alerts on</span> <button type=\"button\" class=\"chip\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "Offline alerts on</span> <button type=\"button\" class=\"chip\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -861,7 +861,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<div class=\"panel\"><div class=\"panel-head\"><h3>Integrations</h3><span class=\"status is-online\">connected</span> <span class=\"muted\">last worked 4 min ago</span> <span class=\"spacer\"></span> <button type=\"button\" class=\"btn btn-sm\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<div class=\"panel\"><div class=\"panel-head\"><h3>Integrations</h3><span class=\"status is-online\">Connected</span> <span class=\"muted\">last worked 4 min ago</span> <span class=\"spacer\"></span> <button type=\"button\" class=\"btn btn-sm\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -877,7 +877,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<a href=\"#table\">nas</a></div></td><td class=\"mono\">10.0.0.5</td><td><span class=\"chip static\">static</span></td><td><span class=\"status is-online\">online</span></td><td class=\"num\">4</td><td class=\"muted\">2 min ago</td></tr><tr><td><div class=\"dev\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<a href=\"#table\">nas</a></div></td><td class=\"mono\">10.0.0.5</td><td><span class=\"chip static\">Static</span></td><td><span class=\"status is-online\">Online</span></td><td class=\"num\">4</td><td class=\"muted\">2 min ago</td></tr><tr><td><div class=\"dev\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -885,7 +885,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<a href=\"#table\">pixel-8</a> <span class=\"status is-new\">new</span></div></td><td class=\"mono\">10.0.0.61</td><td><span class=\"chip dhcp\">dhcp</span></td><td><span class=\"status is-offline\">offline</span></td><td class=\"num\">0</td><td class=\"muted\">3 h ago</td></tr><tr><td><div class=\"dev\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<a href=\"#table\">pixel-8</a> <span class=\"status is-new\">New</span></div></td><td class=\"mono\">10.0.0.61</td><td><span class=\"chip dhcp\">DHCP</span></td><td><span class=\"status is-offline\">Offline</span></td><td class=\"num\">0</td><td class=\"muted\">3 h ago</td></tr><tr><td><div class=\"dev\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -893,7 +893,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<a href=\"#table\">unknown-host</a></div></td><td class=\"mono\">10.0.0.99</td><td><span class=\"chip dhcp\">dhcp</span></td><td><span class=\"status is-conflict\">conflict</span></td><td class=\"num\">1</td><td class=\"muted\">just now</td></tr></tbody></table></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<a href=\"#table\">unknown-host</a></div></td><td class=\"mono\">10.0.0.99</td><td><span class=\"chip dhcp\">DHCP</span></td><td><span class=\"status is-conflict\">Conflict</span></td><td class=\"num\">1</td><td class=\"muted\">just now</td></tr></tbody></table></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

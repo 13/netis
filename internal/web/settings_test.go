@@ -77,7 +77,7 @@ func TestCannotDeleteSelf(t *testing.T) {
 	other, _ := st.CreateUser(t.Context(), "admin2", "hash", "admin")
 
 	del := authedPost(t, srv, st, "/settings/users/"+itoa(ben.ID)+"/delete", url.Values{})
-	if del.Code != http.StatusBadRequest || !strings.Contains(del.Body.String(), "you cannot delete your own account") {
+	if del.Code != http.StatusBadRequest || !strings.Contains(del.Body.String(), "You cannot delete your own account") {
 		t.Fatalf("self delete: code=%d", del.Code)
 	}
 	if _, found, _ := st.GetUser(t.Context(), ben.ID); !found {

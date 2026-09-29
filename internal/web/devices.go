@@ -846,7 +846,7 @@ func (s *Server) handleLinkDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.flashToast(w, r, "Link removed")
+	s.flashToast(w, r, "Link deleted")
 	http.Redirect(w, r, "/devices/"+devID, http.StatusSeeOther)
 }
 
@@ -870,7 +870,7 @@ func (s *Server) handleFieldDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	s.flashToast(w, r, "Field removed")
+	s.flashToast(w, r, "Field deleted")
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
@@ -968,7 +968,7 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(ifaces) == 0 {
-		http.Error(w, "device has no interface", 400)
+		http.Error(w, "this device has no network interface, so there is nothing to scan; add a MAC or IP address first", 400)
 		return
 	}
 	ips, err := s.store.ListIPs(r.Context(), ifaces[0].ID)
@@ -977,7 +977,7 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(ips) == 0 {
-		http.Error(w, "device has no IP", 400)
+		http.Error(w, "this device has no IP address, so its ports cannot be scanned; add an IP address first", 400)
 		return
 	}
 	open := scan.PortScan(r.Context(), ips[0].IP, scan.CommonPorts, time.Second)
@@ -1014,13 +1014,13 @@ func (s *Server) handleDeviceIPKind(w http.ResponseWriter, r *http.Request) {
 	}
 	subnetID, err := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad subnet", 400)
+		http.Error(w, "that subnet does not exist; reload the page and try again", 400)
 		return
 	}
 	ip := r.FormValue("ip")
 	kind := r.FormValue("kind")
 	if kind != "static" && kind != "dhcp" {
-		http.Error(w, "bad kind", 400)
+		http.Error(w, "choose static or DHCP", 400)
 		return
 	}
 	if err := s.store.SetIPKind(r.Context(), subnetID, ip, kind); err != nil {

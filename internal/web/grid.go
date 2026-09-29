@@ -276,13 +276,13 @@ func (s *Server) handleScanNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sn.Kind == "wireguard" {
-		s.render(w, r, views.ScanToast(sn.CIDR+" is WireGuard — not scannable"))
+		s.render(w, r, views.ScanToast(sn.CIDR+" is a WireGuard subnet: netis reads its peers from the server instead of scanning it"))
 		return
 	}
 	if s.trigger != nil && !s.trigger.Trigger(sn.ID) {
-		s.render(w, r, views.ScanToast("Scan of "+sn.CIDR+" already queued or running"))
+		s.render(w, r, views.ScanToast(sn.CIDR+" is already being scanned"))
 	} else {
-		s.render(w, r, views.ScanToast("Scanning "+sn.CIDR+"…"))
+		s.render(w, r, views.ScanToast("Scan started for "+sn.CIDR))
 	}
 	if onSubnetPages(r) {
 		s.render(w, r, views.ScanControlOOB(s.scanState(sn)))
@@ -329,7 +329,7 @@ func (s *Server) handleCellKind(w http.ResponseWriter, r *http.Request) {
 	ip := r.FormValue("ip")
 	kind := r.FormValue("kind")
 	if kind != "static" && kind != "dhcp" {
-		http.Error(w, "bad kind", 400)
+		http.Error(w, "choose static, DHCP or free for this address", 400)
 		return
 	}
 	if err := s.store.SetIPKind(r.Context(), sn.ID, ip, kind); err != nil {
@@ -399,10 +399,10 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case skipped == 0:
-		s.render(w, r, views.ScanToast("Scanning all subnets…"))
+		s.render(w, r, views.ScanToast("Scan started for all subnets"))
 	case queued == 0:
-		s.render(w, r, views.ScanToast("Scans already queued or running"))
+		s.render(w, r, views.ScanToast("Every subnet is already being scanned"))
 	default:
-		s.render(w, r, views.ScanToast(fmt.Sprintf("Scanning %d subnet(s); %d already queued or running", queued, skipped)))
+		s.render(w, r, views.ScanToast(fmt.Sprintf("Scan started for %d of %d subnets; the rest were already running", queued, queued+skipped)))
 	}
 }

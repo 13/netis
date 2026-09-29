@@ -135,7 +135,7 @@ func eventDevice(e store.Event) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if e.DeviceID != nil || deviceEventTypes[e.Type] {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span class=\"muted\">deleted device</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span class=\"muted\">Deleted device</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

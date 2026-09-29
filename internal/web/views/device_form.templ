@@ -144,7 +144,7 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 	>
 		<div class="db">
 			if f.Error != "" {
-				<p class="form-error" role="alert">{ f.Error }</p>
+				<p class="form-error" role="alert">{ Sentence(f.Error) }</p>
 			}
 			if f.Prefilled && !f.IsEdit && f.IP != "" {
 				<p class="df-prefill">

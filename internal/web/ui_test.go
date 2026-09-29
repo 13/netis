@@ -80,7 +80,7 @@ func TestDestructiveFormsAskForConfirmation(t *testing.T) {
 		}
 	}
 	// Session revoke forms carry an opaque id; check each one on the page.
-	if n, m := strings.Count(users, `/settings/sessions/`)-1, strings.Count(users, `data-confirm="Revoke this session?"`); m == 0 || m != n {
+	if n, m := strings.Count(users, `/settings/sessions/`)-1, strings.Count(users, `data-confirm="Sign out this session?"`); m == 0 || m != n {
 		t.Errorf("session revoke forms: %d confirmations for %d forms", m, n)
 	}
 
@@ -190,7 +190,7 @@ func TestDeviceFormErrorsRenderInline(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("plain post code=%d", rec.Code)
 	}
-	for _, want := range []string{"<nav", `class="form-error"`, "invalid MAC address", `value="printer"`, `value="HP"`, `value="zz:zz"`} {
+	for _, want := range []string{"<nav", `class="form-error"`, "Invalid MAC address", `value="printer"`, `value="HP"`, `value="zz:zz"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("plain post error page missing %q", want)
 		}
@@ -201,7 +201,7 @@ func TestDeviceFormErrorsRenderInline(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("htmx post code=%d", rec.Code)
 	}
-	if strings.Contains(body, "<nav") || !strings.Contains(body, "<dialog") || !strings.Contains(body, "invalid MAC address") {
+	if strings.Contains(body, "<nav") || !strings.Contains(body, "<dialog") || !strings.Contains(body, "Invalid MAC address") {
 		t.Errorf("htmx error should be the dialog with the message: %s", body)
 	}
 

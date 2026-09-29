@@ -175,11 +175,11 @@ templ StyleguidePage(username string, colors []ColorToken) {
 				<div class="sg-row">
 					<span class="chip">homelab</span>
 					<span class="chip">server</span>
-					<span class="chip static">static</span>
-					<span class="chip dhcp">dhcp</span>
+					<span class="chip static">Static</span>
+					<span class="chip dhcp">DHCP</span>
 					<span class="chip">
 						@Icon("bell", "")
-						offline alerts on
+						Offline alerts on
 					</span>
 					<button type="button" class="chip">
 						@Icon("plus", "")
@@ -211,7 +211,7 @@ templ StyleguidePage(username string, colors []ColorToken) {
 			<div class="panel">
 				<div class="panel-head">
 					<h3>Integrations</h3>
-					<span class="status is-online">connected</span>
+					<span class="status is-online">Connected</span>
 					<span class="muted">last worked 4 min ago</span>
 					<span class="spacer"></span>
 					<button type="button" class="btn btn-sm">
@@ -235,8 +235,8 @@ templ StyleguidePage(username string, colors []ColorToken) {
 								</div>
 							</td>
 							<td class="mono">10.0.0.5</td>
-							<td><span class="chip static">static</span></td>
-							<td><span class="status is-online">online</span></td>
+							<td><span class="chip static">Static</span></td>
+							<td><span class="status is-online">Online</span></td>
 							<td class="num">4</td>
 							<td class="muted">2 min ago</td>
 						</tr>
@@ -245,12 +245,12 @@ templ StyleguidePage(username string, colors []ColorToken) {
 								<div class="dev">
 									@deviceIcon("", "phone", "")
 									<a href="#table">pixel-8</a>
-									<span class="status is-new">new</span>
+									<span class="status is-new">New</span>
 								</div>
 							</td>
 							<td class="mono">10.0.0.61</td>
-							<td><span class="chip dhcp">dhcp</span></td>
-							<td><span class="status is-offline">offline</span></td>
+							<td><span class="chip dhcp">DHCP</span></td>
+							<td><span class="status is-offline">Offline</span></td>
 							<td class="num">0</td>
 							<td class="muted">3 h ago</td>
 						</tr>
@@ -262,8 +262,8 @@ templ StyleguidePage(username string, colors []ColorToken) {
 								</div>
 							</td>
 							<td class="mono">10.0.0.99</td>
-							<td><span class="chip dhcp">dhcp</span></td>
-							<td><span class="status is-conflict">conflict</span></td>
+							<td><span class="chip dhcp">DHCP</span></td>
+							<td><span class="status is-conflict">Conflict</span></td>
 							<td class="num">1</td>
 							<td class="muted">just now</td>
 						</tr>

@@ -112,32 +112,35 @@ templ accountItems(username string) {
 }
 
 // sidebar is the desktop navigation: the mark, search, the four sections,
-// and at the bottom Settings and the account menu.
+// and at the bottom Settings and the account menu. The aside is the
+// column, as tall as the page; its inner box sticks to the window.
 templ sidebar(username string) {
 	<aside class="sidebar">
-		<a href="/" class="brand" aria-label="netis dashboard">
-			<img class="mark" src="/static/icon.svg" alt=""/>
-			<span class="lbl">netis</span>
-		</a>
-		@searchButton("")
-		<nav aria-label="Main">
-			@navItem("/", "layout-dashboard", "Dashboard")
-			@navItem("/devices", "monitor", "Devices")
-			@navItem("/subnets", "network", "Subnets")
-			@navItem("/events", "activity", "Events")
-		</nav>
-		<div class="sidebar-foot">
-			@navItem("/settings/account", "settings", "Settings")
-			<details class="acct">
-				<summary class="nav-item" aria-label={ "Account: " + username }>
-					@Icon("user", "icon-lg")
-					<span class="lbl acct-name">{ username }</span>
-					@Icon("chevron-down", "lbl acct-chev")
-				</summary>
-				<div class="menu">
-					@accountItems(username)
-				</div>
-			</details>
+		<div class="sidebar-inner">
+			<a href="/" class="brand" aria-label="netis dashboard">
+				<img class="mark" src="/static/icon.svg" alt=""/>
+				<span class="lbl">netis</span>
+			</a>
+			@searchButton("")
+			<nav aria-label="Main">
+				@navItem("/", "layout-dashboard", "Dashboard")
+				@navItem("/devices", "monitor", "Devices")
+				@navItem("/subnets", "network", "Subnets")
+				@navItem("/events", "activity", "Events")
+			</nav>
+			<div class="sidebar-foot">
+				@navItem("/settings/account", "settings", "Settings")
+				<details class="acct">
+					<summary class="nav-item" aria-label={ "Account: " + username }>
+						@Icon("user", "icon-lg")
+						<span class="lbl acct-name">{ username }</span>
+						@Icon("chevron-down", "lbl acct-chev")
+					</summary>
+					<div class="menu">
+						@accountItems(username)
+					</div>
+				</details>
+			</div>
 		</div>
 	</aside>
 }

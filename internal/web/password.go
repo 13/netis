@@ -42,13 +42,13 @@ func (s *Server) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// so guesses are limited per account the same way logins are.
 	key := "change:" + strconv.FormatInt(u.ID, 10)
 	if !s.userLimiter.reserve(key) {
-		s.settingsError(w, r, "account", http.StatusTooManyRequests, "too many attempts, try again later")
+		s.settingsError(w, r, "account", http.StatusTooManyRequests, "too many attempts; wait a minute and try again")
 		return
 	}
 	wrong := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(r.FormValue("current_password"))) != nil
 	s.userLimiter.done(key, wrong)
 	if wrong {
-		s.settingsError(w, r, "account", http.StatusForbidden, "current password is wrong")
+		s.settingsError(w, r, "account", http.StatusForbidden, "the current password is wrong; enter the password you sign in with")
 		return
 	}
 	next, msg := validNewPassword(r)

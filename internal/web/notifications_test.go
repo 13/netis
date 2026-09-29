@@ -128,11 +128,11 @@ func TestDeviceAlertToggle(t *testing.T) {
 		t.Fatal("flag not set")
 	}
 	body := authedGet(t, srv, st, path).Body.String()
-	if !strings.Contains(body, "offline alerts on") || !strings.Contains(body, "Turn off offline alerts") {
+	if !strings.Contains(body, "Offline alerts on") || !strings.Contains(body, "Turn off offline alerts") {
 		t.Fatal("device page does not show the flag as on")
 	}
 	// Viewers see the state but not the button.
-	if v := viewerGet(t, srv, st, path); !strings.Contains(v, "offline alerts on") || strings.Contains(v, "/alert") {
+	if v := viewerGet(t, srv, st, path); !strings.Contains(v, "Offline alerts on") || strings.Contains(v, "/alert") {
 		t.Fatal("viewer page: state missing or toggle shown")
 	}
 	authedPost(t, srv, st, path+"/alert", url.Values{"alert_offline": {"0"}})
@@ -155,7 +155,7 @@ func TestNotificationsTabRendersSecretState(t *testing.T) {
 	if strings.Contains(body, "@secretState") {
 		t.Fatal("raw templ call rendered into the page")
 	}
-	if !strings.Contains(body, `Stored header: <span class="muted">none</span>`) || !strings.Contains(body, `Stored token: <span class="chip">stored</span>`) {
+	if !strings.Contains(body, `Stored header: <span class="muted">None</span>`) || !strings.Contains(body, `Stored token: <span class="chip">Stored</span>`) {
 		t.Fatal("stored-credential state missing")
 	}
 }

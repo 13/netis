@@ -136,7 +136,7 @@ templ WelcomeNetwork(d WelcomeNetworkData) {
 						}
 					/>
 					if d.Error != "" {
-						<p class="field-error" id="manual-err" role="alert">{ d.Error }</p>
+						<p class="field-error" id="manual-err" role="alert">{ Sentence(d.Error) }</p>
 					}
 					<p class="hint" id="manual-help">An address and a prefix length. A typical home network is a /24, like 192.168.1.0/24.</p>
 				</div>
@@ -165,7 +165,7 @@ templ WelcomeIntegrations(d WelcomeServicesData) {
 		<h1>Connect services</h1>
 		<p class="muted">Optional. A service fills in what a scan cannot see, like names, leases and virtual machines. You can do this later in Settings.</p>
 		if d.Error != "" {
-			<p class="form-error" role="alert">{ d.Error }</p>
+			<p class="form-error" role="alert">{ Sentence(d.Error) }</p>
 		}
 		<form method="post" action="/welcome/integrations">
 			<div class="ob-services">

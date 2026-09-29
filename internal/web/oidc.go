@@ -312,7 +312,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("oidc code exchange failed", "err", err)
 		note.Detail = "code exchange failed"
-		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed")
+		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed; try again, or sign in with your password")
 		return
 	}
 	raw, _ := tok.Extra("id_token").(string)
@@ -322,13 +322,13 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("oidc id token rejected", "err", err)
 		note.Detail = "id token rejected"
-		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed")
+		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed; try again, or sign in with your password")
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(idt.Nonce), []byte(f.Nonce)) != 1 {
 		slog.Warn("oidc id token nonce mismatch", "sub", idt.Subject)
 		note.Detail = "nonce mismatch"
-		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed")
+		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed; try again, or sign in with your password")
 		return
 	}
 	var claims oidcClaims
@@ -336,7 +336,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	if err := errors.Join(idt.Claims(&claims), idt.Claims(&all)); err != nil {
 		slog.Warn("oidc id token claims unreadable", "err", err)
 		note.Detail = "claims unreadable"
-		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed")
+		s.loginError(w, r, http.StatusUnauthorized, "sign-in failed; try again, or sign in with your password")
 		return
 	}
 	groups := claimStrings(all[a.cfg.GroupsClaim])
@@ -414,7 +414,7 @@ func (s *Server) oidcUser(ctx context.Context, issuer, subject string, c oidcCla
 	}
 	if !cfg.AutoCreate {
 		return u, oidcOutcome{reason: "unknown identity, auto-create off",
-			message: "no netis account is linked to this SSO account; sign in with your password and link it under Settings → Users, or ask an admin"}, nil
+			message: "no netis account is linked to this SSO account; sign in with your password and link it under Settings, Profile, or ask an admin"}, nil
 	}
 	name := ssoUsername(c, subject)
 	// SSO accounts get a password nobody knows, so password login fails for
@@ -431,7 +431,7 @@ func (s *Server) oidcUser(ctx context.Context, issuer, subject string, c oidcCla
 	id, err := s.store.CreateOIDCUser(ctx, name, string(hash), role, issuer, subject)
 	if store.IsUniqueViolation(err) {
 		return u, oidcOutcome{reason: "username taken by a local account: " + name,
-			message: "a netis account named " + name + " already exists; sign in to it with your password and link SSO under Settings → Users"}, nil
+			message: "a netis account named " + name + " already exists; sign in to it with your password and link SSO under Settings, Profile"}, nil
 	}
 	if err != nil {
 		return u, oidcOutcome{}, err

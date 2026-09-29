@@ -75,7 +75,7 @@ func TestIntegrationRunNilRunner(t *testing.T) {
 	srv, st := testServer(t) // nil runner
 	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/integrations/pihole/run", url.Values{})
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "not available") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "cannot be run") {
 		t.Fatalf("nil runner code=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
@@ -111,7 +111,7 @@ func TestIntegrationRunBusy(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "pihole", OK: true, Detail: "48 leases, 2 new"})
 	rec := authedPost(t, srv, st, "/settings/integrations/pihole/run", url.Values{})
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pi-hole: already running") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Pi-hole is already running") {
 		t.Fatalf("busy code=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

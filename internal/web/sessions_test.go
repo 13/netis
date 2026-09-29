@@ -80,7 +80,7 @@ func TestSettingsListsOwnSessionsOnly(t *testing.T) {
 	st.CreateSession(t.Context(), "ben-phone", ben.ID, "2099-01-01T00:00:00Z")
 	body := authedGet(t, srv, st, "/settings/sessions").Body.String()
 
-	if !strings.Contains(body, "this browser") {
+	if !strings.Contains(body, "This browser") {
 		t.Error("the session making the request should be marked")
 	}
 	if strings.Contains(body, "testtok") || strings.Contains(body, "kim-token") {

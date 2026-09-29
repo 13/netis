@@ -42,7 +42,7 @@ func TestUserRoleChange(t *testing.T) {
 
 	// The only admin cannot demote themselves.
 	rec := authedPost(t, srv, st, path(ben.ID), url.Values{"role": {"viewer"}})
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "cannot demote the last admin") {
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "is the only admin") {
 		t.Fatalf("demote last admin: code=%d", rec.Code)
 	}
 	if u, _, _ := st.GetUser(t.Context(), ben.ID); u.Role != "admin" {
@@ -79,7 +79,7 @@ func TestUserRoleChange(t *testing.T) {
 	want := []string{
 		"user " + itoa(eve) + "  403", // the demoted ben's attempt, refused before the handler ran
 		"user ben admin -> viewer 303",
-		"user eve bad role 400",
+		"user eve choose a role: Admin or Viewer 400",
 		"user eve viewer -> admin 303",
 		"user ben admin -> viewer 400",
 	}
@@ -259,7 +259,7 @@ func TestAuditTab(t *testing.T) {
 	st.AddAudit(t.Context(), store.AuditEntry{Action: "login", Detail: "unknown user", Status: 401})
 
 	body := authedGet(t, srv, st, "/settings/audit").Body.String()
-	if !strings.Contains(body, "Audit log") || !strings.Contains(body, "unknown user") {
+	if !strings.Contains(body, "Audit log") || !strings.Contains(body, "Unknown user") {
 		t.Fatal("audit tab missing entries")
 	}
 	if !strings.Contains(body, "before=") {
@@ -270,7 +270,7 @@ func TestAuditTab(t *testing.T) {
 	}
 
 	body = authedGet(t, srv, st, "/settings/audit?action=login").Body.String()
-	if !strings.Contains(body, "unknown user") || strings.Contains(body, "device.update</td>") {
+	if !strings.Contains(body, "Unknown user") || strings.Contains(body, "device.update</td>") {
 		t.Error("action filter not applied")
 	}
 

@@ -75,7 +75,7 @@ templ ImportPage(username string, v ImportView) {
 	@Layout("Import devices", username) {
 		<h1>Import devices</h1>
 		if v.Error != "" {
-			<p class="form-error" role="alert">{ v.Error }</p>
+			<p class="form-error" role="alert">{ Sentence(v.Error) }</p>
 		}
 		if !IsAdmin(ctx) {
 			<p class="muted">Importing devices needs the admin role. You can still <a href="/api/export/devices.csv">export the inventory as CSV</a>.</p>

@@ -169,7 +169,7 @@ templ IntegrationPanel(it Integration, values map[string]string, standalone bool
 							Error
 						}
 					</dt>
-					<dd>{ it.Status.Detail }</dd>
+					<dd>{ Sentence(it.Status.Detail) }</dd>
 				}
 			</dl>
 		}

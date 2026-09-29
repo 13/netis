@@ -22,7 +22,7 @@ templ eventDevice(e store.Event) {
 	if e.DeviceID != nil && e.DeviceName != nil {
 		<a href={ templ.URL(fmt.Sprintf("/devices/%d", *e.DeviceID)) }>{ *e.DeviceName }</a>
 	} else if e.DeviceID != nil || deviceEventTypes[e.Type] {
-		<span class="muted">deleted device</span>
+		<span class="muted">Deleted device</span>
 	}
 }
 

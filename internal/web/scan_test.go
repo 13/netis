@@ -69,11 +69,11 @@ func TestScanNowSaysWhenNotQueued(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
 	body := authedPost(t, srv, st, "/subnets/1/scan", url.Values{}).Body.String()
-	if strings.Contains(body, "Scanning") || !strings.Contains(body, "already queued") {
+	if strings.Contains(body, "started") || !strings.Contains(body, "already being scanned") {
 		t.Fatalf("scan-now toast = %s, want it to say the scan is already queued", body)
 	}
 	body = authedPost(t, srv, st, "/scan", url.Values{}).Body.String()
-	if strings.Contains(body, "Scanning") || !strings.Contains(body, "already queued") {
+	if strings.Contains(body, "started") || !strings.Contains(body, "already being scanned") {
 		t.Fatalf("scan-all toast = %s, want it to say the scans are already queued", body)
 	}
 }
@@ -86,7 +86,7 @@ func TestScanNowWireGuardDoesNotTrigger(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("code=%d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "not scannable") {
+	if !strings.Contains(rec.Body.String(), "instead of scanning it") {
 		t.Fatalf("expected not-scannable toast: %s", rec.Body.String())
 	}
 	if ids := trig.got(); len(ids) != 0 {

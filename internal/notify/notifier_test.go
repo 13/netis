@@ -266,7 +266,7 @@ func TestRetriesServerErrorsButNotClientErrors(t *testing.T) {
 	srv2, _, calls2 := endpoint(t, 401, 401, 401)
 	c = Config{WebhookURL: srv2.URL}
 	err := s.deliver(t.Context(), c, testMessage(c))
-	if err == nil || !strings.Contains(err.Error(), "webhook: HTTP 401") {
+	if err == nil || !strings.Contains(err.Error(), "webhook: the server refused the credentials") {
 		t.Fatalf("err = %v", err)
 	}
 	if calls2.Load() != 1 {

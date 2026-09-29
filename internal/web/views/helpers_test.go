@@ -36,7 +36,7 @@ func TestTokenExpiry(t *testing.T) {
 	cases := []struct {
 		exp  *string
 		want string
-	}{{nil, "never"}, {&future, ">in 29d</time>"}, {&past, "expired <time"}}
+	}{{nil, "Never"}, {&future, ">in 29d</time>"}, {&past, "Expired <time"}}
 	for _, c := range cases {
 		var b strings.Builder
 		if err := tokenExpiry(store.APIToken{ExpiresAt: c.exp}).Render(context.Background(), &b); err != nil {

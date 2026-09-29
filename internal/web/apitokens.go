@@ -89,7 +89,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(name) > maxTokenNameLen {
-		s.settingsError(w, r, "tokens", http.StatusBadRequest, "token name is too long")
+		s.settingsError(w, r, "tokens", http.StatusBadRequest, "the token name is too long; keep it under 100 characters")
 		return
 	}
 	auditNote(r).Target = "token " + name
@@ -98,7 +98,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(r.FormValue("expires_days")); v != "" {
 		days, err := strconv.Atoi(v)
 		if err != nil || days < 0 || days > 3650 {
-			s.settingsError(w, r, "tokens", http.StatusBadRequest, "expiry must be 0 (never) to 3650 days")
+			s.settingsError(w, r, "tokens", http.StatusBadRequest, "expiry must be between 0 (never expires) and 3650 days")
 			return
 		}
 		if days > 0 {
