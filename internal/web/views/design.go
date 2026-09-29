@@ -2,28 +2,6 @@ package views
 
 import "strconv"
 
-// eventClass is the label style for an event type: a status in the colour of
-// what the event says about the device, or a plain status with a hollow dot
-// for events that are news but not a state (an IP change). A type added later
-// gets the plain style rather than none.
-func eventClass(eventType string) string {
-	switch eventType {
-	case "online", "sync_recovered", "device_returned":
-		return "status is-online"
-	case "offline":
-		return "status is-offline"
-	case "device_new":
-		return "status is-new"
-	case "device_missing":
-		return "status is-missing"
-	case "ip_conflict":
-		return "status is-conflict"
-	case "scan_error":
-		return "status is-error"
-	}
-	return "status"
-}
-
 // occSegment is one coloured run of the dashboard occupancy bar, in percent
 // of its width.
 type occSegment struct {

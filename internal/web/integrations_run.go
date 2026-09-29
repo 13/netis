@@ -8,13 +8,8 @@ import (
 	"netis/internal/web/views"
 )
 
-var integrationTitles = map[string]string{
-	"proxmox":   "Proxmox",
-	"wireguard": "WireGuard",
-	"pihole":    "Pi-hole",
-	"adguard":   "AdGuard Home",
-	"opnsense":  "OPNsense",
-}
+// integrationTitles are the integrations a run can be asked for, by slug.
+var integrationTitles = views.IntegrationTitles
 
 // handleIntegrationRun triggers a single on-demand run of an integration and
 // toasts the result read back from the recorded status.

@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
 // SetDeviceAlertOffline records whether the device's offline and online events
 // should be sent as notifications. It is kept apart from UpdateDevice so that
@@ -42,4 +45,18 @@ func (s *Store) ConflictingIPs(ctx context.Context, subnetID int64) (map[string]
 		out[ip] = append(out[ip], name)
 	}
 	return out, rows.Err()
+}
+
+// AlertOfflineDeviceIDs returns the devices whose offline alerts are on.
+func (s *Store) AlertOfflineDeviceIDs(ctx context.Context) (map[int64]bool, error) {
+	out := make(map[int64]bool)
+	err := s.eachRow(ctx, `SELECT id FROM device WHERE alert_offline=?`, func(rows *sql.Rows) error {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		out[id] = true
+		return nil
+	}, true)
+	return out, err
 }

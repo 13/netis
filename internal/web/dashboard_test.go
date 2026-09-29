@@ -76,7 +76,7 @@ func TestDashboardWidgetsRendersStatusAndAttention(t *testing.T) {
 		t.Fatalf("code=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"pihole", "48 leases, 2 new", "unknown-aa:bb:cc:00:00:09", "10.0.0.1"} {
+	for _, want := range []string{"Pi-hole", "48 leases, 2 new", "unknown-aa:bb:cc:00:00:09", "10.0.0.1"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("widgets missing %q", want)
 		}

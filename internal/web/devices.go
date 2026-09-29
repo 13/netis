@@ -448,7 +448,7 @@ func (s *Server) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/devices", http.StatusSeeOther)
+	http.Redirect(w, r, localNext(r.FormValue("next"), "/devices"), http.StatusSeeOther)
 }
 
 func (s *Server) handleDeviceDelete(w http.ResponseWriter, r *http.Request) {
