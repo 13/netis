@@ -249,22 +249,41 @@ templ integrationsTab(d SettingsData) {
 }
 
 // subnetsListTab is the read-only subnet list a viewer sees.
+// scanEvery describes a subnet's periodic scan for the read-only list.
+func scanEvery(sn store.Subnet) string {
+	if !sn.ScanEnabled {
+		return "off"
+	}
+	switch sec := sn.ScanIntervalSec; {
+	case sec > 0 && sec%3600 == 0:
+		return fmt.Sprintf("every %dh", sec/3600)
+	case sec > 0 && sec%60 == 0:
+		return fmt.Sprintf("every %dm", sec/60)
+	default:
+		return fmt.Sprintf("every %ds", sec)
+	}
+}
+
+// subnetsListTab is the viewer's Subnets tab: the subnets as a read-only
+// table, each linked to its grid.
 templ subnetsListTab(d SettingsData) {
 	<h2>Subnets</h2>
 	if len(d.Subnets) == 0 {
 		<p class="muted">No subnets configured.</p>
-	}
-	for _, sn := range d.Subnets {
+	} else {
 		<div class="setting-card">
-			<div class="sc-head">
-				<h3>{ sn.Name }</h3>
-				<span class="mono muted">{ sn.CIDR }</span>
-				<span class="badge">{ sn.Kind }</span>
-				if sn.ScanEnabled {
-					<span class="badge online">auto-scan on</span>
-				} else {
-					<span class="badge">auto-scan off</span>
-				}
+			<div class="table-wrap">
+				<table>
+					<tr><th>Name</th><th>CIDR</th><th>Kind</th><th>Auto-scan</th></tr>
+					for _, sn := range d.Subnets {
+						<tr>
+							<td><a href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a></td>
+							<td class="mono">{ sn.CIDR }</td>
+							<td><span class="badge">{ sn.Kind }</span></td>
+							<td>{ scanEvery(sn) }</td>
+						</tr>
+					}
+				</table>
 			</div>
 		</div>
 	}
