@@ -382,7 +382,7 @@ func sidebar(username string) templ.Component {
 			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<aside class=\"sidebar\"><a href=\"/\" class=\"brand\" aria-label=\"netis dashboard\"><span class=\"mark\"><span class=\"dot\"></span></span> <span class=\"lbl\">netis</span></a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<aside class=\"sidebar\"><a href=\"/\" class=\"brand\" aria-label=\"netis dashboard\"><img class=\"mark\" src=\"/static/icon.svg\" alt=\"\"> <span class=\"lbl\">netis</span></a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -615,7 +615,7 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<div class=\"page\"><header class=\"topbar\"><a href=\"/\" class=\"brand\" aria-label=\"netis dashboard\"><span class=\"mark\"><span class=\"dot\"></span></span></a> <span class=\"topbar-title\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<div class=\"page\"><header class=\"topbar\"><a href=\"/\" class=\"brand\" aria-label=\"netis dashboard\"><img class=\"mark\" src=\"/static/icon.svg\" alt=\"\"></a> <span class=\"topbar-title\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -19,9 +19,21 @@
 			b.setAttribute('aria-pressed', on ? 'true' : 'false');
 		});
 	}
+	// The browser chrome follows the page: with a theme picked, both
+	// theme-color metas (one per OS scheme) take that theme's background;
+	// with none, each goes back to its own scheme's.
+	var chrome = { light: '#ECEEEC', dark: '#161A18' };
+	function tint() {
+		var t = stored();
+		document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+			if (!m.dataset.orig) { m.dataset.orig = m.getAttribute('content'); }
+			m.setAttribute('content', t ? chrome[t] : m.dataset.orig);
+		});
+	}
 	function apply() {
 		document.documentElement.setAttribute('data-theme', stored() || system());
 		mark();
+		tint();
 	}
 	// choose sets the theme to "light", "dark" or "system" (follow the OS).
 	function choose(t) {
@@ -38,6 +50,7 @@
 	}
 	document.querySelectorAll('[data-theme-choice]').forEach(function (el) { el.hidden = false; });
 	mark();
+	tint();
 	document.addEventListener('click', function (e) {
 		var b = e.target.closest('[data-theme-set]');
 		if (b) { choose(b.getAttribute('data-theme-set')); }

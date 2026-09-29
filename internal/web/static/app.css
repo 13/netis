@@ -332,9 +332,7 @@
 
   .brand { display:flex; align-items:center; gap:var(--sp-2); color:var(--fg); font-weight:var(--w-semibold);
            font-size:var(--text-md); text-decoration:none; }
-  .brand .mark { display:grid; place-items:center; width:28px; height:28px; flex:none; border-radius:var(--r-control);
-                 background:var(--surface-2); border:1px solid var(--border); }
-  .brand .mark .dot { width:9px; height:9px; background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .brand .mark { display:block; width:28px; height:28px; flex:none; }
 
   .sidebar { position:sticky; top:0; display:flex; flex-direction:column; gap:var(--sp-1); flex:none; width:224px; height:100vh;
              padding:var(--sp-3); background:var(--surface); border-right:1px solid var(--border); z-index:20; }

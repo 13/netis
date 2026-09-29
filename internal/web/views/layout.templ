@@ -116,7 +116,7 @@ templ accountItems(username string) {
 templ sidebar(username string) {
 	<aside class="sidebar">
 		<a href="/" class="brand" aria-label="netis dashboard">
-			<span class="mark"><span class="dot"></span></span>
+			<img class="mark" src="/static/icon.svg" alt=""/>
 			<span class="lbl">netis</span>
 		</a>
 		@searchButton("")
@@ -189,7 +189,7 @@ templ Layout(title string, username string) {
 			@sidebar(username)
 			<div class="page">
 				<header class="topbar">
-					<a href="/" class="brand" aria-label="netis dashboard"><span class="mark"><span class="dot"></span></span></a>
+					<a href="/" class="brand" aria-label="netis dashboard"><img class="mark" src="/static/icon.svg" alt=""/></a>
 					<span class="topbar-title">{ title }</span>
 					@searchButton("btn-icon")
 				</header>
