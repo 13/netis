@@ -129,6 +129,23 @@ func TestCellPanelContent(t *testing.T) {
 	}
 }
 
+// New device here on a free port opens the shared device dialog with the
+// address and subnet already filled in.
+func TestNewDeviceHereOpensPrefilledDialog(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	panel := htmxRequest(t, srv, st, "GET", fmt.Sprintf("/subnets/%d/cell?ip=10.0.0.3", snID), nil).Body.String()
+	link := fmt.Sprintf("/devices/new?subnet=%d&ip=10.0.0.3", snID)
+	if !strings.Contains(panel, `hx-get="`+strings.ReplaceAll(link, "&", "&amp;")+`" hx-target="#modal"`) {
+		t.Fatalf("panel has no New device here into the dialog: %s", panel)
+	}
+	dlg := htmxRequest(t, srv, st, "GET", link, nil).Body.String()
+	if !strings.Contains(dlg, "<dialog") || !strings.Contains(dlg, `value="10.0.0.3"`) || !strings.Contains(dlg, fmt.Sprintf(`value="%d" selected`, snID)) {
+		t.Fatalf("device dialog not prefilled with the address and subnet: %s", dlg)
+	}
+}
+
 // Without JavaScript a port is a submit button: the page it loads, and a
 // shared ?ip= link, open that port's details and mark it selected.
 func TestCellOpensWithoutJavaScript(t *testing.T) {
