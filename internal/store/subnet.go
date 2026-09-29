@@ -1,6 +1,10 @@
 package store
 
-import "context"
+import (
+	"context"
+	"net/netip"
+	"sort"
+)
 
 type Subnet struct {
 	ID              int64
@@ -28,7 +32,7 @@ func (s *Store) GetSubnet(ctx context.Context, id int64) (Subnet, error) {
 
 func (s *Store) ListSubnets(ctx context.Context) ([]Subnet, error) {
 	rows, err := s.query(ctx, `SELECT id,cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec
-		FROM subnet ORDER BY cidr`)
+		FROM subnet`)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +46,38 @@ func (s *Store) ListSubnets(ctx context.Context) ([]Subnet, error) {
 		}
 		out = append(out, sn)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sortSubnets(out)
+	return out, nil
+}
+
+// sortSubnets orders subnets by network address, numerically rather than as
+// text (10.6.0.0/24 before 10.10.10.0/24), IPv4 before IPv6, and a shorter
+// prefix before a longer one at the same address. A CIDR that does not parse
+// sorts last, by its text.
+func sortSubnets(sns []Subnet) {
+	key := func(sn Subnet) (netip.Prefix, bool) {
+		p, err := netip.ParsePrefix(sn.CIDR)
+		return p.Masked(), err == nil
+	}
+	sort.SliceStable(sns, func(i, j int) bool {
+		a, aok := key(sns[i])
+		b, bok := key(sns[j])
+		switch {
+		case aok != bok:
+			return aok
+		case !aok:
+			return sns[i].CIDR < sns[j].CIDR
+		case a.Addr().Is4() != b.Addr().Is4():
+			return a.Addr().Is4()
+		case a.Addr() != b.Addr():
+			return a.Addr().Less(b.Addr())
+		default:
+			return a.Bits() < b.Bits()
+		}
+	})
 }
 
 func (s *Store) UpdateSubnet(ctx context.Context, sn Subnet) error {
