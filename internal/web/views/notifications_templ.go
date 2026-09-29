@@ -47,7 +47,7 @@ func secretState(stored bool) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if stored {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<span class=\"badge\">stored</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<span class=\"chip\">stored</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -82,7 +82,7 @@ func notificationsTab(n NotifyData) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<h2>Notifications</h2><p class=\"muted\">Events are collected for 30 seconds and sent together, so a scan that finds many devices sends one message. Offline and online alerts are sent only for devices marked \"alert when offline\" on their page.</p><form method=\"post\" action=\"/settings/notifications\"><div class=\"setting-card\"><div class=\"sc-head\"><h3>Webhook</h3></div><div class=\"field-grid\"><label>URL <input type=\"url\" name=\"notify_webhook_url\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<h2>Notifications</h2><p class=\"muted\">Events are collected for 30 seconds and sent together, so a scan that finds many devices sends one message. Offline and online alerts are sent only for devices marked \"alert when offline\" on their page.</p><form method=\"post\" action=\"/settings/notifications\"><div class=\"panel\"><div class=\"panel-head\"><h3>Webhook</h3></div><div class=\"field-grid\"><label>URL <input type=\"url\" name=\"notify_webhook_url\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -95,7 +95,7 @@ func notificationsTab(n NotifyData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" placeholder=\"https://example.lan/hooks/netis\"></label> <label>Authorization header <input type=\"password\" name=\"notify_webhook_auth\" placeholder=\"leave blank to keep current value\" autocomplete=\"off\"></label></div><p class=\"muted\" style=\"margin:0 0 6px\">Stored header:")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" placeholder=\"https://example.lan/hooks/netis\"></label> <label>Authorization header <input type=\"password\" name=\"notify_webhook_auth\" placeholder=\"leave blank to keep current value\" autocomplete=\"off\"></label></div><p class=\"hint\">Stored header:")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -118,20 +118,20 @@ func notificationsTab(n NotifyData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</p><p class=\"muted\" style=\"margin:0\">POSTs JSON: <span class=\"mono\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</p><p class=\"hint\">POSTs JSON: <span class=\"mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(`{event, device, details, time, url}`)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/notifications.templ`, Line: 49, Col: 107}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/notifications.templ`, Line: 49, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span>.</p></div><div class=\"setting-card\"><div class=\"sc-head\"><h3>ntfy</h3></div><div class=\"field-grid\"><label>Topic URL <input type=\"url\" name=\"notify_ntfy_url\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</span>.</p></div><div class=\"panel\"><div class=\"panel-head\"><h3>ntfy</h3></div><div class=\"field-grid\"><label>Topic URL <input type=\"url\" name=\"notify_ntfy_url\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -144,7 +144,7 @@ func notificationsTab(n NotifyData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" placeholder=\"https://ntfy.sh/my-netis-topic\"></label> <label>Access token <input type=\"password\" name=\"notify_ntfy_token\" placeholder=\"leave blank to keep current token\" autocomplete=\"off\"></label></div><p class=\"muted\" style=\"margin:0\">Stored token:")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" placeholder=\"https://ntfy.sh/my-netis-topic\"></label> <label>Access token <input type=\"password\" name=\"notify_ntfy_token\" placeholder=\"leave blank to keep current token\" autocomplete=\"off\"></label></div><p class=\"hint\">Stored token:")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -167,7 +167,7 @@ func notificationsTab(n NotifyData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</p></div><div class=\"setting-card\"><div class=\"sc-head\"><h3>Send for</h3></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</p></div><div class=\"panel\"><div class=\"panel-head\"><h3>Send for</h3></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -226,7 +226,7 @@ func notificationsTab(n NotifyData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div><div class=\"setting-card\"><div class=\"sc-head\"><h3>Links</h3></div><label>netis base URL <input type=\"url\" name=\"notify_base_url\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div><div class=\"panel\"><div class=\"panel-head\"><h3>Links</h3></div><label>netis base URL <input type=\"url\" name=\"notify_base_url\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -239,7 +239,7 @@ func notificationsTab(n NotifyData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" placeholder=\"https://netis.lan\"></label><p class=\"muted\" style=\"margin:6px 0 4px\">Used to link each message to the device or event log. Leave blank to send no links.</p></div><button type=\"submit\" class=\"primary\">Save notifications</button> <button type=\"button\" class=\"ghost\" hx-post=\"/settings/notifications/test\" hx-target=\"#toasts\" hx-swap=\"beforeend\">Send test</button><p class=\"muted\" style=\"margin:6px 0 0\">Send test uses the saved settings.</p></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" placeholder=\"https://netis.lan\"></label><p class=\"hint\">Used to link each message to the device or event log. Leave blank to send no links.</p></div><button type=\"submit\" class=\"btn btn-primary\">Save notifications</button> <button type=\"button\" class=\"btn\" hx-post=\"/settings/notifications/test\" hx-target=\"#toasts\" hx-swap=\"beforeend\">Send test</button><p class=\"hint\">Send test uses the saved settings.</p></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

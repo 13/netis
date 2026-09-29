@@ -107,7 +107,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		oidc:           newOIDCAuth(o.OIDC),
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
-	s.mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
+	s.mux.Handle("GET /static/", staticHandler())
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("POST /login", s.handleLogin)
 	s.mux.HandleFunc("POST /logout", s.handleLogout)
@@ -151,6 +151,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("POST /devices/{id}/ip/kind", s.requireAdmin(s.handleDeviceIPKind))
 	s.mux.HandleFunc("POST /devices/{id}/alert", s.requireAdmin(s.handleDeviceAlert))
 	s.mux.HandleFunc("GET /events", s.handleEventsPage)
+	s.mux.HandleFunc("GET /styleguide", s.handleStyleguide)
 	// JSON for scripts, and Prometheus metrics. /api/ authenticates with the
 	// session cookie or a personal API token; /metrics with the cookie or its
 	// own scrape token. Reads are open to every role, writes are admin-only.

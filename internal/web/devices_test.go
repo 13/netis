@@ -304,7 +304,9 @@ func TestDeviceListShowsStoredIcon(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateDevice(t.Context(), store.Device{Name: "console", Kind: "other", Icon: "🎮", Source: "manual"})
 	body := authedGet(t, srv, st, "/devices").Body.String()
-	if !strings.Contains(body, "🎮") {
+	// An icon picked when the picker offered emoji is drawn as its SVG
+	// replacement.
+	if !strings.Contains(body, `href="/static/icons.svg#gamepad-2"`) {
 		t.Fatal("device list should render the stored icon")
 	}
 }

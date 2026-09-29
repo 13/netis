@@ -120,7 +120,7 @@ func EventsPage(username string, evs []store.Event, typeFilter string) templ.Com
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<h1>Events</h1><form method=\"get\" action=\"/events\"><label>Type <select name=\"type\" onchange=\"this.form.submit()\"><option value=\"\">all</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<h1>Events</h1><form method=\"get\" action=\"/events\" class=\"toolbar\"><label>Type <select name=\"type\" onchange=\"this.form.submit()\"><option value=\"\">all</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -189,7 +189,7 @@ func EventsPage(username string, evs []store.Event, typeFilter string) templ.Com
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</select></label><noscript><button type=\"submit\">Filter</button></noscript></form><div class=\"table-wrap\"><table><tr><th>Time</th><th>Type</th><th>Device</th><th>Details</th></tr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</select></label><noscript><button type=\"submit\" class=\"btn\">Filter</button></noscript></form><div class=\"table-wrap\"><table><tr><th>Time</th><th>Type</th><th>Device</th><th>Details</th></tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -211,7 +211,7 @@ func EventsPage(username string, evs []store.Event, typeFilter string) templ.Com
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var11 = []any{"badge", e.Type}
+				var templ_7745c5c3_Var11 = []any{eventClass(e.Type)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var11...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -236,7 +236,7 @@ func EventsPage(username string, evs []store.Event, typeFilter string) templ.Com
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(e.Type)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/eventspage.templ`, Line: 58, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/eventspage.templ`, Line: 58, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {

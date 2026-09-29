@@ -99,7 +99,7 @@ func WelcomeSubnets(username string, detected []netdetect.Detected) templ.Compon
 					}
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<label>Add another CIDR <input type=\"text\" name=\"manual_cidr\" placeholder=\"192.168.1.0/24\"></label> <button type=\"submit\" class=\"primary\">Continue</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<label>Add another CIDR <input type=\"text\" name=\"manual_cidr\" placeholder=\"192.168.1.0/24\"></label> <button type=\"submit\" class=\"btn btn-primary\">Continue</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -154,7 +154,7 @@ func WelcomeIntegrations(username string, values map[string]string) templ.Compon
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<button type=\"submit\" class=\"primary\">Save &amp; finish</button></form><form method=\"post\" action=\"/welcome/skip\"><button type=\"submit\" class=\"ghost\">Skip for now</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<button type=\"submit\" class=\"btn btn-primary\">Save &amp; finish</button></form><form method=\"post\" action=\"/welcome/skip\"><button type=\"submit\" class=\"btn btn-quiet\">Skip for now</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

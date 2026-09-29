@@ -6,10 +6,11 @@
 		var list = document.getElementById('dev-list');
 		var grid = document.getElementById('dev-grid');
 		if (!list || !grid) { return; }
-		list.style.display = view === 'grid' ? 'none' : '';
-		grid.style.display = view === 'grid' ? '' : 'none';
+		list.hidden = view === 'grid';
+		grid.hidden = view !== 'grid';
 		document.querySelectorAll('#dev-view button').forEach(function (b) {
 			b.classList.toggle('on', b.getAttribute('data-view') === view);
+			b.setAttribute('aria-pressed', b.getAttribute('data-view') === view ? 'true' : 'false');
 		});
 	}
 	show(stored());

@@ -175,15 +175,15 @@ templ integrationsFields(values map[string]string) {
 templ integrationStatus(name string, configured bool, statuses map[string]store.IntegrationStatus) {
 	if st, ok := statuses[name]; ok {
 		if st.OK {
-			<span class="status-line"><span class="pill online"><span class="d"></span>connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
+			<span class="status-line"><span class="status is-online">connected</span> <span class="muted">last worked { relTime(st.LastRun) }</span></span>
 		} else {
-			<span class="status-line"><span class="pill bad"><span class="d"></span>failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
+			<span class="status-line"><span class="status is-error">failing</span> <span class="muted">{ relTime(st.LastRun) }</span></span>
 		}
 		if st.Detail != "" {
-			<p class="muted" style="margin:4px 0 0">{ st.Detail }</p>
+			<p class="hint">{ st.Detail }</p>
 		}
 	} else if configured {
-		<span class="status-line"><span class="pill reserved"><span class="d"></span>configured · not run yet</span></span>
+		<span class="status-line"><span class="status">configured · not run yet</span></span>
 	} else {
 		<span class="status-line"><span class="muted">not configured</span></span>
 	}
@@ -193,24 +193,24 @@ templ integrationStatus(name string, configured bool, statuses map[string]store.
 // one works and when it last ran, without its configuration or the controls.
 templ integrationsStatusTab(d SettingsData) {
 	<h2>Integrations</h2>
-	<div class="setting-card">
-		<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Configured["proxmox"], d.Statuses)
+	<div class="panel">
+		<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Configured["proxmox"], d.Statuses)
 </div>
 	</div>
-	<div class="setting-card">
-		<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Configured["wireguard"], d.Statuses)
+	<div class="panel">
+		<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Configured["wireguard"], d.Statuses)
 </div>
 	</div>
-	<div class="setting-card">
-		<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)
+	<div class="panel">
+		<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)
 </div>
 	</div>
-	<div class="setting-card">
-		<div class="sc-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Configured["adguard"], d.Statuses)
+	<div class="panel">
+		<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Configured["adguard"], d.Statuses)
 </div>
 	</div>
-	<div class="setting-card">
-		<div class="sc-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Configured["opnsense"], d.Statuses)
+	<div class="panel">
+		<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Configured["opnsense"], d.Statuses)
 </div>
 	</div>
 }
@@ -219,32 +219,57 @@ templ integrationsTab(d SettingsData) {
 	<h2>Integrations</h2>
 	<p class="muted">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p>
 	<form method="post" action="/settings/integrations">
-		<div class="setting-card">
-			<div class="sc-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)
-<button type="button" class="ghost" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)
+<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			</div>
 			@proxmoxFields(d.Values)
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)
-<button type="button" class="ghost" hx-post="/settings/integrations/wireguard/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+		<div class="panel">
+			<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)
+<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/wireguard/run" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			</div>
 			@wireguardFields(d.Values)
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)
-<button type="button" class="ghost" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)
+<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			</div>
 			@piholeFields(d.Values)
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Values["adguard_url"] != "", d.Statuses)
-<button type="button" class="ghost" hx-post="/settings/integrations/adguard/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+		<div class="panel">
+			<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Values["adguard_url"] != "", d.Statuses)
+<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/adguard/run" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			</div>
 			@adguardFields(d.Values)
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Values["opnsense_url"] != "", d.Statuses)
-<button type="button" class="ghost" hx-post="/settings/integrations/opnsense/run" hx-target="#toasts" hx-swap="beforeend">Run now</button></div>
+		<div class="panel">
+			<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Values["opnsense_url"] != "", d.Statuses)
+<span class="spacer"></span>
+				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/opnsense/run" hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			</div>
 			@opnsenseFields(d.Values)
 		</div>
-		<button type="submit" class="primary">Save integrations</button>
+		<button type="submit" class="btn btn-primary">Save integrations</button>
 	</form>
 }
 
@@ -271,7 +296,7 @@ templ subnetsListTab(d SettingsData) {
 	if len(d.Subnets) == 0 {
 		<p class="muted">No subnets configured.</p>
 	} else {
-		<div class="setting-card">
+		<div class="panel">
 			<div class="table-wrap">
 				<table>
 					<tr><th>Name</th><th>CIDR</th><th>Kind</th><th>Auto-scan</th></tr>
@@ -279,7 +304,7 @@ templ subnetsListTab(d SettingsData) {
 						<tr>
 							<td><a href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a></td>
 							<td class="mono">{ sn.CIDR }</td>
-							<td><span class="badge">{ sn.Kind }</span></td>
+							<td><span class="chip">{ sn.Kind }</span></td>
 							<td>{ scanEvery(sn) }</td>
 						</tr>
 					}
@@ -292,15 +317,15 @@ templ subnetsListTab(d SettingsData) {
 templ subnetsTab(d SettingsData) {
 	<h2>Subnets</h2>
 	for _, sn := range d.Subnets {
-		<div class="setting-card">
-			<div class="sc-head">
+		<div class="panel">
+			<div class="panel-head">
 				<h3>{ sn.Name }</h3>
 				<span class="mono muted">{ sn.CIDR }</span>
-				<span class="badge">{ sn.Kind }</span>
+				<span class="chip">{ sn.Kind }</span>
 				if sn.ScanEnabled {
-					<span class="badge online">auto-scan on</span>
+					<span class="chip">auto-scan on</span>
 				} else {
-					<span class="badge">auto-scan off</span>
+					<span class="chip">auto-scan off</span>
 				}
 			</div>
 			<form id={ fmt.Sprintf("sn-edit-%d", sn.ID) } method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d", sn.ID)) }>
@@ -329,13 +354,19 @@ templ subnetsTab(d SettingsData) {
 /> Auto-scan (periodic)</label>
 				</div>
 			</form>
-			<div class="sc-actions">
-				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="primary">Save</button>
+			<div class="row">
+				<button type="submit" form={ fmt.Sprintf("sn-edit-%d", sn.ID) } class="btn btn-primary">Save</button>
 				if sn.Kind != "wireguard" {
-					<button type="button" class="ghost" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">Scan</button>
+					<button type="button" class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
+						@Icon("radar", "")
+						Scan
+					</button>
 				}
 				<form method="post" action={ templ.URL(fmt.Sprintf("/settings/subnets/%d/delete", sn.ID)) } class="inline" data-confirm={ "Delete the subnet " + sn.CIDR + " and its IP assignments?" }>
-					<button type="submit" class="ghost">Delete</button>
+					<button type="submit" class="btn btn-danger">
+						@Icon("trash-2", "")
+						Delete
+					</button>
 				</form>
 			</div>
 		</div>
@@ -352,13 +383,16 @@ templ subnetsTab(d SettingsData) {
 					<input type="hidden" name="kind" value="lan"/>
 					<input type="hidden" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/>
 					<input type="hidden" name="scan_enabled" value="on"/>
-					<button type="submit" class="chip-add"><span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span> +</button>
+					<button type="submit" class="chip">
+						@Icon("plus", "")
+						<span class="mono">{ det.CIDR }</span> <span class="muted">({ det.Iface })</span>
+					</button>
 				</form>
 			}
 		</div>
 	}
-	<div class="setting-card">
-		<div class="sc-head"><h3>Add subnet</h3></div>
+	<div class="panel">
+		<div class="panel-head"><h3>Add subnet</h3></div>
 		<form method="post" action="/settings/subnets">
 			<div class="field-grid">
 				<label>CIDR <input type="text" name="cidr" placeholder="192.168.1.0/24" required/></label>
@@ -384,21 +418,21 @@ templ subnetsTab(d SettingsData) {
 	}
 /> Auto-scan (periodic)</label>
 			</div>
-			<button type="submit" class="primary">Add subnet</button>
+			<button type="submit" class="btn btn-primary">Add subnet</button>
 		</form>
 	</div>
 }
 
 templ usersTab(d SettingsData) {
 	<h2>Users</h2>
-	<div class="setting-card">
+	<div class="panel">
 		<div class="table-wrap">
 			<table>
 				<tr><th>Username</th><th>Role</th><th></th></tr>
 				for _, u := range d.Users {
 					<tr>
 						<td>{ u.Username }</td>
-						<td><span class="badge">{ u.Role }</span></td>
+						<td><span class="chip">{ u.Role }</span></td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/role", u.ID)) } class="inline">
 								<select name="role" aria-label={ "Role for " + u.Username }>
@@ -410,15 +444,15 @@ templ usersTab(d SettingsData) {
 										}
 									}
 								</select>
-								<button type="submit" class="ghost">set role</button>
+								<button type="submit" class="btn btn-sm">set role</button>
 							</form>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
 								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
-								<button type="submit" class="ghost">reset password</button>
+								<button type="submit" class="btn btn-sm">reset password</button>
 							</form>
 							if u.ID != d.CurrentUserID {
 								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
-									<button type="submit" class="ghost">delete</button>
+									<button type="submit" class="btn btn-danger btn-sm">delete</button>
 								</form>
 							}
 						</td>
@@ -428,8 +462,8 @@ templ usersTab(d SettingsData) {
 		</div>
 	</div>
 	@myAccount(d)
-	<div class="setting-card">
-		<div class="sc-head"><h3>Add user</h3></div>
+	<div class="panel">
+		<div class="panel-head"><h3>Add user</h3></div>
 		<form method="post" action="/settings/users">
 			<div class="field-grid">
 				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
@@ -442,7 +476,7 @@ templ usersTab(d SettingsData) {
 					</select>
 				</label>
 			</div>
-			<button type="submit" class="primary">Add user</button>
+			<button type="submit" class="btn btn-primary">Add user</button>
 		</form>
 	</div>
 }
@@ -450,8 +484,8 @@ templ usersTab(d SettingsData) {
 // myAccount is the part of the users tab about the signed-in user's own
 // account: sessions and password, which every role manages for itself.
 templ myAccount(d SettingsData) {
-	<div class="setting-card">
-		<div class="sc-head"><h3>My sessions</h3></div>
+	<div class="panel">
+		<div class="panel-head"><h3>My sessions</h3></div>
 		<div class="table-wrap">
 			<table>
 				<tr><th>Signed in</th><th>From</th><th>Browser</th><th>Expires</th><th></th></tr>
@@ -460,7 +494,7 @@ templ myAccount(d SettingsData) {
 						<td>
 							{ sessionStarted(sess) }
 							if sess.ID == d.CurrentSessionID {
-								<span class="badge">this browser</span>
+								<span class="chip">this browser</span>
 							}
 						</td>
 						<td>{ orDash(sess.IP) }</td>
@@ -468,7 +502,7 @@ templ myAccount(d SettingsData) {
 						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
-								<button type="submit" class="ghost">revoke</button>
+								<button type="submit" class="btn btn-sm">revoke</button>
 							</form>
 						</td>
 					</tr>
@@ -476,32 +510,32 @@ templ myAccount(d SettingsData) {
 			</table>
 		</div>
 		<form method="post" action="/settings/sessions/revoke-others" class="inline" data-confirm="Sign out every other session?">
-			<button type="submit" class="ghost">Sign out other sessions</button>
+			<button type="submit" class="btn">Sign out other sessions</button>
 		</form>
 	</div>
 	if d.SSO.Enabled {
-		<div class="setting-card">
-			<div class="sc-head"><h3>Single sign-on</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Single sign-on</h3></div>
 			if d.SSO.Linked {
-				<p class="muted" style="margin:0 0 6px">This account is linked to an SSO account. Linking again replaces the link.</p>
+				<p class="hint">This account is linked to an SSO account. Linking again replaces the link.</p>
 			} else {
-				<p class="muted" style="margin:0 0 6px">Link this account to your SSO account to sign in with it.</p>
+				<p class="hint">Link this account to your SSO account to sign in with it.</p>
 			}
 			<form method="post" action="/settings/sso/link" class="inline">
-				<button type="submit" class="ghost">Link SSO account</button>
+				<button type="submit" class="btn">Link SSO account</button>
 			</form>
 		</div>
 	}
-	<div class="setting-card">
-		<div class="sc-head"><h3>Change my password</h3></div>
+	<div class="panel">
+		<div class="panel-head"><h3>Change my password</h3></div>
 		<form method="post" action="/settings/password">
 			<div class="field-grid">
 				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
 				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
 				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
 			</div>
-			<p class="muted" style="margin:6px 0 4px">Your other sessions are signed out when the password changes.</p>
-			<button type="submit" class="primary">Change password</button>
+			<p class="hint">Your other sessions are signed out when the password changes.</p>
+			<button type="submit" class="btn btn-primary">Change password</button>
 		</form>
 	</div>
 }
@@ -509,10 +543,10 @@ templ myAccount(d SettingsData) {
 templ generalTab(d SettingsData) {
 	<h2>General</h2>
 	<form method="post" action="/settings/general">
-		<div class="setting-card">
-			<div class="sc-head"><h3>Availability</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Availability</h3></div>
 			<label>Offline after (missed scans) <input type="number" name="offline_after" min="1" max="10" value={ generalOfflineAfter(d.Values) }/></label>
-			<p class="muted" style="margin:6px 0 4px">A device is marked offline after this many consecutive missed scans.</p>
+			<p class="hint">A device is marked offline after this many consecutive missed scans.</p>
 			<label>Presence without ping
 				<select name="presence_fallback">
 					if d.Values["presence_fallback"] != "off" {
@@ -524,10 +558,10 @@ templ generalTab(d SettingsData) {
 					}
 				</select>
 			</label>
-			<p class="muted" style="margin:6px 0 4px">On directly attached subnets, a host that ignores ping but answers ARP (confirmed by a TCP connect or a second ARP check) counts as seen.</p>
+			<p class="hint">On directly attached subnets, a host that ignores ping but answers ARP (confirmed by a TCP connect or a second ARP check) counts as seen.</p>
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>Defaults for new subnets</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Defaults for new subnets</h3></div>
 			<div class="field-grid">
 				<label>Default scan interval (s) <input type="number" name="default_scan_interval_sec" min="30" value={ settingOr(d.Values, "default_scan_interval_sec", "120") }/></label>
 				<label>
@@ -555,22 +589,22 @@ templ generalTab(d SettingsData) {
 					</select>
 				</label>
 			</div>
-			<p class="muted" style="margin:6px 0 4px">Prefilled into the Add-subnet form.</p>
+			<p class="hint">Prefilled into the Add-subnet form.</p>
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>Retention</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Retention</h3></div>
 			<div class="field-grid">
 				<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
 				<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
 				<label>Keep audit log (days) <input type="number" name="audit_retention_days" min="0" value={ settingOr(d.Values, "audit_retention_days", "180") }/></label>
 			</div>
-			<p class="muted" style="margin:6px 0 4px">
+			<p class="hint">
 				Older rows are deleted every six hours. Availability history is one row
 				per interface per hour, so it is the fastest-growing table. Set a value
 				to 0 to keep everything.
 			</p>
 		</div>
-		<button type="submit" class="primary">Save</button>
+		<button type="submit" class="btn btn-primary">Save</button>
 	</form>
 }
 
@@ -589,7 +623,7 @@ templ aboutRow(label, value string) {
 
 templ aboutTab(a AboutData) {
 	<div class="cards">
-		<div class="card">
+		<div class="panel">
 			<h3>Build</h3>
 			<table>
 				<tbody>
@@ -614,7 +648,7 @@ templ aboutTab(a AboutData) {
 				</tbody>
 			</table>
 		</div>
-		<div class="card">
+		<div class="panel">
 			<h3>Runtime</h3>
 			<table>
 				<tbody>
@@ -627,7 +661,7 @@ templ aboutTab(a AboutData) {
 				</tbody>
 			</table>
 		</div>
-		<div class="card">
+		<div class="panel">
 			<h3>Dependencies</h3>
 			if len(a.Info.Deps) == 0 {
 				<p class="muted">Not recorded in this binary.</p>

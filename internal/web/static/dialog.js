@@ -2,9 +2,9 @@
 	// Per-kind default icons — mirrors views.kindIcons. Used to keep the icon
 	// picker's selection in sync with the Kind field until the user overrides.
 	var KIND_ICON = {
-		computer: '💻', switch: '🔀', router: '🛜', modem: '📶', phone: '📱',
-		server: '🖥️', printer: '🖨️', iot: '💡', vm: '🧊', lxc: '📦',
-		'wg-peer': '🔒', other: '❓'
+		computer: 'laptop', switch: 'ethernet-port', router: 'router', modem: 'signal',
+		phone: 'smartphone', server: 'server', printer: 'printer', iot: 'lightbulb',
+		vm: 'box', lxc: 'container', 'wg-peer': 'lock', other: 'circle-help'
 	};
 
 	// The control that opened the current dialog, to hand focus back to when
@@ -58,7 +58,7 @@
 		}
 	});
 
-	// Close on ✕ / Cancel ([data-close]) or a click on the backdrop, which
+	// Close on the X / Cancel ([data-close]) or a click on the backdrop, which
 	// reports the <dialog> itself as the target (its content fills the box).
 	document.addEventListener('click', function (e) {
 		if (e.target.closest('[data-close]')) { closeModal(); return; }
@@ -95,7 +95,7 @@
 		var pick = dialog.querySelector('.iconpick');
 		var hidden = dialog.querySelector('input[name=icon]');
 		if (!pick || !hidden) { return; }
-		var newDefault = KIND_ICON[e.target.value] || '❓';
+		var newDefault = KIND_ICON[e.target.value] || 'circle-help';
 		if (hidden.value === pick.dataset.kindDefault) {
 			selectSwatch(pick, newDefault);
 		}

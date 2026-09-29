@@ -408,6 +408,8 @@ curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
 # Create: name and kind are required; mac, ip, subnet_id, tags, notes,
 # vendor, model, function, icon and parent_device_id are optional. Without
 # subnet_id the IP goes into the narrowest configured subnet that holds it.
+# icon names one of the icon picker's choices (e.g. "hard-drive", listed on
+# /styleguide); anything else shows the kind's default icon.
 curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"nas","kind":"server","mac":"aa:bb:cc:00:00:01","ip":"192.168.1.20","tags":["core"]}' \
   $NETIS/api/devices

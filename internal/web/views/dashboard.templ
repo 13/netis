@@ -60,11 +60,11 @@ templ Dashboard(d DashboardData) {
 
 templ DashboardBody(d DashboardData) {
 	<div class="stats">
-		<div class="stat"><span class="num">{ fmt.Sprint(d.Stats.Total) }</span> devices</div>
-		<div class="stat"><span class="num ok">{ fmt.Sprint(d.Stats.Online) }</span> online</div>
-		<div class="stat"><span class="num">{ fmt.Sprint(d.Stats.Offline) }</span> offline</div>
-		<div class="stat"><span class="num warn">{ fmt.Sprint(d.Stats.Unknown) }</span> unknown</div>
-		<div class="stat"><span class="num">{ fmt.Sprint(d.Stats.Subnets) }</span> subnets</div>
+		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Total) }</span> <span class="lbl">devices</span></div>
+		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Online) }</span> <span class="lbl"><span class="dot is-online"></span>online</span></div>
+		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Offline) }</span> <span class="lbl"><span class="dot"></span>offline</span></div>
+		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Unknown) }</span> <span class="lbl"><span class="dot is-new"></span>unknown</span></div>
+		<div class="panel stat"><span class="num">{ fmt.Sprint(d.Stats.Subnets) }</span> <span class="lbl">subnets</span></div>
 	</div>
 	<div class="band">
 		<section class="panel">
@@ -78,9 +78,9 @@ templ DashboardBody(d DashboardData) {
 							<td>{ it.Name }</td>
 							<td>
 								if it.OK {
-									<span class="badge online">ok</span>
+									<span class="status is-online">ok</span>
 								} else {
-									<span class="badge offline">failing</span>
+									<span class="status is-error">failing</span>
 								}
 							</td>
 							<td class="muted">{ relTime(it.LastRun) }</td>
@@ -117,7 +117,10 @@ templ DashboardBody(d DashboardData) {
 	<h2>
 		Subnets
 		if IsAdmin(ctx) {
-			<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan all</button>
+			<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="btn btn-sm">
+				@Icon("radar", "")
+				Scan all
+			</button>
 		}
 	</h2>
 	<div class="cards">
@@ -126,11 +129,12 @@ templ DashboardBody(d DashboardData) {
 		}
 	</div>
 	<h2>Recent events</h2>
+	<div class="table-wrap">
 	<table>
 		for _, e := range d.Events {
 			<tr>
 				<td class="mono">{ e.TS }</td>
-				<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+				<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 				<td>
 					@eventDevice(e)
 				</td>
@@ -138,29 +142,34 @@ templ DashboardBody(d DashboardData) {
 			</tr>
 		}
 	</table>
+	</div>
 }
 
 templ subnetCard(r DashRow) {
-	<div class="card">
-		<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+	<div class="panel">
+		<div class="panel-head">
 			<h3><a href={ templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)) }>{ r.Subnet.Name }</a></h3>
 			<span class="mono muted">{ r.Subnet.CIDR }</span>
 			if r.Subnet.Kind != "wireguard" && IsAdmin(ctx) {
-				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="ghost">Scan</button>
+				<span class="spacer"></span>
+				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="btn btn-sm">
+					@Icon("radar", "")
+					Scan
+				</button>
 			}
 		</div>
-		<div class="occ">
-			<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
-			<i class="res" style={ "width:" + BarPct(r.Unseen, r.Hosts) }></i>
-			<i class="off" style={ "width:" + BarPct(r.Offline, r.Hosts) }></i>
-		</div>
+		<svg class="occ" aria-hidden="true">
+			for _, seg := range occSegments(r) {
+				<rect class={ seg.Class } x={ pct(seg.X) } width={ pct(seg.W) } height="100%"></rect>
+			}
+		</svg>
 		<div class="legend">
-			<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
-			<span><span class="sw" style="background:var(--border-strong)"></span><b>{ fmt.Sprint(r.Offline) }</b> offline</span>
+			<span><span class="sw on"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
+			<span><span class="sw off"></span><b>{ fmt.Sprint(r.Offline) }</b> offline</span>
 			if r.Unseen > 0 {
-				<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Unseen) }</b> not seen yet</span>
+				<span><span class="sw res"></span><b>{ fmt.Sprint(r.Unseen) }</b> not seen yet</span>
 			}
-			<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+			<span><span class="sw free"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
 			<span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
 		</div>
 	</div>

@@ -19,7 +19,7 @@ type NotifyGroup struct {
 
 templ secretState(stored bool) {
 	if stored {
-		<span class="badge">stored</span>
+		<span class="chip">stored</span>
 	} else {
 		<span class="muted">none</span>
 	}
@@ -33,28 +33,28 @@ templ notificationsTab(n NotifyData) {
 		devices marked "alert when offline" on their page.
 	</p>
 	<form method="post" action="/settings/notifications">
-		<div class="setting-card">
-			<div class="sc-head"><h3>Webhook</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Webhook</h3></div>
 			<div class="field-grid">
 				<label>URL <input type="url" name="notify_webhook_url" value={ n.WebhookURL } placeholder="https://example.lan/hooks/netis"/></label>
 				<label>Authorization header <input type="password" name="notify_webhook_auth" placeholder="leave blank to keep current value" autocomplete="off"/></label>
 			</div>
-			<p class="muted" style="margin:0 0 6px">
+			<p class="hint">
 				Stored header:{ " " }
 				@secretState(n.HasWebhookAuth)
 				if n.HasWebhookAuth {
 					<label class="chk"><input type="checkbox" name="notify_webhook_auth_clear"/> clear</label>
 				}
 			</p>
-			<p class="muted" style="margin:0">POSTs JSON: <span class="mono">{ `{event, device, details, time, url}` }</span>.</p>
+			<p class="hint">POSTs JSON: <span class="mono">{ `{event, device, details, time, url}` }</span>.</p>
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>ntfy</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>ntfy</h3></div>
 			<div class="field-grid">
 				<label>Topic URL <input type="url" name="notify_ntfy_url" value={ n.NtfyURL } placeholder="https://ntfy.sh/my-netis-topic"/></label>
 				<label>Access token <input type="password" name="notify_ntfy_token" placeholder="leave blank to keep current token" autocomplete="off"/></label>
 			</div>
-			<p class="muted" style="margin:0">
+			<p class="hint">
 				Stored token:{ " " }
 				@secretState(n.HasNtfyToken)
 				if n.HasNtfyToken {
@@ -62,8 +62,8 @@ templ notificationsTab(n NotifyData) {
 				}
 			</p>
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>Send for</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Send for</h3></div>
 			for _, g := range n.Groups {
 				<label class="chk">
 					<input
@@ -77,13 +77,13 @@ templ notificationsTab(n NotifyData) {
 				</label>
 			}
 		</div>
-		<div class="setting-card">
-			<div class="sc-head"><h3>Links</h3></div>
+		<div class="panel">
+			<div class="panel-head"><h3>Links</h3></div>
 			<label>netis base URL <input type="url" name="notify_base_url" value={ n.BaseURL } placeholder="https://netis.lan"/></label>
-			<p class="muted" style="margin:6px 0 4px">Used to link each message to the device or event log. Leave blank to send no links.</p>
+			<p class="hint">Used to link each message to the device or event log. Leave blank to send no links.</p>
 		</div>
-		<button type="submit" class="primary">Save notifications</button>
-		<button type="button" class="ghost" hx-post="/settings/notifications/test" hx-target="#toasts" hx-swap="beforeend">Send test</button>
-		<p class="muted" style="margin:6px 0 0">Send test uses the saved settings.</p>
+		<button type="submit" class="btn btn-primary">Save notifications</button>
+		<button type="button" class="btn" hx-post="/settings/notifications/test" hx-target="#toasts" hx-swap="beforeend">Send test</button>
+		<p class="hint">Send test uses the saved settings.</p>
 	</form>
 }

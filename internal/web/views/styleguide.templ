@@ -1,0 +1,386 @@
+package views
+
+import "fmt"
+
+// ColorToken is one palette entry from app.css with its value in each theme.
+type ColorToken struct {
+	Name, Light, Dark string
+}
+
+// sgKinds lists the device kinds in picker order, for the icon section.
+var sgKinds = deviceKinds
+
+var sgType = []struct{ Token, Size, Use string }{
+	{"--text-xl", "1.625rem", "Page title"},
+	{"--text-lg", "1.25rem", "Section heading"},
+	{"--text-md", "1rem", "Panel heading"},
+	{"--text-base", "0.875rem", "Body text, table cells, controls"},
+	{"--text-sm", "0.8125rem", "Labels, hints, table headers"},
+	{"--text-xs", "0.75rem", "Chips, status labels, meta"},
+}
+
+var sgSpacing = []struct {
+	Token string
+	Px    int
+}{{"--sp-1", 4}, {"--sp-2", 8}, {"--sp-3", 12}, {"--sp-4", 16}, {"--sp-5", 24}, {"--sp-6", 32}, {"--sp-7", 48}}
+
+var sgStatuses = []struct{ Tone, Label, Use string }{
+	{"is-online", "online", "Link light: answering"},
+	{"is-offline", "offline", "Dim: not seen lately"},
+	{"is-new", "new", "Activity: new device, not reviewed"},
+	{"is-reserved", "reserved", "Activity: address held, no device seen"},
+	{"is-conflict", "conflict", "Fault: two devices on one address"},
+	{"is-missing", "missing upstream", "Hollow activity: integration lost it"},
+	{"is-error", "failing", "Fault: sync or scan failed"},
+	{"", "neutral", "News that is not a state"},
+}
+
+templ sgSection(title string) {
+	<section class="sg-section">
+		<h2>{ title }</h2>
+		{ children... }
+	</section>
+}
+
+templ sgSwatch(c ColorToken) {
+	<div class="sg-swatch">
+		<svg class="chip-color" viewBox="0 0 2 1" preserveAspectRatio="none" aria-hidden="true">
+			<rect width="1" height="1" fill={ c.Light }></rect>
+			<rect x="1" width="1" height="1" fill={ c.Dark }></rect>
+		</svg>
+		<div class="meta">
+			<strong class="mono">--{ c.Name }</strong>
+			<span class="muted mono">{ c.Light } · { c.Dark }</span>
+		</div>
+	</div>
+}
+
+// StyleguidePage is the living style tile at /styleguide: every token and
+// component in the current theme, the reference for the pages built on them.
+templ StyleguidePage(username string, colors []ColorToken) {
+	@Layout("Style guide", username) {
+		<h1>Style guide</h1>
+		<p class="muted">
+			The netis design system, rendered from app.css in the current theme. Use the theme
+			button in the header to check the other. Each swatch shows light · dark.
+		</p>
+		@sgSection("Palette") {
+			<div class="sg-grid">
+				for _, c := range colors {
+					@sgSwatch(c)
+				}
+			</div>
+			<p class="hint">Status colours (link, activity, fault) appear only on status: dots, status labels and grid ports.</p>
+		}
+		@sgSection("Type") {
+			<div class="panel sg-type">
+				<h1>Page title in Plex Sans 600</h1>
+				<h2>Section heading</h2>
+				<h3>Panel heading</h3>
+				<p>Body text at 0.875rem with a 1.5 line height. Numbers are tabular: 1,024 devices, 17 subnets.</p>
+				<p class="muted text-sm">Muted secondary text for hints and meta.</p>
+				<p><span class="mono">192.168.10.24</span> · <span class="mono">aa:bb:cc:dd:ee:ff</span> · <span class="mono">10.0.0.0/24</span> · Plex Mono is for addresses only.</p>
+				<p>Press <kbd>Ctrl</kbd> <kbd>K</kbd> to search, <kbd>/</kbd> to filter.</p>
+			</div>
+			<div class="table-wrap">
+				<table>
+					<thead><tr><th>Token</th><th>Size</th><th>Use</th></tr></thead>
+					<tbody>
+						for _, t := range sgType {
+							<tr><td class="mono">{ t.Token }</td><td class="mono">{ t.Size }</td><td>{ t.Use }</td></tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		@sgSection("Spacing and radius") {
+			<div class="panel">
+				<div class="sg-spacing">
+					for _, sp := range sgSpacing {
+						<div>
+							<span class="mono">{ sp.Token }</span>
+							<svg width={ fmt.Sprint(sp.Px) } height="8" aria-hidden="true"><rect width="100%" height="8" rx="2" class="sg-bar"></rect></svg>
+							<span>{ fmt.Sprint(sp.Px) }px</span>
+						</div>
+					}
+				</div>
+				<p class="hint">Radius: 4px on controls (buttons, inputs, chips), 8px on panels, dialogs and toasts. Panels have a hairline and no shadow; only overlays cast one.</p>
+			</div>
+		}
+		@sgSection("Icons") {
+			<h3>Device kinds</h3>
+			<div class="sg-icons">
+				for _, k := range sgKinds {
+					<div>
+						@deviceIcon("", k, "")
+						{ k }
+					</div>
+				}
+			</div>
+			<h3>Icon picker</h3>
+			<div class="sg-icons">
+				for _, n := range IconChoices {
+					<div>
+						@Icon(n, iconTone(n))
+						{ n }
+					</div>
+				}
+			</div>
+			<h3>Interface</h3>
+			<div class="sg-icons">
+				for _, n := range uiIcons {
+					<div>
+						@Icon(n, "")
+						{ n }
+					</div>
+				}
+			</div>
+		}
+		@sgSection("Buttons") {
+			<div class="panel">
+				for _, size := range []string{"btn-sm", "", "btn-lg"} {
+					<div class="sg-row">
+						<button type="button" class={ "btn", "btn-primary", size }>Save changes</button>
+						<button type="button" class={ "btn", size }>Cancel</button>
+						<button type="button" class={ "btn", "btn-quiet", size }>Skip</button>
+						<button type="button" class={ "btn", "btn-danger", size }>
+							@Icon("trash-2", "")
+							Delete
+						</button>
+						<button type="button" class={ "btn", "btn-icon", size } aria-label="Refresh">
+							@Icon("refresh-cw", "")
+						</button>
+						<button type="button" class={ "btn", "btn-quiet", "btn-icon", size } aria-label="More">
+							@Icon("ellipsis", "")
+						</button>
+					</div>
+				}
+				<div class="sg-row">
+					<button type="button" class="btn btn-primary">
+						@Icon("plus", "")
+						New device
+					</button>
+					<button type="button" class="btn">
+						@Icon("radar", "")
+						Scan now
+					</button>
+					<button type="button" class="btn btn-primary" disabled>Disabled</button>
+					<button type="button" class="btn" disabled>Disabled</button>
+					<a class="btn" href="#buttons">A link as a button</a>
+				</div>
+			</div>
+		}
+		@sgSection("Chips, status and counts") {
+			<div class="panel">
+				<div class="sg-row">
+					<span class="chip">homelab</span>
+					<span class="chip">server</span>
+					<span class="chip static">static</span>
+					<span class="chip dhcp">dhcp</span>
+					<span class="chip">
+						@Icon("bell", "")
+						offline alerts on
+					</span>
+					<button type="button" class="chip">
+						@Icon("plus", "")
+						<span class="mono">10.0.20.0/24</span>
+					</button>
+				</div>
+				<div class="table-wrap">
+					<table>
+						<thead><tr><th>Status label</th><th>Dot</th><th>Meaning</th></tr></thead>
+						<tbody>
+							for _, st := range sgStatuses {
+								<tr>
+									<td><span class={ "status", st.Tone }>{ st.Label }</span></td>
+									<td><span class={ "dot", st.Tone }></span></td>
+									<td class="muted">{ st.Use }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+				<div class="sg-row">
+					<span>Events <span class="count">12</span></span>
+					<span>New <span class="count is-new">3</span></span>
+					<span>Conflicts <span class="count is-conflict">1</span></span>
+				</div>
+			</div>
+		}
+		@sgSection("Panel and table") {
+			<div class="panel">
+				<div class="panel-head">
+					<h3>Integrations</h3>
+					<span class="status is-online">connected</span>
+					<span class="muted">last worked 4 min ago</span>
+					<span class="spacer"></span>
+					<button type="button" class="btn btn-sm">
+						@Icon("refresh-cw", "")
+						Run now
+					</button>
+				</div>
+				<p class="muted">A panel groups one topic. Hairline border, 8px radius, 16px padding.</p>
+			</div>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr><th>Device</th><th>IP</th><th>Lease</th><th>Status</th><th class="num">Ports</th><th>Last seen</th></tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td>
+								<div class="dev">
+									@deviceIcon("", "server", "")
+									<a href="#table">nas</a>
+								</div>
+							</td>
+							<td class="mono">10.0.0.5</td>
+							<td><span class="chip static">static</span></td>
+							<td><span class="status is-online">online</span></td>
+							<td class="num">4</td>
+							<td class="muted">2 min ago</td>
+						</tr>
+						<tr>
+							<td>
+								<div class="dev">
+									@deviceIcon("", "phone", "")
+									<a href="#table">pixel-8</a>
+									<span class="status is-new">new</span>
+								</div>
+							</td>
+							<td class="mono">10.0.0.61</td>
+							<td><span class="chip dhcp">dhcp</span></td>
+							<td><span class="status is-offline">offline</span></td>
+							<td class="num">0</td>
+							<td class="muted">3 h ago</td>
+						</tr>
+						<tr>
+							<td>
+								<div class="dev">
+									@deviceIcon("", "other", "")
+									<a href="#table">unknown-host</a>
+								</div>
+							</td>
+							<td class="mono">10.0.0.99</td>
+							<td><span class="chip dhcp">dhcp</span></td>
+							<td><span class="status is-conflict">conflict</span></td>
+							<td class="num">1</td>
+							<td class="muted">just now</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		}
+		@sgSection("Form fields") {
+			<div class="panel">
+				<div class="field-grid">
+					<label>
+						Name
+						<input type="text" value="nas" autocomplete="off"/>
+					</label>
+					<div class="field">
+						<label for="sg-ip">IP address</label>
+						<input id="sg-ip" type="text" class="mono" value="10.0.0.300" aria-invalid="true" aria-describedby="sg-ip-err"/>
+						<span id="sg-ip-err" class="field-error">Not an IPv4 address.</span>
+					</div>
+					<label>
+						Kind
+						<select>
+							for _, k := range deviceKinds {
+								<option>{ k }</option>
+							}
+						</select>
+					</label>
+				</div>
+				<div class="field">
+					<label for="sg-notes">Notes</label>
+					<textarea id="sg-notes" placeholder="Where it lives, what it runs"></textarea>
+					<p class="hint">Shown under the name on the device page.</p>
+				</div>
+				<label><input type="checkbox" checked/> Auto-scan this subnet</label>
+				<p class="form-error" role="alert">That address is already assigned to printer.</p>
+				<div class="row">
+					<button type="button" class="btn btn-primary">Save changes</button>
+					<button type="button" class="btn">Cancel</button>
+				</div>
+			</div>
+		}
+		@sgSection("Segmented control and tabs") {
+			<div class="panel">
+				<div class="sg-row">
+					<div class="seg">
+						<button type="button" class="on" aria-pressed="true">
+							@Icon("list", "")
+							List
+						</button>
+						<button type="button" aria-pressed="false">
+							@Icon("layout-grid", "")
+							Tiles
+						</button>
+					</div>
+				</div>
+				<nav class="tabs" aria-label="Example tabs">
+					<a class="tab active" href="#tabs">Network</a>
+					<a class="tab" href="#tabs">Integrations</a>
+					<a class="tab" href="#tabs">Users</a>
+					<a class="tab" href="#tabs">About</a>
+				</nav>
+			</div>
+		}
+		@sgSection("Toast and dialog") {
+			<div class="toasts sg-demo-toasts">
+				<div class="toast">
+					@Icon("check", "")
+					Scan started for 10.0.0.0/24
+				</div>
+			</div>
+			<div class="dialog sg-demo-dialog" role="group" aria-label="Example dialog">
+				<div class="dh">
+					<h3>Delete device</h3>
+					<button type="button" class="btn btn-quiet btn-icon btn-sm" aria-label="Close">
+						@Icon("x", "")
+					</button>
+				</div>
+				<div class="db">
+					<p>Delete nas and everything recorded about it? This cannot be undone.</p>
+				</div>
+				<div class="df">
+					<button type="button" class="btn">Cancel</button>
+					<button type="button" class="btn btn-danger">Delete device</button>
+				</div>
+			</div>
+		}
+		@sgSection("Empty state and loading") {
+			<div class="cards">
+				<div class="panel">
+					<div class="empty">
+						@Icon("network", "")
+						<h3>No subnets yet</h3>
+						<p>Add the network netis should scan. It finds the devices on it by itself.</p>
+						<a class="btn btn-primary" href="#empty">
+							@Icon("plus", "")
+							Add subnet
+						</a>
+					</div>
+				</div>
+				<div class="panel stack" aria-busy="true" aria-label="Loading">
+					<span class="skeleton"></span>
+					<span class="skeleton"></span>
+					<span class="skeleton"></span>
+				</div>
+			</div>
+		}
+		@sgSection("Subnet grid ports") {
+			<div class="panel legend-sq">
+				<span class="sq online" aria-hidden="true"></span> online
+				<span class="sq offline" aria-hidden="true"></span> offline
+				<span class="sq reserved" aria-hidden="true"></span> reserved
+				<span class="sq" aria-hidden="true"></span> free
+				<span class="sq conflict" aria-hidden="true"></span> conflict
+				<span class="sq edge" aria-hidden="true"></span> network/broadcast
+				<span class="sq static" aria-hidden="true"></span> static
+				<span class="sq dhcp" aria-hidden="true"></span> dhcp
+			</div>
+		}
+	}
+}

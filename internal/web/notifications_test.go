@@ -148,7 +148,7 @@ func TestNotificationsTabRendersSecretState(t *testing.T) {
 	if strings.Contains(body, "@secretState") {
 		t.Fatal("raw templ call rendered into the page")
 	}
-	if !strings.Contains(body, `Stored header: <span class="muted">none</span>`) || !strings.Contains(body, `Stored token: <span class="badge">stored</span>`) {
+	if !strings.Contains(body, `Stored header: <span class="muted">none</span>`) || !strings.Contains(body, `Stored token: <span class="chip">stored</span>`) {
 		t.Fatal("stored-credential state missing")
 	}
 }

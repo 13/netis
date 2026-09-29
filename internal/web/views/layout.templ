@@ -59,12 +59,20 @@ templ Layout(title string, username string) {
 					<a href="/settings">Settings</a>
 				</div>
 				<div class="right">
-					<span class="who">{ username }</span>
-					<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+					<span class="who">
+						@Icon("user", "")
+						{ username }
+					</span>
+					<button type="button" id="theme-toggle" class="btn btn-quiet btn-sm theme-toggle" aria-label="Toggle theme">
+						@Icon("sun", "i-sun")
+						@Icon("moon", "i-moon")
 						<span class="tglabel">Theme</span>
 					</button>
 					<form method="post" action="/logout" class="logout">
-						<button type="submit">Logout</button>
+						<button type="submit" class="btn btn-quiet btn-sm">
+							@Icon("log-out", "")
+							Logout
+						</button>
 					</form>
 				</div>
 			</nav>

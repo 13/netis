@@ -28,7 +28,7 @@ templ eventDevice(e store.Event) {
 templ EventsPage(username string, evs []store.Event, typeFilter string) {
 	@Layout("Events", username) {
 		<h1>Events</h1>
-		<form method="get" action="/events">
+		<form method="get" action="/events" class="toolbar">
 			<label>
 				Type
 				<select name="type" onchange="this.form.submit()">
@@ -42,7 +42,7 @@ templ EventsPage(username string, evs []store.Event, typeFilter string) {
 					}
 				</select>
 			</label>
-			<noscript><button type="submit">Filter</button></noscript>
+			<noscript><button type="submit" class="btn">Filter</button></noscript>
 		</form>
 		<div class="table-wrap">
 			<table>
@@ -55,7 +55,7 @@ templ EventsPage(username string, evs []store.Event, typeFilter string) {
 				for _, e := range evs {
 					<tr>
 						<td class="mono">{ e.TS }</td>
-						<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+						<td><span class={ eventClass(e.Type) }>{ e.Type }</span></td>
 						<td>
 							@eventDevice(e)
 						</td>
