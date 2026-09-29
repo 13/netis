@@ -73,10 +73,10 @@ func (s *Sync) reconcile(ctx context.Context, seen map[int64]bool) {
 		return
 	}
 	for _, d := range gone {
-		s.events.Emit(ctx, "device_missing", &d.ID, fmt.Sprintf("proxmox guest %s is no longer in Proxmox", d.Name))
+		s.events.Emit(ctx, "device_missing", &d.ID, fmt.Sprintf("Proxmox guest %s is no longer in Proxmox", d.Name))
 	}
 	for _, d := range back {
-		s.events.Emit(ctx, "device_returned", &d.ID, fmt.Sprintf("proxmox guest %s is back in Proxmox", d.Name))
+		s.events.Emit(ctx, "device_returned", &d.ID, fmt.Sprintf("Proxmox guest %s is back in Proxmox", d.Name))
 	}
 }
 
@@ -126,7 +126,7 @@ func (s *Sync) upsertGuest(ctx context.Context, g Guest, nodeID int64) (int64, e
 		if err != nil {
 			return 0, err
 		}
-		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("proxmox guest %s (%d)", g.Name, g.VMID))
+		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("Proxmox guest %s (%d)", g.Name, g.VMID))
 	} else if err := s.store.SetProxmoxGuestParent(ctx, devID, nodeID); err != nil {
 		return devID, err
 	}

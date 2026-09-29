@@ -146,7 +146,7 @@ func TestFailureIsRecordedAndAnnouncedOnce(t *testing.T) {
 	if !strings.HasPrefix(stat.Summary(), "failed at ") {
 		t.Errorf("summary = %q", stat.Summary())
 	}
-	if got := ev.got(); !slices.Equal(got, []string{"scan_error: scheduled backup failing"}) {
+	if got := ev.got(); !slices.Equal(got, []string{"scan_error: Scheduled backup failing"}) {
 		t.Errorf("events = %v, want one scan_error", got)
 	}
 

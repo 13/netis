@@ -149,6 +149,7 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 		return data, err
 	}
 	data.Integrations = statuses
+	data.Unscanned = unscanned(rows, statuses)
 	for _, st := range statuses {
 		if st.OK {
 			continue
@@ -179,6 +180,26 @@ func (s *Server) assembleDashboard(r *http.Request) (views.DashboardData, error)
 	}
 	data.Days = views.GroupEventsByDay(evs, time.Now())
 	return data, nil
+}
+
+// unscanned reports whether nothing has been scanned yet: there is no subnet,
+// or there are subnets a sweep covers and the scanner has never recorded a
+// run. A WireGuard subnet is read from its server, never swept.
+func unscanned(rows []views.DashRow, statuses []store.IntegrationStatus) bool {
+	if len(rows) == 0 {
+		return true
+	}
+	for _, st := range statuses {
+		if st.Name == "scan" {
+			return false
+		}
+	}
+	for _, row := range rows {
+		if row.Subnet.Kind != "wireguard" {
+			return true
+		}
+	}
+	return false
 }
 
 // failureDetail puts a stored failure detail ("timeout", "auth failed: 401

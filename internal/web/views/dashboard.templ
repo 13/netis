@@ -105,6 +105,10 @@ type DashboardData struct {
 	Days         []EventDay
 	// Setup is the Finish setup panel, nil when it is not shown.
 	Setup *SetupStatus
+	// Unscanned says nothing has been looked at yet: there is no subnet, or
+	// none of the subnets a sweep covers has been scanned. Zero counts then
+	// mean "not known yet", not "all clear".
+	Unscanned bool
 }
 
 // attentionCount is how many items need the user, the unlisted new devices
@@ -158,7 +162,9 @@ templ DashboardBody(d DashboardData) {
 // count as a link to the list behind it. A zero count keeps its LED dark.
 templ healthStrip(d DashboardData) {
 	<nav class="health panel" aria-label="Network health">
-		if d.attentionCount() == 0 {
+		if d.attentionCount() == 0 && d.Unscanned {
+			<p class="health-sum is-idle"><span class="dot"></span>Nothing scanned yet</p>
+		} else if d.attentionCount() == 0 {
 			<p class="health-sum is-online"><span class="dot"></span>All clear</p>
 		} else {
 			<a class="health-sum is-new" href="#attention"><span class="dot"></span>{ plural(d.attentionCount(), "item needs you", "items need you") }</a>
@@ -199,7 +205,15 @@ templ attentionPanel(d DashboardData) {
 		<div class="panel-head">
 			<h2 id="attn-h">Needs attention</h2>
 		</div>
-		if d.attentionCount() == 0 {
+		if d.attentionCount() == 0 && d.Unscanned {
+			<div class="attn-clear is-idle">
+				@Icon("radar", "icon-lg")
+				<div>
+					<p class="attn-clear-h">Nothing scanned yet</p>
+					<p class="muted">Conflicts, failing syncs and new devices show up here once a subnet has been scanned.</p>
+				</div>
+			</div>
+		} else if d.attentionCount() == 0 {
 			<div class="attn-clear">
 				@Icon("check", "icon-lg")
 				<div>

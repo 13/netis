@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"mime/multipart"
+	"regexp"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -268,5 +269,15 @@ func TestDeviceListExportImportButtons(t *testing.T) {
 	page := viewerGet(t, srv, st, "/devices/import")
 	if strings.Contains(page, `type="file"`) || !strings.Contains(page, "needs the admin role") {
 		t.Error("viewer import page offers the upload form")
+	}
+}
+
+// The import page leads back to the device list like the device page does.
+func TestImportPageHasBackLink(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	body := authedGet(t, srv, st, "/devices/import").Body.String()
+	if !regexp.MustCompile(`<a class="dd-back" href="/devices">.*?Devices</a>`).MatchString(body) {
+		t.Error("import page has no back link to Devices")
 	}
 }

@@ -21,6 +21,8 @@ func TestEventInfoNamesEveryKind(t *testing.T) {
 		{"scan_error", "pihole sync failing: timeout", "sync_failed", "Sync failed", "is-error"},
 		{"scan_error", "opnsense sync failing: configuration error", "sync_failed", "Sync failed", "is-error"},
 		{"scan_error", "scheduled backup failing", "backup_failed", "Backup failed", "is-error"},
+		{"scan_error", "Scheduled backup failing", "backup_failed", "Backup failed", "is-error"},
+		{"scan_error", "Subnet 10.0.0.0/24: sendto: operation not permitted", "scan_failed", "Scan failed", "is-error"},
 		{"sync_recovered", "pihole sync working again", "sync_recovered", "Sync recovered", "is-online"},
 		{"device_missing", "", "device_missing", "Gone upstream", "is-missing"},
 		{"device_returned", "", "device_returned", "Back upstream", "is-online"},
@@ -75,7 +77,7 @@ func TestEventKindFilter(t *testing.T) {
 	if f, _ := EventKindFilter("sync_failed"); f.Type != "scan_error" || len(f.DetailPrefixes) != len(IntegrationTitles) {
 		t.Errorf("sync_failed = %+v", f)
 	}
-	if f, _ := EventKindFilter("scan_failed"); f.Type != "scan_error" || len(f.NotDetailPrefixes) != len(IntegrationTitles)+1 {
+	if f, _ := EventKindFilter("scan_failed"); f.Type != "scan_error" || len(f.NotDetailPrefixes) != len(IntegrationTitles)+2 {
 		t.Errorf("scan_failed = %+v", f)
 	}
 	if f, ok := EventKindFilter("scan_error"); !ok || f.Type != "scan_error" || f.DetailPrefixes != nil || f.NotDetailPrefixes != nil {

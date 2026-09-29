@@ -18,9 +18,8 @@
   .ev { display:grid; grid-template-columns:9.5rem minmax(7rem, 13rem) minmax(0, 1fr) 5.5rem; gap:var(--sp-3);
         align-items:center; padding:var(--sp-2) var(--sp-3); border-top:1px solid var(--border); }
   .ev:first-child { border-top:0; }
-  /* An event with no device gives its details the device's column too. */
-  .ev-dev:empty { display:none; }
-  .ev-dev:empty + .ev-detail { grid-column:2 / 4; }
+  /* An event with no device leaves the device column empty, so details
+     always start in the same place. */
   .ev-dev { min-width:0; overflow-wrap:anywhere; }
   .ev-dev a { font-weight:var(--w-medium); text-decoration:none; }
   .ev-dev a:hover { text-decoration:underline; }
@@ -50,7 +49,7 @@
     .ev-time { grid-area:time; }
     .ev-dev { grid-area:dev; }
     .ev-detail { grid-area:detail; }
-    .ev-dev:empty + .ev-detail { grid-area:detail; }
+    .ev-dev:empty { display:none; }
     .ev-kind + .ev-dev { margin-top:var(--sp-1); }
     .pager .btn { min-height:44px; }
   }

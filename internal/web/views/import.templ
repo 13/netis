@@ -73,6 +73,10 @@ templ importTable(v ImportView) {
 
 templ ImportPage(username string, v ImportView) {
 	@Layout("Import devices", username) {
+		<a class="dd-back" href="/devices">
+			@Icon("arrow-left", "")
+			Devices
+		</a>
 		<h1>Import devices</h1>
 		if v.Error != "" {
 			<p class="form-error" role="alert">{ Sentence(v.Error) }</p>

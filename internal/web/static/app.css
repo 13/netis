@@ -573,7 +573,6 @@
     .sidebar { display:none; }
     .topbar { position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:var(--sp-3); height:52px;
               padding:0 var(--sp-2) 0 var(--sp-3); background:var(--surface); border-bottom:1px solid var(--border); }
-    .topbar-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--w-semibold); }
     .topbar .search-btn { width:44px; height:44px; justify-content:center; padding:0; border:0; background:none; }
     .topbar .search-btn .lbl { display:none; }
     .topbar .search-btn .icon { width:20px; height:20px; }
@@ -613,7 +612,7 @@
     .btn-icon, .btn-icon.btn-sm { width:44px; }
     .seg button { height:38px; }
     .menu-item { min-height:44px; }
-    .topbar .brand { width:44px; height:44px; justify-content:center; }
+    .topbar .brand { min-width:44px; height:44px; }
     .subnav-links a { min-height:44px; display:flex; align-items:center; }
     nav.tabs .tab { min-height:44px; display:inline-flex; align-items:center; }
     .disclosure > summary, .subnet-row > summary { min-height:44px; }

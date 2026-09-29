@@ -348,3 +348,21 @@ func mustID(t *testing.T, s string) int64 {
 	}
 	return n
 }
+
+// On a phone a stacked device row is one tap target for the device: the
+// name link stretches over the row (unclipped by the ellipsis box), with the
+// checkbox and Approve stacked above it.
+func TestStackedDeviceRowIsOneTapTarget(t *testing.T) {
+	srv, st := testServer(t)
+	css := authedGet(t, srv, st, "/static/pages/devices.css").Body.String()
+	for _, want := range []string{
+		".devtable tr { position:relative; }",
+		".devtable.devtable .dev-name a { position:static; }",
+		".devtable.devtable .dev-name a::after { content:\"\"; position:absolute; inset:0;",
+		".devtable td.col-sel, .devtable td.col-act { position:relative; z-index:1; }",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("devices.css missing %q", want)
+		}
+	}
+}

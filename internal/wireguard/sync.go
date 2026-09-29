@@ -92,10 +92,10 @@ func (s *Sync) reconcile(ctx context.Context, seen map[int64]bool, now time.Time
 		return
 	}
 	for _, d := range gone {
-		s.events.Emit(ctx, "device_missing", &d.ID, fmt.Sprintf("wireguard peer %s was removed from the server", d.Name))
+		s.events.Emit(ctx, "device_missing", &d.ID, fmt.Sprintf("WireGuard peer %s was removed from the server", d.Name))
 	}
 	for _, d := range back {
-		s.events.Emit(ctx, "device_returned", &d.ID, fmt.Sprintf("wireguard peer %s is back on the server", d.Name))
+		s.events.Emit(ctx, "device_returned", &d.ID, fmt.Sprintf("WireGuard peer %s is back on the server", d.Name))
 	}
 }
 
@@ -134,7 +134,7 @@ func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, n
 		if err != nil {
 			return 0, err
 		}
-		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("wireguard peer %s", name))
+		s.events.Emit(ctx, "device_new", &devID, fmt.Sprintf("WireGuard peer %s", name))
 	} else {
 		ifaces, err := s.store.ListIfaces(ctx, devID)
 		if err != nil || len(ifaces) == 0 {
@@ -154,13 +154,13 @@ func (s *Sync) upsertPeer(ctx context.Context, p Peer, subnets []store.Subnet, n
 		wasOffline, _ := s.store.MarkSeen(ctx, ifaceID, 0, now)
 		if wasOffline {
 			d, _ := s.store.GetDevice(ctx, devID)
-			s.events.Emit(ctx, "online", &devID, fmt.Sprintf("wg peer %s connected", d.Name))
+			s.events.Emit(ctx, "online", &devID, fmt.Sprintf("WireGuard peer %s connected", d.Name))
 		}
 	} else {
 		went, _ := s.store.MarkMissed(ctx, ifaceID, 1)
 		if went {
 			d, _ := s.store.GetDevice(ctx, devID)
-			s.events.Emit(ctx, "offline", &devID, fmt.Sprintf("wg peer %s disconnected", d.Name))
+			s.events.Emit(ctx, "offline", &devID, fmt.Sprintf("WireGuard peer %s disconnected", d.Name))
 		}
 	}
 	return devID, nil

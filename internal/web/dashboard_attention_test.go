@@ -107,6 +107,8 @@ func TestDashboardAllClear(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.CreateSubnet(t.Context(), store.Subnet{Name: "LAN", CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 300})
+	st.SetIntegrationStatus(t.Context(), store.IntegrationStatus{Name: "scan", LastRun: "2026-09-29T10:00:00Z", OK: true})
 	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +119,37 @@ func TestDashboardAllClear(t *testing.T) {
 	body := authedGet(t, srv, st, "/").Body.String()
 	if strings.Count(body, "All clear") < 2 {
 		t.Error("an empty attention list does not say all clear")
+	}
+	if strings.Contains(body, "Nothing scanned yet") {
+		t.Error("a scanned network says nothing was scanned")
+	}
+}
+
+// Before anything is scanned the zero counts mean "not known yet": the
+// dashboard says so instead of all clear, with or without subnets.
+func TestDashboardNothingScannedYet(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	check := func(when string) {
+		t.Helper()
+		body := authedGet(t, srv, st, "/").Body.String()
+		if strings.Contains(body, "All clear") {
+			t.Errorf("%s: says all clear", when)
+		}
+		if strings.Count(body, "Nothing scanned yet") < 2 {
+			t.Errorf("%s: health strip and attention list do not say nothing was scanned", when)
+		}
+	}
+	check("no subnets")
+	st.CreateSubnet(t.Context(), store.Subnet{Name: "LAN", CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 300})
+	check("subnet never scanned")
+
+	// A network with only a WireGuard subnet has nothing to sweep.
+	srv2, st2 := testServer(t)
+	st2.SetSetting(t.Context(), "onboarded", "1")
+	st2.CreateSubnet(t.Context(), store.Subnet{Name: "WG", CIDR: "10.6.0.0/24", Kind: "wireguard", ScanIntervalSec: 300})
+	if body := authedGet(t, srv2, st2, "/").Body.String(); !strings.Contains(body, "All clear") {
+		t.Error("a WireGuard-only network waits for a scan that never comes")
 	}
 }
 

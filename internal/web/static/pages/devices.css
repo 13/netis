@@ -148,6 +148,14 @@
     .devtable.devtable.devtable :is(td.col-kind, td.col-seen, td.opt) { display:none; }
     .devtable .dev { min-width:0; }
     .devtable .dev-name a { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+    /* The name link stretches over its whole row, so a tap anywhere on the
+       row opens the device. The link is not positioned, so its box (which
+       clips the long name) does not clip the stretched area; the row is. The
+       checkbox and Approve sit above it and keep their own taps. */
+    .devtable tr { position:relative; }
+    .devtable.devtable .dev-name a { position:static; }
+    .devtable.devtable .dev-name a::after { content:""; position:absolute; inset:0; height:auto; transform:none; }
+    .devtable td.col-sel, .devtable td.col-act { position:relative; z-index:1; }
     .devtable .tree-indent { width:8px; }
     .devtable.devtable tr.is-child td.col-ip { padding-left:58px; }
     .devgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }

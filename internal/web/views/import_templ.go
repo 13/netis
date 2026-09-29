@@ -330,35 +330,43 @@ func ImportPage(username string, v ImportView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<h1>Import devices</h1>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<a class=\"dd-back\" href=\"/devices\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("arrow-left", "").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "Devices</a><h1>Import devices</h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if v.Error != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<p class=\"form-error\" role=\"alert\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<p class=\"form-error\" role=\"alert\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(Sentence(v.Error))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/import.templ`, Line: 78, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/import.templ`, Line: 82, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if !IsAdmin(ctx) {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<p class=\"muted\">Importing devices needs the admin role. You can still <a href=\"/api/export/devices.csv\">export the inventory as CSV</a>.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<p class=\"muted\">Importing devices needs the admin role. You can still <a href=\"/api/export/devices.csv\">export the inventory as CSV</a>.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -367,7 +375,7 @@ func ImportPage(username string, v ImportView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, " ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -375,7 +383,7 @@ func ImportPage(username string, v ImportView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, " <p><a class=\"btn btn-primary\" href=\"/devices\">Back to devices</a></p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " <p><a class=\"btn btn-primary\" href=\"/devices\">Back to devices</a></p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -384,7 +392,7 @@ func ImportPage(username string, v ImportView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, " ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -392,35 +400,35 @@ func ImportPage(username string, v ImportView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " <form method=\"post\" action=\"/devices/import\" enctype=\"multipart/form-data\" class=\"inline\"><input type=\"hidden\" name=\"csv\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, " <form method=\"post\" action=\"/devices/import\" enctype=\"multipart/form-data\" class=\"inline\"><input type=\"hidden\" name=\"csv\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.CSV)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/import.templ`, Line: 90, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/import.templ`, Line: 94, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"> <input type=\"hidden\" name=\"commit\" value=\"1\"> <button type=\"submit\" class=\"btn btn-primary\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\"> <input type=\"hidden\" name=\"commit\" value=\"1\"> <button type=\"submit\" class=\"btn btn-primary\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if v.Creates+v.Updates == 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, " disabled")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " disabled")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, ">Import</button></form><a class=\"btn btn-quiet\" href=\"/devices/import\">Choose another file</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, ">Import</button></form><a class=\"btn btn-quiet\" href=\"/devices/import\">Choose another file</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"panel\"><form method=\"post\" action=\"/devices/import\" enctype=\"multipart/form-data\"><label>CSV file <input type=\"file\" name=\"file\" accept=\".csv,text/csv\" required></label><p class=\"hint\">Devices are matched by MAC address. The first row names the columns: <span class=\"mono\">mac</span> (required), and any of <span class=\"mono\">name, kind, ip, tags, notes, vendor, model, function</span>. An <a href=\"/api/export/devices.csv\">export</a> can be edited and imported as it is.</p><p class=\"hint\">A new MAC creates a manual device (it needs a name; an IP must fall in a configured subnet). A known MAC only fills in what the device is missing: notes, vendor, model and function where empty, and tags are added. Names and kinds change only on unreviewed scan discoveries; devices from integrations and reviewed devices keep theirs.</p><button type=\"submit\" class=\"btn btn-primary\">Preview import</button></form></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<div class=\"panel\"><form method=\"post\" action=\"/devices/import\" enctype=\"multipart/form-data\"><label>CSV file <input type=\"file\" name=\"file\" accept=\".csv,text/csv\" required></label><p class=\"hint\">Devices are matched by MAC address. The first row names the columns: <span class=\"mono\">mac</span> (required), and any of <span class=\"mono\">name, kind, ip, tags, notes, vendor, model, function</span>. An <a href=\"/api/export/devices.csv\">export</a> can be edited and imported as it is.</p><p class=\"hint\">A new MAC creates a manual device (it needs a name; an IP must fall in a configured subnet). A known MAC only fills in what the device is missing: notes, vendor, model and function where empty, and tags are added. Names and kinds change only on unreviewed scan discoveries; devices from integrations and reviewed devices keep theirs.</p><button type=\"submit\" class=\"btn btn-primary\">Preview import</button></form></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

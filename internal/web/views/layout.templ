@@ -197,9 +197,15 @@ templ Layout(title string, username string) {
 			<a class="skip" href="#main">Skip to content</a>
 			@sidebar(username)
 			<div class="page">
+				// The phone top bar carries the mark and search only: each page
+				// names itself in its own h1 right below, so a title here would
+				// say it twice.
 				<header class="topbar">
-					<a href="/" class="brand" aria-label="netis dashboard"><img class="mark" src="/static/icon.svg" alt=""/></a>
-					<span class="topbar-title">{ title }</span>
+					<a href="/" class="brand" aria-label="netis dashboard">
+						<img class="mark" src="/static/icon.svg" alt=""/>
+						<span class="lbl">netis</span>
+					</a>
+					<span class="grow"></span>
 					@searchButton("btn-icon")
 				</header>
 				<main id="main">
