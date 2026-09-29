@@ -51,13 +51,17 @@ func TestEventsPageFilters(t *testing.T) {
 	st.AddEvent(ctx, "offline", &tv, "tv-detail")
 	st.AddEvent(ctx, "scan_error", nil, "pihole sync failing: timeout")
 	st.AddEvent(ctx, "scan_error", nil, "subnet 10.0.0.0/24: boom")
+	// A failed backup, as written now and as written before sentence case.
+	st.AddEvent(ctx, "scan_error", nil, "Scheduled backup failing")
+	st.AddEvent(ctx, "scan_error", nil, "scheduled backup failing")
 	if _, err := st.DB.Exec(`INSERT INTO event (ts,type,details) VALUES ('2020-01-01T12:00:00Z','online','old-detail')`); err != nil {
 		t.Fatal(err)
 	}
 
 	cases := map[string]struct{ want, not []string }{
 		"/events?type=sync_failed":                        {[]string{"Pi-hole: timeout", "Sync failed"}, []string{"boom", "nas-detail"}},
-		"/events?type=scan_failed":                        {[]string{"boom", "Scan failed"}, []string{"Pi-hole: timeout"}},
+		"/events?type=scan_failed":                        {[]string{"boom", "Scan failed"}, []string{"Pi-hole: timeout", "backup failing"}},
+		"/events?type=backup_failed":                      {[]string{"Scheduled backup failing", "scheduled backup failing"}, []string{"boom"}},
 		"/events?type=scan_error":                         {[]string{"boom", "Pi-hole: timeout"}, []string{"nas-detail"}},
 		"/events?device=NAS":                              {[]string{"nas-detail"}, []string{"tv-detail", "boom"}},
 		"/events?from=2020-01-01&to=2020-01-01":           {[]string{"old-detail"}, []string{"nas-detail"}},

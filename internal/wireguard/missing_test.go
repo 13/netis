@@ -87,6 +87,12 @@ func testSyncFlagsPeersMissingUpstream(t *testing.T, st *store.Store) {
 	if n := countEvents(t, st, "device_returned"); n != 1 {
 		t.Fatalf("device_returned events = %d, want 1", n)
 	}
+	evs, _ := st.ListEvents(t.Context(), 100)
+	for _, e := range evs {
+		if !strings.HasPrefix(e.Details, "WireGuard peer ") {
+			t.Errorf("%s details = %q, want sentence case", e.Type, e.Details)
+		}
+	}
 	if rows, _ := st.ListDevices(t.Context()); len(rows) != 2 {
 		t.Fatalf("devices = %d, want 2 (nothing deleted)", len(rows))
 	}

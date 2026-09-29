@@ -193,7 +193,7 @@ func (s *Scheduler) record(ctx context.Context, at time.Time, name string, err e
 	if announce && s.events != nil {
 		ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		s.events.Emit(ectx, "scan_error", nil, "scheduled backup failing")
+		s.events.Emit(ectx, "scan_error", nil, "Scheduled backup failing")
 	}
 }
 

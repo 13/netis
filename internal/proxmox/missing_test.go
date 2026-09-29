@@ -96,8 +96,8 @@ func testSyncFlagsGuestsMissingUpstream(t *testing.T, st *store.Store) {
 	if missing(100) != nil {
 		t.Fatal("listed guest marked missing")
 	}
-	if evs := eventsOfType(t, st, "device_missing"); len(evs) != 1 {
-		t.Fatalf("device_missing events = %+v, want exactly one", evs)
+	if evs := eventsOfType(t, st, "device_missing"); len(evs) != 1 || evs[0].Details != "Proxmox guest db is no longer in Proxmox" {
+		t.Fatalf("device_missing events = %+v, want exactly one, in sentence case", evs)
 	}
 	if rows, _ := st.ListDevices(t.Context()); len(rows) != 3 {
 		t.Fatalf("devices = %d, want node + 2 guests (nothing deleted)", len(rows))
@@ -117,7 +117,7 @@ func testSyncFlagsGuestsMissingUpstream(t *testing.T, st *store.Store) {
 	if missing(101) != nil {
 		t.Fatal("returned guest still marked missing")
 	}
-	if evs := eventsOfType(t, st, "device_returned"); len(evs) != 1 {
-		t.Fatalf("device_returned events = %+v, want exactly one", evs)
+	if evs := eventsOfType(t, st, "device_returned"); len(evs) != 1 || evs[0].Details != "Proxmox guest db is back in Proxmox" {
+		t.Fatalf("device_returned events = %+v, want exactly one, in sentence case", evs)
 	}
 }

@@ -63,8 +63,12 @@ func EventKinds() []EventKind {
 }
 
 // backupFailing is the details of the scan_error the backup scheduler raises
-// (internal/backup).
-const backupFailing = "scheduled backup failing"
+// (internal/backup). Events recorded before details were written in sentence
+// case carry legacyBackupFailing; both are kept apart from failed scans.
+const (
+	backupFailing       = "Scheduled backup failing"
+	legacyBackupFailing = "scheduled backup failing"
+)
 
 // syncFailingPrefixes are the details prefixes of the scan_error an
 // integration raises when its sync starts failing ("pihole sync failing:
@@ -85,7 +89,7 @@ func eventKey(e store.Event) string {
 	if e.Type != "scan_error" {
 		return e.Type
 	}
-	if e.Details == backupFailing {
+	if e.Details == backupFailing || e.Details == legacyBackupFailing {
 		return "backup_failed"
 	}
 	for _, p := range syncFailingPrefixes() {
@@ -208,11 +212,11 @@ func dayLabel(day, today time.Time) string {
 func EventKindFilter(key string) (f store.EventFilter, ok bool) {
 	switch key {
 	case "scan_failed":
-		return store.EventFilter{Type: "scan_error", NotDetailPrefixes: append(syncFailingPrefixes(), backupFailing)}, true
+		return store.EventFilter{Type: "scan_error", NotDetailPrefixes: append(syncFailingPrefixes(), backupFailing, legacyBackupFailing)}, true
 	case "sync_failed":
 		return store.EventFilter{Type: "scan_error", DetailPrefixes: syncFailingPrefixes()}, true
 	case "backup_failed":
-		return store.EventFilter{Type: "scan_error", DetailPrefixes: []string{backupFailing}}, true
+		return store.EventFilter{Type: "scan_error", DetailPrefixes: []string{backupFailing, legacyBackupFailing}}, true
 	case "scan_error":
 		return store.EventFilter{Type: "scan_error"}, true
 	}

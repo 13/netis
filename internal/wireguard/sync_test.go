@@ -3,6 +3,7 @@ package wireguard
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,16 @@ func testSyncCreatesPeersAndStatus(t *testing.T, st *store.Store) {
 	}
 	if byName["10.6.0.3"].Online {
 		t.Fatal("peerB (no handshake) must be offline")
+	}
+	// Event details are written in sentence case.
+	evs, _ := st.ListEvents(t.Context(), 100)
+	for _, e := range evs {
+		if !strings.HasPrefix(e.Details, "WireGuard peer ") {
+			t.Errorf("%s details = %q, want it to start with %q", e.Type, e.Details, "WireGuard peer ")
+		}
+	}
+	if len(evs) == 0 {
+		t.Error("no events recorded")
 	}
 }
 

@@ -74,7 +74,7 @@ func logStoreErr(op string, ifaceID int64, err error) {
 func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	swept, err := e.Sweeper.Sweep(ctx, sn.CIDR)
 	if err != nil {
-		e.Events.Emit(ctx, "scan_error", nil, fmt.Sprintf("subnet %s: %v", sn.CIDR, err))
+		e.Events.Emit(ctx, "scan_error", nil, fmt.Sprintf("Subnet %s: %v", sn.CIDR, err))
 		return err
 	}
 	sweptAt := time.Now()
@@ -229,7 +229,7 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	logStoreErr("MarkSeen", ifID, err)
 	logStoreErr("RecordAvailability", ifID,
 		e.Store.RecordAvailability(ctx, ifID, true, bucket))
-	msg := fmt.Sprintf("new device %s at %s", name, r.IP)
+	msg := fmt.Sprintf("New device %s at %s", name, r.IP)
 	if private {
 		msg += " (randomized MAC — may be a phone with Private Wi-Fi Address)"
 	}

@@ -87,6 +87,10 @@ func TestAutoCreatesUnknownDevice(t *testing.T) {
 	if len(evs) != 1 || evs[0].Type != "device_new" {
 		t.Fatalf("events=%+v", evs)
 	}
+	// Details are written in sentence case.
+	if want := "New device unknown-bc:24:11:00:00:01 at 10.0.0.9"; evs[0].Details != want {
+		t.Errorf("details = %q, want %q", evs[0].Details, want)
+	}
 }
 
 func TestOfflineAfterThreeMisses(t *testing.T) {
@@ -426,7 +430,7 @@ func TestSweepErrorAppliesNoMisses(t *testing.T) {
 		t.Fatal("a failed sweep must not mark devices missed")
 	}
 	evs, _ := st.ListEvents(t.Context(), 1)
-	if len(evs) != 1 || evs[0].Type != "scan_error" {
+	if len(evs) != 1 || evs[0].Type != "scan_error" || !strings.HasPrefix(evs[0].Details, "Subnet ") {
 		t.Fatalf("events=%+v", evs)
 	}
 }

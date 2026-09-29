@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"netis/internal/events"
@@ -50,6 +51,17 @@ func testSyncUpsertsGuestsIdempotently(t *testing.T, st *store.Store) {
 	cfs, _ := st.ListCustomFields(t.Context(), vm.ID)
 	if len(cfs) != 1 || cfs[0].Key != "proxmox_status" || cfs[0].Value != "running" {
 		t.Fatalf("cfs=%+v", cfs)
+	}
+	// Each new guest is announced once, in sentence case.
+	evs, _ := st.ListEvents(t.Context(), 100)
+	var news []string
+	for _, e := range evs {
+		if e.Type == "device_new" {
+			news = append(news, e.Details)
+		}
+	}
+	if !slices.Contains(news, "Proxmox guest nas-vm (100)") {
+		t.Errorf("device_new details = %q, want %q among them", news, "Proxmox guest nas-vm (100)")
 	}
 }
 
