@@ -89,8 +89,7 @@ jobs:
 
   # The README sells netis as a single static binary; until this job existed a
   # release shipped only a container image, so running it without Docker meant
-  # building it yourself. The images are amd64 only, so the arm64 tarball is how
-  # an arm64 machine runs a released build.
+  # building it yourself. Like the image, it is built for linux/amd64 only.
   binaries:
     needs: test
     runs-on: ubuntu-latest
@@ -118,17 +117,15 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           mkdir -p dist
-          for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
-              -ldflags="-s -w \
-                -X netis/internal/buildinfo.Version=${version} \
-                -X netis/internal/buildinfo.Commit=${COMMIT} \
-                -X netis/internal/buildinfo.Build=${BUILD} \
-                -X netis/internal/buildinfo.Date=${DATE}" \
-              -o "dist/netis" ./cmd/netis
-            tar -czf "dist/netis_${version}_linux_${arch}.tar.gz" -C dist netis -C .. LICENSE README.md
-            rm dist/netis
-          done
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags="-s -w \
+              -X netis/internal/buildinfo.Version=${version} \
+              -X netis/internal/buildinfo.Commit=${COMMIT} \
+              -X netis/internal/buildinfo.Build=${BUILD} \
+              -X netis/internal/buildinfo.Date=${DATE}" \
+            -o "dist/netis" ./cmd/netis
+          tar -czf "dist/netis_${version}_linux_amd64.tar.gz" -C dist netis -C .. LICENSE README.md
+          rm dist/netis
           cd dist && sha256sum ./*.tar.gz > SHA256SUMS
 
       - name: attach to release

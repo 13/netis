@@ -117,9 +117,9 @@ deletion of the account that made them.
 
 ## Install
 
-Every `v*` tag publishes static Linux binaries (amd64 and arm64) to the GitHub
-release, alongside a `SHA256SUMS` file. The container images are amd64 only, so
-on an arm64 machine use the binary:
+Every `v*` tag publishes a static Linux amd64 binary to the GitHub release,
+alongside a `SHA256SUMS` file. Releases are amd64 only; on another architecture,
+build from source (see Quick start).
 
 ```sh
 tar -xzf netis_<version>_linux_amd64.tar.gz
