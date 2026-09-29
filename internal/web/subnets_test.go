@@ -26,7 +26,7 @@ func TestSubnetsIndexEmptyState(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	body := authedGet(t, srv, st, "/subnets").Body.String()
-	if !strings.Contains(body, "No subnets yet") || !strings.Contains(body, "/settings?tab=subnets") {
+	if !strings.Contains(body, "No subnets yet") || !strings.Contains(body, `href="/settings/network"`) {
 		t.Errorf("empty state missing: %s", body)
 	}
 }

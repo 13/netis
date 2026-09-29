@@ -86,37 +86,35 @@ func TestViewerSettingsHideAdminConfig(t *testing.T) {
 	for _, v := range integrationConfig {
 		forbidden = append(forbidden, v)
 	}
-	for _, tab := range []string{"", "subnets", "integrations", "users", "general", "about"} {
-		body := viewerGet(t, srv, st, "/settings?tab="+tab)
+	// Nor does any page a viewer can open link into the Admin area.
+	forbidden = append(forbidden, "/settings/network", "/settings/integrations", "/settings/notifications",
+		`"/settings/users"`, "/settings/audit", "/settings/system", "Manage subnets", "Scan all subnets")
+	for _, path := range []string{"/settings/account", "/settings/sessions", "/settings/tokens", "/", "/subnets", "/devices"} {
+		body := viewerGet(t, srv, st, path)
 		for _, f := range forbidden {
 			if strings.Contains(body, f) {
-				t.Errorf("tab %q shows a viewer %q", tab, f)
+				t.Errorf("%s shows a viewer %q", path, f)
 			}
 		}
 	}
+	// And asking for an admin page directly is refused.
+	for _, path := range []string{"/settings/network", "/settings/integrations", "/settings/notifications",
+		"/settings/users", "/settings/audit", "/settings/system"} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("viewer GET %s: code=%d, want 403", path, rec.Code)
+		}
+	}
 
-	integrations := viewerGet(t, srv, st, "/settings?tab=integrations")
-	for _, want := range []string{"Proxmox", "failing", "connection failed", "WireGuard", "Pi-hole"} {
-		if !strings.Contains(integrations, want) {
-			t.Errorf("viewer integrations tab missing status %q", want)
-		}
+	account := viewerGet(t, srv, st, "/settings/account")
+	if !strings.Contains(account, `action="/settings/password"`) {
+		t.Error("viewer account page missing the password form")
 	}
-	account := viewerGet(t, srv, st, "/settings?tab=users")
-	for _, want := range []string{`action="/settings/password"`, "My sessions", "/settings/sessions/revoke-others"} {
-		if !strings.Contains(account, want) {
-			t.Errorf("viewer account tab missing %q", want)
-		}
-	}
-	// The viewer's subnets are a read-only table, not edit cards with their
-	// forms taken out, each linked to its grid.
-	subnets := viewerGet(t, srv, st, "/settings?tab=subnets")
-	for _, want := range []string{"10.0.0.0/24", `">lab</a>`, "every 2m", "<th>Auto-scan</th>"} {
-		if !strings.Contains(subnets, want) {
-			t.Errorf("viewer subnets tab missing %q", want)
-		}
-	}
-	if strings.Contains(subnets, `class="sc-head"`) {
-		t.Error("viewer subnets tab renders empty edit cards")
+	if sessions := viewerGet(t, srv, st, "/settings/sessions"); !strings.Contains(sessions, "/settings/sessions/revoke-others") {
+		t.Error("viewer sessions page missing sign out other sessions")
 	}
 }
 
@@ -124,7 +122,7 @@ func TestAdminSettingsStillShowConfig(t *testing.T) {
 	srv, st := testServer(t)
 	seedSettingsForViewer(t, st)
 
-	integrations := authedGet(t, srv, st, "/settings?tab=integrations").Body.String()
+	integrations := authedGet(t, srv, st, "/settings/integrations").Body.String()
 	for _, v := range integrationConfig {
 		if !strings.Contains(integrations, v) {
 			t.Errorf("admin integrations tab missing %q", v)
@@ -135,14 +133,14 @@ func TestAdminSettingsStillShowConfig(t *testing.T) {
 			t.Errorf("admin integrations tab missing %q", want)
 		}
 	}
-	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
-	for _, want := range []string{"carol", "reset password", "Add user", `action="/settings/password"`} {
+	users := authedGet(t, srv, st, "/settings/users").Body.String()
+	for _, want := range []string{"carol", "Reset password", "Add user"} {
 		if !strings.Contains(users, want) {
 			t.Errorf("admin users tab missing %q", want)
 		}
 	}
-	if general := authedGet(t, srv, st, "/settings?tab=general").Body.String(); !strings.Contains(general, `action="/settings/general"`) {
-		t.Error("admin general tab missing its form")
+	if network := authedGet(t, srv, st, "/settings/network").Body.String(); !strings.Contains(network, `action="/settings/general"`) {
+		t.Error("admin network page missing the scanning form")
 	}
 }
 

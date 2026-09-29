@@ -149,10 +149,10 @@ func TestLayoutHasThemeToggleAndBootstrap(t *testing.T) {
 		t.Fatalf("code=%d", rec.Code)
 	}
 	for _, want := range []string{
-		`id="theme-toggle"`, // the toggle control
-		`data-theme`,        // the no-flash bootstrap sets it
-		`/static/theme.js`,  // toggle + active-nav script
-		`class="brand"`,     // restyled nav
+		`data-theme-set="system"`, // the theme choice in the account menu
+		`data-theme`,              // the no-flash bootstrap sets it
+		`/static/theme.js`,        // theme choice script
+		`class="brand"`,           // the netis mark
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard layout missing %q", want)

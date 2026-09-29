@@ -8,7 +8,7 @@ import (
 
 var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 
-// SettingsData is the view-model for the settings page. Values never contains
+// SettingsData is the view-model for a settings page. Values never contains
 // an integration secret (proxmox_secret, pihole_password, adguard_password,
 // opnsense_secret) — those fields always render blank so the stored secrets
 // are never echoed back.
@@ -26,7 +26,9 @@ type SettingsData struct {
 	// Configured says which integrations have settings, by name. Viewers get
 	// this and not Values, which is left empty for them.
 	Configured map[string]bool
-	ActiveTab  string
+	// ActiveTab is the settings page shown: one of the settingsSections
+	// keys ("account", "network", ...).
+	ActiveTab string
 	Detected   []netdetect.Detected
 	Statuses   map[string]store.IntegrationStatus
 	About      AboutData
@@ -74,62 +76,102 @@ type BackupView struct {
 	Failed bool
 }
 
-templ tabLink(active, tab, label string) {
-	if active == tab {
-		<a class="tab active" href={ templ.URL("/settings?tab=" + tab) }>{ label }</a>
-	} else {
-		<a class="tab" href={ templ.URL("/settings?tab=" + tab) }>{ label }</a>
+// settingsSection is one page of Settings in the secondary navigation.
+type settingsSection struct {
+	Key, Label string
+}
+
+// accountSections are the settings every account has; adminSections only an
+// admin sees, and only an admin can open.
+var (
+	accountSections = []settingsSection{
+		{"account", "Profile"}, {"sessions", "Sessions"}, {"tokens", "API tokens"},
 	}
+	adminSections = []settingsSection{
+		{"network", "Network"}, {"integrations", "Integrations"}, {"notifications", "Notifications"},
+		{"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
+	}
+)
+
+// settingsTitle is the heading of the settings page for key.
+func settingsTitle(key string) string {
+	for _, sec := range append(accountSections, adminSections...) {
+		if sec.Key == key {
+			if key == "account" {
+				return "Account"
+			}
+			return sec.Label
+		}
+	}
+	return "Settings"
+}
+
+templ settingsLink(active string, sec settingsSection) {
+	<li><a
+		href={ templ.SafeURL("/settings/" + sec.Key) }
+		if active == sec.Key {
+			aria-current="page"
+		}
+	>{ sec.Label }</a></li>
+}
+
+// settingsNav is the secondary navigation: a list down the left on wide
+// screens, wrapping rows of links on a phone. The Admin group is left out
+// for a viewer.
+templ settingsNav(active string) {
+	<nav class="subnav" aria-label="Settings">
+		<div class="subnav-group">
+			<span class="subnav-h" id="subnav-account">Account</span>
+			<ul class="subnav-links" aria-labelledby="subnav-account">
+				for _, sec := range accountSections {
+					@settingsLink(active, sec)
+				}
+			</ul>
+		</div>
+		if IsAdmin(ctx) {
+			<div class="subnav-group">
+				<span class="subnav-h" id="subnav-admin">Admin</span>
+				<ul class="subnav-links" aria-labelledby="subnav-admin">
+					for _, sec := range adminSections {
+						@settingsLink(active, sec)
+					}
+				</ul>
+			</div>
+		}
+	</nav>
 }
 
 templ SettingsPage(username string, d SettingsData) {
-	@Layout("Settings", username) {
-		<h1>Settings</h1>
-		<nav class="tabs">
-			@tabLink(d.ActiveTab, "subnets", "Subnets")
-			@tabLink(d.ActiveTab, "integrations", "Integrations")
-			if IsAdmin(ctx) {
-				@tabLink(d.ActiveTab, "users", "Users")
-				@tabLink(d.ActiveTab, "general", "General")
-				@tabLink(d.ActiveTab, "notifications", "Notifications")
-				@tabLink(d.ActiveTab, "audit", "Audit")
-			} else {
-				@tabLink(d.ActiveTab, "users", "Account")
-			}
-			@tabLink(d.ActiveTab, "tokens", "API tokens")
-			@tabLink(d.ActiveTab, "about", "About")
-		</nav>
-		if d.Error != "" {
-			<p class="form-error" role="alert">{ d.Error }</p>
-		}
-		if d.ActiveTab == "tokens" {
-			@tokensTab(d)
-		} else if !IsAdmin(ctx) {
-			if d.ActiveTab == "subnets" {
-				@subnetsListTab(d)
-			} else if d.ActiveTab == "integrations" {
-				@integrationsStatusTab(d)
-			} else if d.ActiveTab == "users" {
-				<h2>Account</h2>
-				@myAccount(d)
-			} else if d.ActiveTab == "about" {
-				@aboutTab(d.About)
-			}
-		} else if d.ActiveTab == "subnets" {
-			@subnetsTab(d)
-		} else if d.ActiveTab == "integrations" {
-			@integrationsTab(d)
-		} else if d.ActiveTab == "users" {
-			@usersTab(d)
-		} else if d.ActiveTab == "general" {
-			@generalTab(d)
-		} else if d.ActiveTab == "notifications" {
-			@notificationsTab(d.Notify)
-		} else if d.ActiveTab == "audit" {
-			@auditTab(d.Audit)
-		} else if d.ActiveTab == "about" {
-			@aboutTab(d.About)
-		}
+	@Layout(settingsTitle(d.ActiveTab)+" · Settings", username) {
+		<div class="settings">
+			@settingsNav(d.ActiveTab)
+			<div class="settings-body">
+				<h1>{ settingsTitle(d.ActiveTab) }</h1>
+				if d.Error != "" {
+					<p class="form-error" role="alert">{ d.Error }</p>
+				}
+				switch d.ActiveTab {
+					case "sessions":
+						@sessionsSection(d)
+					case "tokens":
+						@tokensTab(d)
+					case "network":
+						@networkSection(d)
+					case "integrations":
+						@integrationsTab(d)
+					case "notifications":
+						@notificationsTab(d.Notify)
+					case "users":
+						@usersTab(d)
+					case "audit":
+						@auditTab(d.Audit)
+					case "system":
+						@systemSection(d)
+					default:
+						@accountSection(username, d)
+				}
+			</div>
+		</div>
 	}
 }
 

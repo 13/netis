@@ -17,7 +17,7 @@ func TestNotificationsTabIsAdminOnly(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.SetSetting(t.Context(), notify.KeyWebhookURL, "https://hooks.internal/netis")
 
-	admin := authedGet(t, srv, st, "/settings?tab=notifications").Body.String()
+	admin := authedGet(t, srv, st, "/settings/notifications").Body.String()
 	for _, want := range []string{`action="/settings/notifications"`, "https://hooks.internal/netis",
 		`hx-post="/settings/notifications/test"`, `name="notify_offline"`} {
 		if !strings.Contains(admin, want) {
@@ -25,11 +25,18 @@ func TestNotificationsTabIsAdminOnly(t *testing.T) {
 		}
 	}
 
-	viewer := viewerGet(t, srv, st, "/settings?tab=notifications")
-	for _, leak := range []string{"tab=notifications", "hooks.internal", "/settings/notifications"} {
+	viewer := viewerGet(t, srv, st, "/settings/account")
+	for _, leak := range []string{"hooks.internal", "/settings/notifications"} {
 		if strings.Contains(viewer, leak) {
 			t.Errorf("viewer settings page contains %q", leak)
 		}
+	}
+	req := httptest.NewRequest("GET", "/settings/notifications", nil)
+	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "viewertok"})
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden || strings.Contains(rec.Body.String(), "hooks.internal") {
+		t.Errorf("viewer GET /settings/notifications: code=%d, want 403", rec.Code)
 	}
 }
 
@@ -52,14 +59,14 @@ func TestNotificationsSave(t *testing.T) {
 		"notify_base_url":     {"https://netis.lan"},
 		"notify_device_new":   {"on"},
 		"notify_ip_conflict":  {"on"},
-	}), "/settings?tab=notifications")
+	}), "/settings/notifications")
 	if get(notify.KeyWebhookURL) != "https://hooks.lan/x" || get(notify.KeyWebhookAuth) != "Bearer abc" ||
 		get(notify.KeyNtfyToken) != "tk" || get("notify_device_new") != "1" || get("notify_offline") != "0" {
 		t.Fatal("settings not stored as submitted")
 	}
 
 	// The credentials are never echoed back into the page.
-	body := authedGet(t, srv, st, "/settings?tab=notifications").Body.String()
+	body := authedGet(t, srv, st, "/settings/notifications").Body.String()
 	if strings.Contains(body, "Bearer abc") || strings.Contains(body, `value="tk"`) {
 		t.Fatal("stored credential rendered into the form")
 	}
@@ -144,7 +151,7 @@ func TestNotificationsTabRendersSecretState(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.SetSetting(t.Context(), notify.KeyNtfyToken, "tk")
 
-	body := authedGet(t, srv, st, "/settings?tab=notifications").Body.String()
+	body := authedGet(t, srv, st, "/settings/notifications").Body.String()
 	if strings.Contains(body, "@secretState") {
 		t.Fatal("raw templ call rendered into the page")
 	}

@@ -32,7 +32,7 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/sessions", http.StatusSeeOther)
 }
 
 // handleSessionRevokeOthers signs the user out everywhere except here, the
@@ -51,5 +51,5 @@ func (s *Server) handleSessionRevokeOthers(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/sessions", http.StatusSeeOther)
 }

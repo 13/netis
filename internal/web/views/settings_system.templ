@@ -55,10 +55,6 @@ templ aboutTab(a AboutData) {
 						<td class="muted">Server time</td>
 						<td>{ serverTime(a.Now) }</td>
 					</tr>
-					<tr>
-						<td class="muted">Last backup</td>
-						<td>@backupLine(a.Backup)</td>
-					</tr>
 				</tbody>
 			</table>
 		</div>
@@ -98,4 +94,34 @@ templ backupLine(b BackupView) {
 	} else {
 		@Time(b.At) <span class="muted">({ b.File })</span>
 	}
+}
+
+// systemSection is the admin's System page: how long history is kept, how
+// backups are doing, and what build is running.
+templ systemSection(d SettingsData) {
+	<form method="post" action="/settings/general" class="panel">
+		<input type="hidden" name="section" value="system"/>
+		<div class="panel-head"><h2>Retention</h2></div>
+		<div class="field-grid narrow">
+			<label>Keep events (days) <input type="number" name="event_retention_days" min="0" value={ settingOr(d.Values, "event_retention_days", "30") }/></label>
+			<label>Keep availability history (days) <input type="number" name="availability_retention_days" min="0" value={ settingOr(d.Values, "availability_retention_days", "365") }/></label>
+			<label>Keep audit log (days) <input type="number" name="audit_retention_days" min="0" value={ settingOr(d.Values, "audit_retention_days", "180") }/></label>
+		</div>
+		<p class="hint">
+			Older rows are deleted every six hours. Availability history is one row per interface per
+			hour, so it grows fastest. 0 keeps everything.
+		</p>
+		<button type="submit" class="btn btn-primary">Save retention</button>
+	</form>
+	<section class="panel">
+		<div class="panel-head"><h2>Backups</h2></div>
+		<dl class="facts">
+			<dt>Last backup</dt>
+			<dd>
+				@backupLine(d.About.Backup)
+			</dd>
+		</dl>
+	</section>
+	<h2>About</h2>
+	@aboutTab(d.About)
 }

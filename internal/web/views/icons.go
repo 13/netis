@@ -93,7 +93,8 @@ var uiIcons = []string{
 	"moon", "monitor", "chevron-down", "chevron-right", "x", "check", "triangle-alert",
 	"trash-2", "pencil", "external-link", "copy", "power", "wifi", "network", "server",
 	"shield", "bell", "key", "list", "layout-grid", "clock", "filter", "ellipsis",
-	"arrow-left", "download", "upload", "circle-help",
+	"arrow-left", "download", "upload", "circle-help", "layout-dashboard", "activity",
+	"sun-moon", "keyboard", "corner-down-left", "menu",
 }
 
 // iconTone is the extra class for a device icon: the unknown icon is muted.

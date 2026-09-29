@@ -36,14 +36,57 @@ var formSecrets = map[string]bool{
 	"proxmox_secret": true, "pihole_password": true, "adguard_password": true, "opnsense_secret": true,
 }
 
+// adminSettings are the settings pages only an admin can open; the rest
+// ("account", "sessions", "tokens") belong to every account.
+var adminSettings = map[string]bool{
+	"network": true, "integrations": true, "notifications": true,
+	"users": true, "audit": true, "system": true,
+}
+
+// legacySettingsTabs maps the tabs of the old single settings page
+// (/settings?tab=...) to the page that holds them now.
+var legacySettingsTabs = map[string]string{
+	"subnets": "network", "general": "network", "integrations": "integrations",
+	"users": "users", "notifications": "notifications", "audit": "audit",
+	"about": "system", "tokens": "tokens",
+}
+
+// handleSettingsPage sends /settings to a settings page: the account page,
+// or for an old /settings?tab=... link the page that tab became. A viewer
+// following a link to an admin tab lands on their account instead (the
+// subnet list on the Subnets page), and the audit filters carry over.
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
-	d, err := s.settingsData(r, r.URL.Query().Get("tab"))
-	if err != nil {
-		s.fail(w, r, err)
-		return
+	q := r.URL.Query()
+	tab := q.Get("tab")
+	q.Del("tab")
+	dest := "/settings/account"
+	if page, ok := legacySettingsTabs[tab]; ok {
+		switch {
+		case !adminSettings[page] || isAdmin(r):
+			dest = "/settings/" + page
+		case tab == "subnets":
+			dest = "/subnets"
+		}
 	}
-	u, _ := userFrom(r)
-	s.render(w, r, views.SettingsPage(u.Username, d))
+	if len(q) > 0 && dest == "/settings/audit" {
+		dest += "?" + q.Encode()
+	}
+	http.Redirect(w, r, dest, http.StatusFound)
+}
+
+// handleSettingsSection serves the settings page tab. Admin pages are
+// registered behind requireAdmin as well; settingsData refuses them to a
+// viewer regardless.
+func (s *Server) handleSettingsSection(tab string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		d, err := s.settingsData(r, tab)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		u, _ := userFrom(r)
+		s.render(w, r, views.SettingsPage(u.Username, d))
+	}
 }
 
 // settingsError answers a settings form that could not be saved with the
@@ -129,18 +172,15 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		values = map[string]string{}
 	}
 
-	switch tab {
-	case "subnets", "integrations", "users", "tokens", "about":
-	case "general", "notifications", "audit":
-		if !admin {
-			tab = "subnets"
-		}
+	switch {
+	case tab == "account", tab == "sessions", tab == "tokens":
+	case adminSettings[tab] && admin:
 	default:
-		tab = "subnets"
+		tab = "account"
 	}
 
 	var newDetected []netdetect.Detected
-	if detected, err := s.detect(); admin && err == nil {
+	if detected, err := s.detect(); tab == "network" && err == nil {
 		have := make(map[string]bool, len(subnets))
 		for _, sn := range subnets {
 			have[sn.CIDR] = true
@@ -156,7 +196,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	var sessions []store.Session
 	currentSessionID := ""
 	var sso views.SSOAccount
-	if tab == "users" {
+	if tab == "sessions" {
 		sessions, err = s.store.ListSessionsForUser(r.Context(), u.ID)
 		if err != nil {
 			return views.SettingsData{}, err
@@ -164,6 +204,8 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		if c, cerr := r.Cookie("netis_session"); cerr == nil {
 			currentSessionID = store.SessionID(c.Value)
 		}
+	}
+	if tab == "account" {
 		if s.oidc != nil {
 			sso.Enabled = true
 			if sso.Linked, err = s.store.OIDCLinked(r.Context(), u.ID); err != nil {
@@ -249,15 +291,15 @@ func (s *Server) backupSummary() views.BackupView {
 func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 	sn, msg := parseSubnetForm(r)
 	if msg != "" {
-		s.settingsError(w, r, "subnets", http.StatusBadRequest, msg)
+		s.settingsError(w, r, "network", http.StatusBadRequest, msg)
 		return
 	}
 	auditNote(r).Target = "subnet " + sn.CIDR
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
-		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
+		s.settingsWriteError(w, r, "network", err, subnetExistsMsg)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/network", http.StatusSeeOther)
 }
 
 func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
@@ -276,16 +318,16 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	sn, msg := parseSubnetForm(r)
 	if msg != "" {
-		s.settingsError(w, r, "subnets", http.StatusBadRequest, msg)
+		s.settingsError(w, r, "network", http.StatusBadRequest, msg)
 		return
 	}
 	sn.ID = id
 	auditNote(r).Target = "subnet " + sn.CIDR
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
-		s.settingsWriteError(w, r, "subnets", err, subnetExistsMsg)
+		s.settingsWriteError(w, r, "network", err, subnetExistsMsg)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/network", http.StatusSeeOther)
 }
 
 const subnetExistsMsg = "a subnet with that CIDR already exists"
@@ -333,15 +375,41 @@ func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=subnets", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/network", http.StatusSeeOther)
 }
+
+// integrationKeys are the settings keys of each integration, for a form that
+// saves one integration: its panel on the settings page posts only its own
+// fields, and the others must be left as they are.
+var integrationKeys = func() map[string][]string {
+	prefixes := map[string]string{
+		"proxmox": "proxmox_", "wireguard": "wg_", "pihole": "pihole_",
+		"adguard": "adguard_", "opnsense": "opnsense_",
+	}
+	m := make(map[string][]string, len(prefixes))
+	for name, prefix := range prefixes {
+		for _, k := range settingsKeys {
+			if strings.HasPrefix(k, prefix) {
+				m[name] = append(m[name], k)
+			}
+		}
+	}
+	return m
+}()
 
 // saveIntegrationSettings writes the integration settings from a submitted
 // form: a blank secret keeps the stored value, and the *_insecure checkboxes
-// normalize "on" to "1". Shared by the settings page and the setup wizard.
-// A value that fails validation is returned as a badInput, before anything
-// from the form is written.
+// normalize "on" to "1". A form naming one integration (the settings page's
+// per-integration panels) writes only that integration's keys; one naming
+// none (the setup wizard) writes them all. A value that fails validation is
+// returned as a badInput, before anything from the form is written.
 func (s *Server) saveIntegrationSettings(r *http.Request) error {
+	keys := settingsKeys
+	if name := r.FormValue("integration"); name != "" {
+		if keys = integrationKeys[name]; keys == nil {
+			return badInput{"unknown integration " + strconv.Quote(name)}
+		}
+	}
 	// The interface name is spliced into a command the WireGuard host's shell
 	// runs. Blank is fine: it falls back to wg0.
 	if v := r.FormValue("wg_iface"); v != "" {
@@ -349,7 +417,7 @@ func (s *Server) saveIntegrationSettings(r *http.Request) error {
 			return badInput{err.Error()}
 		}
 	}
-	for _, k := range settingsKeys {
+	for _, k := range keys {
 		v := r.FormValue(k)
 		if formSecrets[k] && v == "" {
 			// Blank means "leave unchanged" — don't wipe the stored secret.
@@ -396,7 +464,11 @@ func (s *Server) handleIntegrationsSave(w http.ResponseWriter, r *http.Request) 
 		s.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=integrations", http.StatusSeeOther)
+	dest := "/settings/integrations"
+	if name := r.FormValue("integration"); integrationKeys[name] != nil {
+		dest += "#integration-" + name
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
 }
 
 func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -426,7 +498,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		s.settingsWriteError(w, r, "users", err, "a user named "+username+" already exists")
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
 }
 
 func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
@@ -476,7 +548,7 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot delete the last admin")
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
 }
 
 // handleUserRole promotes a viewer or demotes an admin. Sessions are left
@@ -516,23 +588,32 @@ func (s *Server) handleUserRole(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "users", http.StatusBadRequest, "cannot demote the last admin")
 		return
 	}
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/users", http.StatusSeeOther)
 }
 
+// handleGeneralSave saves the scanning settings from the Network page and
+// the retention windows from the System page. Each page posts only its own
+// fields and names itself in section; a field left out is left unchanged.
 func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
-	n, err := strconv.Atoi(r.FormValue("offline_after"))
-	if err != nil || n < 1 || n > 10 {
-		s.settingsError(w, r, "general", http.StatusBadRequest, "offline_after must be an integer 1-10")
-		return
+	tab := "network"
+	if r.FormValue("section") == "system" {
+		tab = "system"
 	}
-	if err := s.store.SetSetting(r.Context(), "offline_after", strconv.Itoa(n)); err != nil {
-		s.fail(w, r, err)
-		return
+	if v := r.FormValue("offline_after"); v != "" || tab == "network" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 10 {
+			s.settingsError(w, r, tab, http.StatusBadRequest, "Offline after must be a whole number from 1 to 10")
+			return
+		}
+		if err := s.store.SetSetting(r.Context(), "offline_after", strconv.Itoa(n)); err != nil {
+			s.fail(w, r, err)
+			return
+		}
 	}
 	if v := r.FormValue("default_scan_interval_sec"); v != "" {
 		iv, err := strconv.Atoi(v)
 		if err != nil || iv < 30 {
-			s.settingsError(w, r, "general", http.StatusBadRequest, "default scan interval must be an integer >= 30")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "default scan interval must be an integer >= 30")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_interval_sec", strconv.Itoa(iv)); err != nil {
@@ -542,7 +623,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_subnet_kind"); v != "" {
 		if v != "lan" && v != "wireguard" && v != "proxmox-bridge" {
-			s.settingsError(w, r, "general", http.StatusBadRequest, "bad subnet kind")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "bad subnet kind")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_subnet_kind", v); err != nil {
@@ -552,7 +633,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.FormValue("default_scan_enabled"); v != "" {
 		if v != "on" && v != "off" {
-			s.settingsError(w, r, "general", http.StatusBadRequest, "bad default scan enabled")
+			s.settingsError(w, r, tab, http.StatusBadRequest, "bad default scan enabled")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), "default_scan_enabled", v); err != nil {
@@ -579,7 +660,7 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 		}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 0 {
-			s.settingsError(w, r, "general", http.StatusBadRequest, k+" must be a non-negative integer")
+			s.settingsError(w, r, tab, http.StatusBadRequest, k+" must be a non-negative integer")
 			return
 		}
 		if err := s.store.SetSetting(r.Context(), k, strconv.Itoa(n)); err != nil {
@@ -587,5 +668,5 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/settings?tab=general", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/"+tab, http.StatusSeeOther)
 }

@@ -197,7 +197,7 @@ func TestCreateTokenFromSettings(t *testing.T) {
 		t.Fatalf("tokens = %+v", toks)
 	}
 	// A reload of the tab shows the token's name but never the token.
-	body := getAs(t, srv, "evesess", "/settings?tab=tokens")
+	body := getAs(t, srv, "evesess", "/settings/tokens")
 	if !strings.Contains(body, "grafana") || strings.Contains(body, tok) {
 		t.Errorf("token list: has name=%v has token=%v", strings.Contains(body, "grafana"), strings.Contains(body, tok))
 	}
@@ -231,10 +231,10 @@ func TestTokenRevokeScopedToOwner(t *testing.T) {
 	adminTok, _ := st.CreateAPIToken(t.Context(), admin, "ben-script", "netis_ben", "", time.Now())
 	eveTok, _ := st.CreateAPIToken(t.Context(), eve, "eve-script", "netis_eve", "", time.Now())
 
-	if body := getAs(t, srv, "evesess", "/settings?tab=tokens"); strings.Contains(body, "ben-script") || !strings.Contains(body, "eve-script") {
+	if body := getAs(t, srv, "evesess", "/settings/tokens"); strings.Contains(body, "ben-script") || !strings.Contains(body, "eve-script") {
 		t.Error("a viewer's token tab shows someone else's token, or not their own")
 	}
-	if body := getAs(t, srv, "bensess", "/settings?tab=tokens"); !strings.Contains(body, "ben-script") || !strings.Contains(body, "eve-script") {
+	if body := getAs(t, srv, "bensess", "/settings/tokens"); !strings.Contains(body, "ben-script") || !strings.Contains(body, "eve-script") {
 		t.Error("the admin's token tab does not list every token")
 	}
 
@@ -244,11 +244,11 @@ func TestTokenRevokeScopedToOwner(t *testing.T) {
 	if rec := bearer(t, srv, "GET", "/api/status", "netis_ben", ""); rec.Code != http.StatusOK {
 		t.Fatal("the admin's token was revoked by a viewer")
 	}
-	wantRedirect(t, postAs(t, srv, "bensess", "/settings/tokens/"+itoa(eveTok)+"/delete", nil), "/settings?tab=tokens")
+	wantRedirect(t, postAs(t, srv, "bensess", "/settings/tokens/"+itoa(eveTok)+"/delete", nil), "/settings/tokens")
 	if rec := bearer(t, srv, "GET", "/api/status", "netis_eve", ""); rec.Code != http.StatusUnauthorized {
 		t.Error("revoked token still works")
 	}
-	wantRedirect(t, postAs(t, srv, "bensess", "/settings/tokens/"+itoa(adminTok)+"/delete", nil), "/settings?tab=tokens")
+	wantRedirect(t, postAs(t, srv, "bensess", "/settings/tokens/"+itoa(adminTok)+"/delete", nil), "/settings/tokens")
 }
 
 // Deleting a user revokes their tokens.
@@ -258,7 +258,7 @@ func TestDeletedUsersTokensStopWorking(t *testing.T) {
 	addUser(t, st, "ben", "password1", "admin", "bensess")
 	eve := addUser(t, st, "eve", "password1", "viewer", "evesess")
 	tokenFor(t, st, eve, "netis_eve", "")
-	wantRedirect(t, postAs(t, srv, "bensess", "/settings/users/"+itoa(eve)+"/delete", nil), "/settings?tab=users")
+	wantRedirect(t, postAs(t, srv, "bensess", "/settings/users/"+itoa(eve)+"/delete", nil), "/settings/users")
 	if rec := bearer(t, srv, "GET", "/api/status", "netis_eve", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("deleted user's token: code=%d, want 401", rec.Code)
 	}

@@ -323,7 +323,7 @@ func TestPasswordFieldsCarryAutocomplete(t *testing.T) {
 		}
 	}
 
-	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	users := authedGet(t, srv, st, "/settings/account").Body.String() + authedGet(t, srv, st, "/settings/users").Body.String()
 	for _, want := range []string{
 		`name="current_password" autocomplete="current-password"`,
 		`name="confirm_password" autocomplete="new-password"`,

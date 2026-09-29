@@ -48,10 +48,8 @@ templ filterSelect(name, label, current string, options []string) {
 }
 
 templ auditTab(a AuditData) {
-	<h2>Audit log</h2>
 	<p class="muted">Every change made through netis, and every refused attempt, newest first.</p>
-	<form method="get" action="/settings" class="toolbar">
-		<input type="hidden" name="tab" value="audit"/>
+	<form method="get" action="/settings/audit" class="toolbar">
 		@filterSelect("user", "User", a.User, a.Users)
 		@filterSelect("action", "Action", a.Action, a.Actions)
 		<noscript><button type="submit" class="btn">Filter</button></noscript>
@@ -109,7 +107,7 @@ templ auditTab(a AuditData) {
 // auditPageURL links to the Audit tab under the current filters, starting
 // below the entry with id before (0 for the newest page).
 func auditPageURL(a AuditData, before int64) string {
-	q := url.Values{"tab": {"audit"}}
+	q := url.Values{}
 	if a.User != "" {
 		q.Set("user", a.User)
 	}
@@ -119,5 +117,8 @@ func auditPageURL(a AuditData, before int64) string {
 	if before > 0 {
 		q.Set("before", fmt.Sprint(before))
 	}
-	return "/settings?" + q.Encode()
+	if len(q) == 0 {
+		return "/settings/audit"
+	}
+	return "/settings/audit?" + q.Encode()
 }

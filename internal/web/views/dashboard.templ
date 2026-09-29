@@ -177,10 +177,27 @@ templ subnetCard(r DashRow) {
 
 templ SubnetsPage(username string, rows []DashRow) {
 	@Layout("Subnets", username) {
-		<h1>Subnets</h1>
+		<div class="page-head">
+			<h1>Subnets</h1>
+			if IsAdmin(ctx) {
+				<a class="btn" href="/settings/network">
+					@Icon("settings", "")
+					Manage subnets
+				</a>
+			}
+		</div>
 		<p class="muted">Open a subnet to see its occupancy grid — online, offline, not seen yet or free, and static (reserved) or DHCP.</p>
 		if len(rows) == 0 {
-			<p class="muted">No subnets yet — add one in <a href="/settings?tab=subnets">Settings</a>.</p>
+			<div class="panel empty">
+				@Icon("network", "")
+				<h3>No subnets yet</h3>
+				if IsAdmin(ctx) {
+					<p>Add the networks netis should scan, and their devices show up here.</p>
+					<a class="btn btn-primary" href="/settings/network">Add a subnet</a>
+				} else {
+					<p>An admin adds the networks netis scans.</p>
+				}
+			</div>
 		} else {
 			<div class="cards">
 				for _, r := range rows {

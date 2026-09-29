@@ -1,208 +1,211 @@
 package views
 
 import (
+	"fmt"
+
 	"netis/internal/store"
 )
 
-templ proxmoxFields(values map[string]string) {
-	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
-	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-	<label>Secret <input type="password" name="proxmox_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
-	<label>
+// secretHint is the placeholder of a credential field: a stored secret is
+// never echoed back, so the field says a blank keeps it. Before anything is
+// stored there is nothing to keep and it says nothing.
+func secretHint(stored bool) string {
+	if stored {
+		return "Stored. Leave blank to keep it"
+	}
+	return ""
+}
+
+templ insecureBox(name string, values map[string]string) {
+	<label class="chk">
 		<input
 			type="checkbox"
-			name="proxmox_insecure"
-			if values["proxmox_insecure"] == "1" {
+			name={ name }
+			if values[name] == "1" {
 				checked
 			}
 		/>
-		Skip TLS verification
+		Skip TLS certificate check
 	</label>
+}
+
+templ proxmoxFields(values map[string]string) {
+	<div class="field-grid">
+		<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
+		<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] } placeholder="netis@pve!netis"/></label>
+		<label>Token secret <input type="password" name="proxmox_secret" autocomplete="off" placeholder={ secretHint(values["proxmox_url"] != "") }/></label>
+	</div>
+	@insecureBox("proxmox_insecure", values)
 }
 
 templ wireguardFields(values map[string]string) {
-	<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
-	<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
-	<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
-	<label>Known hosts path <input type="text" name="wg_ssh_known_hosts" value={ values["wg_ssh_known_hosts"] } placeholder="/root/.ssh/known_hosts"/></label>
-	<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+	<div class="field-grid">
+		<label>SSH address <input type="text" name="wg_ssh_addr" value={ values["wg_ssh_addr"] } placeholder="10.0.0.1:22"/></label>
+		<label>SSH user <input type="text" name="wg_ssh_user" value={ values["wg_ssh_user"] }/></label>
+		<label>SSH key path <input type="text" name="wg_ssh_key_path" value={ values["wg_ssh_key_path"] }/></label>
+		<label>Known hosts path <input type="text" name="wg_ssh_known_hosts" value={ values["wg_ssh_known_hosts"] } placeholder="/root/.ssh/known_hosts"/></label>
+		<label>Interface <input type="text" name="wg_iface" value={ values["wg_iface"] } placeholder="wg0"/></label>
+	</div>
 }
 
 templ piholeFields(values map[string]string) {
-	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-	<label>App password <input type="password" name="pihole_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="pihole_insecure"
-			if values["pihole_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
+	<div class="field-grid">
+		<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
+		<label>App password <input type="password" name="pihole_password" autocomplete="off" placeholder={ secretHint(values["pihole_url"] != "") }/></label>
+	</div>
+	@insecureBox("pihole_insecure", values)
 }
 
 templ adguardFields(values map[string]string) {
-	<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
-	<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
-	<label>Password <input type="password" name="adguard_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="adguard_insecure"
-			if values["adguard_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
+	<div class="field-grid">
+		<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
+		<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
+		<label>Password <input type="password" name="adguard_password" autocomplete="off" placeholder={ secretHint(values["adguard_url"] != "") }/></label>
+	</div>
+	@insecureBox("adguard_insecure", values)
 }
 
 templ opnsenseFields(values map[string]string) {
-	<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
-	<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
-	<label>API secret <input type="password" name="opnsense_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
-	<label>
-		<input
-			type="checkbox"
-			name="opnsense_insecure"
-			if values["opnsense_insecure"] == "1" {
-				checked
-			}
-		/>
-		Skip TLS verification
-	</label>
+	<div class="field-grid">
+		<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
+		<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
+		<label>API secret <input type="password" name="opnsense_secret" autocomplete="off" placeholder={ secretHint(values["opnsense_url"] != "") }/></label>
+	</div>
+	@insecureBox("opnsense_insecure", values)
 }
 
-// integrationsFields renders the plain fieldsets used by the onboarding welcome
-// page; its output must stay identical to the pre-split version.
-templ integrationsFields(values map[string]string) {
-	<fieldset>
-		<legend>Proxmox</legend>
-		@proxmoxFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>WireGuard (via SSH)</legend>
-		@wireguardFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>Pi-hole (v6)</legend>
-		@piholeFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>AdGuard Home</legend>
-		@adguardFields(values)
-	</fieldset>
-	<fieldset>
-		<legend>OPNsense</legend>
-		@opnsenseFields(values)
-	</fieldset>
+// Integration is one integration as its panel shows it.
+type Integration struct {
+	Name, Label, About string
+	Configured         bool
+	// Status is the last recorded run, nil before the first.
+	Status *store.IntegrationStatus
 }
 
-// integrationStatus renders a connection-status pill (+ detail) for one
-// integration, resolved from the recorded poller status and whether the
-// integration is configured.
-templ integrationStatus(name string, configured bool, statuses map[string]store.IntegrationStatus) {
-	if st, ok := statuses[name]; ok {
-		if st.OK {
-			<span class="status-line"><span class="status is-online">connected</span> <span class="muted">
-				last worked{ " " }
-				@Time(st.LastRun)
-			</span></span>
-		} else {
-			<span class="status-line"><span class="status is-error">failing</span> <span class="muted">@Time(st.LastRun)</span></span>
+// Integrations lists the integrations in the order their panels appear,
+// with whether each is configured and how its last run went.
+func Integrations(configured map[string]bool, statuses map[string]store.IntegrationStatus) []Integration {
+	out := []Integration{
+		{Name: "proxmox", Label: "Proxmox", About: "VMs, containers and the nodes they run on."},
+		{Name: "wireguard", Label: "WireGuard", About: "Peers on a WireGuard server, read over SSH."},
+		{Name: "pihole", Label: "Pi-hole", About: "Names and leases from Pi-hole v6 DHCP."},
+		{Name: "adguard", Label: "AdGuard Home", About: "Names and leases from AdGuard Home DHCP."},
+		{Name: "opnsense", Label: "OPNsense", About: "Names and leases from OPNsense DHCP."},
+	}
+	for i := range out {
+		out[i].Configured = configured[out[i].Name]
+		if st, ok := statuses[out[i].Name]; ok {
+			out[i].Status = &st
 		}
-		if st.Detail != "" {
-			<p class="hint">{ st.Detail }</p>
-		}
-	} else if configured {
-		<span class="status-line"><span class="status">configured · not run yet</span></span>
-	} else {
-		<span class="status-line"><span class="muted">not configured</span></span>
+	}
+	return out
+}
+
+// integrationFields are the settings fields of the named integration.
+templ integrationFields(name string, values map[string]string) {
+	switch name {
+		case "proxmox":
+			@proxmoxFields(values)
+		case "wireguard":
+			@wireguardFields(values)
+		case "pihole":
+			@piholeFields(values)
+		case "adguard":
+			@adguardFields(values)
+		case "opnsense":
+			@opnsenseFields(values)
 	}
 }
 
-// integrationsStatusTab is what a viewer sees of the integrations: whether each
-// one works and when it last ran, without its configuration or the controls.
-templ integrationsStatusTab(d SettingsData) {
-	<h2>Integrations</h2>
-	<div class="panel">
-		<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Configured["proxmox"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Configured["wireguard"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Configured["pihole"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Configured["adguard"], d.Statuses)
-</div>
-	</div>
-	<div class="panel">
-		<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Configured["opnsense"], d.Statuses)
-</div>
-	</div>
+// integrationState is an integration's status chip: connected, failing, set
+// up but not run yet, or not set up.
+templ integrationState(it Integration) {
+	if it.Status != nil && it.Status.OK {
+		<span class="status is-online">Connected</span>
+	} else if it.Status != nil {
+		<span class="status is-error">Sync failed</span>
+	} else if it.Configured {
+		<span class="status">Not run yet</span>
+	} else {
+		<span class="chip">Not set up</span>
+	}
 }
 
+// IntegrationPanel is one integration: its status, last run and item count,
+// Run now, and its settings behind a Configure disclosure (open while it is
+// not set up). On the settings page each panel is its own form (standalone);
+// in the setup wizard the fields join the wizard's single form, which is why
+// the wizard renders them closed and without Run now.
+templ IntegrationPanel(it Integration, values map[string]string, standalone bool) {
+	<section class="panel integ" id={ "integration-" + it.Name } aria-labelledby={ "integ-" + it.Name }>
+		<div class="integ-head">
+			<div class="integ-title">
+				<h2 id={ "integ-" + it.Name }>{ it.Label }</h2>
+				<p class="muted">{ it.About }</p>
+			</div>
+			@integrationState(it)
+			if standalone && it.Configured {
+				<button type="button" class="btn btn-sm" hx-post={ "/settings/integrations/" + it.Name + "/run" } hx-target="#toasts" hx-swap="beforeend">
+					@Icon("refresh-cw", "")
+					Run now
+				</button>
+			}
+		</div>
+		if it.Status != nil {
+			<dl class="facts integ-facts">
+				<dt>Last run</dt>
+				<dd>
+					@Time(it.Status.LastRun)
+				</dd>
+				if it.Status.OK {
+					<dt>Items</dt>
+					<dd class="tnum">{ fmt.Sprint(it.Status.ItemCount) }</dd>
+				}
+				if it.Status.Detail != "" {
+					<dt>
+						if it.Status.OK {
+							Note
+						} else {
+							Error
+						}
+					</dt>
+					<dd>{ it.Status.Detail }</dd>
+				}
+			</dl>
+		}
+		<details
+			class="disclosure"
+			if standalone && !it.Configured {
+				open
+			}
+		>
+			<summary>
+				@Icon("settings", "")
+				if it.Configured {
+					Configure
+				} else {
+					Set up
+				}
+			</summary>
+			if standalone {
+				<form method="post" action="/settings/integrations">
+					<input type="hidden" name="integration" value={ it.Name }/>
+					@integrationFields(it.Name, values)
+					<button type="submit" class="btn btn-primary">Save { it.Label }</button>
+				</form>
+			} else {
+				@integrationFields(it.Name, values)
+			}
+		</details>
+	</section>
+}
+
+// integrationsTab is the admin's Integrations page: one panel each.
 templ integrationsTab(d SettingsData) {
-	<h2>Integrations</h2>
-	<p class="muted">Integration changes apply automatically within a minute — or click Run now to apply immediately.</p>
-	<form method="post" action="/settings/integrations">
-		<div class="panel">
-			<div class="panel-head"><h3>Proxmox</h3>@integrationStatus("proxmox", d.Values["proxmox_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/proxmox/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@proxmoxFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>WireGuard</h3>@integrationStatus("wireguard", d.Values["wg_ssh_addr"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/wireguard/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@wireguardFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>Pi-hole</h3>@integrationStatus("pihole", d.Values["pihole_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/pihole/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@piholeFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>AdGuard Home</h3>@integrationStatus("adguard", d.Values["adguard_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/adguard/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@adguardFields(d.Values)
-		</div>
-		<div class="panel">
-			<div class="panel-head"><h3>OPNsense</h3>@integrationStatus("opnsense", d.Values["opnsense_url"] != "", d.Statuses)
-<span class="spacer"></span>
-				<button type="button" class="btn btn-sm" hx-post="/settings/integrations/opnsense/run" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("refresh-cw", "")
-					Run now
-				</button>
-			</div>
-			@opnsenseFields(d.Values)
-		</div>
-		<button type="submit" class="btn btn-primary">Save integrations</button>
-	</form>
+	<p class="muted">Integrations fill in what a scan cannot see. Saved changes apply within a minute, or at once with Run now.</p>
+	<div class="integ-list">
+		for _, it := range Integrations(d.Configured, d.Statuses) {
+			@IntegrationPanel(it, d.Values, true)
+		}
+	</div>
 }

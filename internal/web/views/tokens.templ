@@ -37,7 +37,6 @@ templ tokenLastUsed(t store.APIToken) {
 // tokensTab is the API tokens tab. Every role manages its own tokens here; an
 // admin's list also carries everyone else's, with the owner shown.
 templ tokensTab(d SettingsData) {
-	<h2>API tokens</h2>
 	<p class="muted">
 		A token lets a script use the JSON API as you, with your role:
 		<span class="mono">curl -H "Authorization: Bearer netis_…" /api/devices</span>.

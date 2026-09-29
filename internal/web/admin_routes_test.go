@@ -118,6 +118,19 @@ var selfService = map[string]bool{
 	"POST /settings/sso/link":           true,
 }
 
+// adminReads lists the pages deliberately hidden from viewers: the Admin
+// area of Settings, which shows configuration (integration hosts, users,
+// the audit log) rather than the network. Every other read stays open to
+// every role, so hiding a page from viewers is a visible decision too.
+var adminReads = map[string]bool{
+	"GET /settings/network":       true,
+	"GET /settings/integrations":  true,
+	"GET /settings/notifications": true,
+	"GET /settings/users":         true,
+	"GET /settings/audit":         true,
+	"GET /settings/system":        true,
+}
+
 // The parse must agree with the mux: every route it found must resolve to
 // exactly that pattern, or the walk below would be testing the wrong thing.
 func TestRegisteredRoutesMatchMux(t *testing.T) {
@@ -135,8 +148,11 @@ func TestMutatingRoutesAreAdminOnly(t *testing.T) {
 	for _, r := range registeredRoutes(t) {
 		key := r.method + " " + r.path
 		if !isMutating(r.method) {
-			if r.admin {
-				t.Errorf("%s: a read-only route wrapped in requireAdmin; viewers should be able to read", key)
+			if r.admin && !adminReads[key] {
+				t.Errorf("%s: a read-only route wrapped in requireAdmin; viewers should be able to read (or list it in adminReads)", key)
+			}
+			if !r.admin && adminReads[key] {
+				t.Errorf("%s is listed in adminReads but not wrapped in requireAdmin", key)
 			}
 			continue
 		}

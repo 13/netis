@@ -57,8 +57,8 @@ func TestDestructiveFormsAskForConfirmation(t *testing.T) {
 	userID := addUser(t, st, "carol", "longenough1", "viewer", "caroltok")
 
 	device := authedGet(t, srv, st, "/devices/"+itoa(devID)).Body.String()
-	subnets := authedGet(t, srv, st, "/settings?tab=subnets").Body.String()
-	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	subnets := authedGet(t, srv, st, "/settings/network").Body.String()
+	users := authedGet(t, srv, st, "/settings/users").Body.String() + authedGet(t, srv, st, "/settings/sessions").Body.String()
 	for _, c := range []struct{ body, action string }{
 		{device, "/devices/" + itoa(devID) + "/delete"},
 		{device, "/links/" + itoa(linkID) + "/delete"},
@@ -118,7 +118,7 @@ func TestWideTablesAndNavFitPhones(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	for _, path := range []string{"/devices", "/events", "/settings?tab=users"} {
+	for _, path := range []string{"/devices", "/events", "/settings/users", "/settings/sessions"} {
 		body := authedGet(t, srv, st, path).Body.String()
 		if !strings.Contains(body, `class="table-wrap"`) {
 			t.Errorf("%s: table not wrapped in a scroll container", path)
@@ -222,7 +222,7 @@ func TestSettingsErrorsRenderInline(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("duplicate subnet code=%d", rec.Code)
 	}
-	for _, want := range []string{"<nav", `class="form-error"`, "already exists", `class="tab active" href="/settings?tab=subnets"`} {
+	for _, want := range []string{"<nav", `class="form-error"`, "already exists", `href="/settings/network" aria-current="page"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("duplicate subnet page missing %q", want)
 		}
@@ -232,7 +232,7 @@ func TestSettingsErrorsRenderInline(t *testing.T) {
 	authedPost(t, srv, st, "/settings/users", user)
 	rec = authedPost(t, srv, st, "/settings/users", user)
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `class="form-error"`) ||
-		!strings.Contains(rec.Body.String(), `class="tab active" href="/settings?tab=users"`) {
+		!strings.Contains(rec.Body.String(), `href="/settings/users" aria-current="page"`) {
 		t.Errorf("duplicate user = %d, want 409 on the users tab with the message", rec.Code)
 	}
 

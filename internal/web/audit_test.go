@@ -50,7 +50,7 @@ func TestUserRoleChange(t *testing.T) {
 	}
 
 	rec = authedPost(t, srv, st, path(eve), url.Values{"role": {"admin"}})
-	wantRedirect(t, rec, "/settings?tab=users")
+	wantRedirect(t, rec, "/settings/users")
 	if u, _, _ := st.GetUser(t.Context(), eve); u.Role != "admin" {
 		t.Fatalf("promote: role %q", u.Role)
 	}
@@ -64,7 +64,7 @@ func TestUserRoleChange(t *testing.T) {
 
 	// With eve an admin, ben may step down, and his very next request is a
 	// viewer's: the role is read per request, so no session has to go.
-	wantRedirect(t, authedPost(t, srv, st, path(ben.ID), url.Values{"role": {"viewer"}}), "/settings?tab=users")
+	wantRedirect(t, authedPost(t, srv, st, path(ben.ID), url.Values{"role": {"viewer"}}), "/settings/users")
 	if rec := authedPost(t, srv, st, path(eve), url.Values{"role": {"viewer"}}); rec.Code != http.StatusForbidden {
 		t.Errorf("demoted admin still acting as one: code=%d", rec.Code)
 	}
@@ -98,7 +98,7 @@ func TestUserRoleChange(t *testing.T) {
 func TestUsersTabOffersRoleChange(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
-	body := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	body := authedGet(t, srv, st, "/settings/users").Body.String()
 	if !strings.Contains(body, `/settings/users/1/role`) {
 		t.Error("users tab has no role form")
 	}
@@ -258,7 +258,7 @@ func TestAuditTab(t *testing.T) {
 	}
 	st.AddAudit(t.Context(), store.AuditEntry{Action: "login", Detail: "unknown user", Status: 401})
 
-	body := authedGet(t, srv, st, "/settings?tab=audit").Body.String()
+	body := authedGet(t, srv, st, "/settings/audit").Body.String()
 	if !strings.Contains(body, "Audit log") || !strings.Contains(body, "unknown user") {
 		t.Fatal("audit tab missing entries")
 	}
@@ -269,13 +269,13 @@ func TestAuditTab(t *testing.T) {
 		t.Error("oldest entry on the first page")
 	}
 
-	body = authedGet(t, srv, st, "/settings?tab=audit&action=login").Body.String()
+	body = authedGet(t, srv, st, "/settings/audit?action=login").Body.String()
 	if !strings.Contains(body, "unknown user") || strings.Contains(body, "device.update</td>") {
 		t.Error("action filter not applied")
 	}
 
 	// A viewer neither sees the tab nor gets its contents by asking.
-	req := httptest.NewRequest("GET", "/settings?tab=audit", nil)
+	req := httptest.NewRequest("GET", "/settings/audit", nil)
 	req.AddCookie(viewerSessionFor(t, st))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -303,7 +303,7 @@ func TestGeneralSavesAuditRetention(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	rec := authedPost(t, srv, st, "/settings/general", url.Values{"offline_after": {"3"}, "audit_retention_days": {"90"}})
-	wantRedirect(t, rec, "/settings?tab=general")
+	wantRedirect(t, rec, "/settings/network")
 	if v, _ := st.GetSetting(t.Context(), "audit_retention_days"); v != "90" {
 		t.Errorf("audit_retention_days = %q", v)
 	}
@@ -324,7 +324,7 @@ func TestAuditTargetsShowNames(t *testing.T) {
 		st.AddAudit(ctx, store.AuditEntry{Username: "ben", Action: "x", Target: target, Status: 303})
 	}
 
-	body := authedGet(t, srv, st, "/settings?tab=audit").Body.String()
+	body := authedGet(t, srv, st, "/settings/audit").Body.String()
 	for _, want := range []string{
 		`<a href="/devices/` + itoa(nas) + `">nas-box</a>`,
 		`<a href="/subnets/` + itoa(snID) + `">subnet lab</a>`,

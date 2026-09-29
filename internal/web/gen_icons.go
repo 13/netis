@@ -37,7 +37,8 @@ var names = []string{
 	"moon", "chevron-down", "chevron-right", "x", "check", "triangle-alert",
 	"trash-2", "pencil", "external-link", "copy", "power", "network", "shield",
 	"bell", "key", "list", "layout-grid", "clock", "filter", "ellipsis",
-	"arrow-left", "download", "upload",
+	"arrow-left", "download", "upload", "layout-dashboard", "activity", "sun-moon",
+	"keyboard", "corner-down-left", "menu",
 }
 
 var (

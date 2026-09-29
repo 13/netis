@@ -68,7 +68,7 @@ func (s *Server) handleNotificationsSave(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	http.Redirect(w, r, "/settings?tab=notifications", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/notifications", http.StatusSeeOther)
 }
 
 // handleNotificationsTest sends a test message with the saved settings and

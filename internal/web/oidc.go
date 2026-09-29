@@ -465,7 +465,7 @@ func (s *Server) linkOIDC(w http.ResponseWriter, r *http.Request, userID int64, 
 	linked, err := s.store.LinkOIDC(r.Context(), u.ID, issuer, subject)
 	if store.IsUniqueViolation(err) {
 		note.Detail = "identity linked to another user"
-		s.settingsError(w, r, "users", http.StatusConflict, "that SSO account is already linked to another netis user")
+		s.settingsError(w, r, "account", http.StatusConflict, "that SSO account is already linked to another netis user")
 		return false
 	}
 	if err != nil {
@@ -478,7 +478,7 @@ func (s *Server) linkOIDC(w http.ResponseWriter, r *http.Request, userID int64, 
 		return false
 	}
 	slog.Info("sso identity linked", "user", u.Username)
-	http.Redirect(w, r, "/settings?tab=users", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/account", http.StatusSeeOther)
 	return true
 }
 
