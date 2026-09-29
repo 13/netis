@@ -18,7 +18,7 @@ type GridCell struct {
 // cellStates names each grid state in words, for screen readers and anyone
 // who cannot tell the colours apart.
 var cellStates = map[string]string{
-	"online": "online", "offline": "offline", "reserved": "reserved",
+	"online": "online", "offline": "offline", "reserved": "not seen yet",
 	"conflict": "IP conflict", "free": "free",
 }
 
@@ -57,11 +57,11 @@ templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []sto
 		<p class="muted legend-sq">
 			<span class="sq online" aria-hidden="true"></span> online
 			<span class="sq offline" aria-hidden="true"></span> offline
-			<span class="sq reserved" aria-hidden="true"></span> reserved
+			<span class="sq reserved" aria-hidden="true"></span> not seen yet
 			<span class="sq" aria-hidden="true"></span> free
 			<span class="sq conflict" aria-hidden="true"></span> conflict
 			<span class="sq edge" aria-hidden="true"></span> network/broadcast
-			· border: <span class="sq static" aria-hidden="true"></span> static
+			· border: <span class="sq static" aria-hidden="true"></span> static (reserved)
 			<span class="sq dhcp" aria-hidden="true"></span> dhcp
 		</p>
 		<p class="muted">

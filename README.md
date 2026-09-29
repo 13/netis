@@ -55,8 +55,10 @@ for the background scan loop (every 120s by default).
 - **Dashboard** — per-subnet online/total counts, recent events, quick
   search.
 - **Subnet grid** — one square per IP in a subnet: green for online, dark
-  for used-but-offline, yellow (marked R) for reserved, empty for free, red
-  (marked !) for an IP claimed by two devices. Each square also names its
+  for used-but-offline, yellow (marked R) for assigned but not seen yet,
+  empty for free, red (marked !) for an IP claimed by two devices. The
+  border tells a static address (a reservation) from a DHCP lease, and the
+  subnet cards count the reservations. Each square also names its
   address and state for screen readers. Squares update live over SSE during
   a scan.
 - **Device list** — filterable/searchable table of every known device, with

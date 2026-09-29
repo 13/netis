@@ -14,11 +14,15 @@ import (
 	"netis/internal/store"
 )
 
+// DashRow is one subnet's occupancy. Online, Unseen and Offline split the
+// used addresses by state; Reserved counts the static assignments (DHCP
+// reservations and fixed IPs) among them whatever their state.
 type DashRow struct {
 	Subnet   store.Subnet
 	Online   int
-	Reserved int
+	Unseen   int
 	Offline  int
+	Reserved int
 	Used     int
 	Free     int
 	Hosts    int
@@ -136,7 +140,7 @@ func DashboardBody(d DashboardData) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(d.Stats.Total))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 59, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 63, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -149,7 +153,7 @@ func DashboardBody(d DashboardData) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(d.Stats.Online))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 60, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 64, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -162,7 +166,7 @@ func DashboardBody(d DashboardData) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(d.Stats.Offline))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 61, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 65, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -175,7 +179,7 @@ func DashboardBody(d DashboardData) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(d.Stats.Unknown))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 62, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 66, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -188,7 +192,7 @@ func DashboardBody(d DashboardData) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(d.Stats.Subnets))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 63, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 67, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -216,7 +220,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(it.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 74, Col: 20}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 78, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -244,7 +248,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(relTime(it.LastRun))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 82, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 86, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -257,7 +261,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(it.Detail)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 83, Col: 22}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 87, Col: 22}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -295,7 +299,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var12 templ.SafeURL
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/devices/%d", u.ID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 97, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 101, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -308,7 +312,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(u.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 98, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 102, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -327,7 +331,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var14 templ.SafeURL
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/subnets/%d", c.SubnetID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 104, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 108, Col: 66}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -340,7 +344,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(c.IP)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 105, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 109, Col: 26}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -353,7 +357,7 @@ func DashboardBody(d DashboardData) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(c.SubnetName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 105, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 109, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -401,7 +405,7 @@ func DashboardBody(d DashboardData) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(e.TS)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 128, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 132, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -436,7 +440,7 @@ func DashboardBody(d DashboardData) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(e.Type)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 129, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 133, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -457,7 +461,7 @@ func DashboardBody(d DashboardData) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(e.Details)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 133, Col: 19}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 137, Col: 19}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -504,7 +508,7 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var23 templ.SafeURL
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(fmt.Sprintf("/subnets/%d", r.Subnet.ID)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 142, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 146, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -517,7 +521,7 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(r.Subnet.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 142, Col: 85}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 146, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -530,7 +534,7 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(r.Subnet.CIDR)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 143, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 147, Col: 43}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -548,7 +552,7 @@ func subnetCard(r DashRow) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 145, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 149, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -566,7 +570,7 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("width:" + BarPct(r.Online, r.Hosts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 149, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 153, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {
@@ -577,9 +581,9 @@ func subnetCard(r DashRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var28 string
-		templ_7745c5c3_Var28, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("width:" + BarPct(r.Reserved, r.Hosts))
+		templ_7745c5c3_Var28, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("width:" + BarPct(r.Unseen, r.Hosts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 150, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 154, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 		if templ_7745c5c3_Err != nil {
@@ -592,7 +596,7 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templruntime.SanitizeStyleAttributeValues("width:" + BarPct(r.Offline, r.Hosts))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 151, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 155, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 		if templ_7745c5c3_Err != nil {
@@ -605,39 +609,75 @@ func subnetCard(r DashRow) templ.Component {
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Online))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 154, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 158, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</b> online</span> <span><span class=\"sw\" style=\"background:var(--warn)\"></span><b>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</b> online</span> <span><span class=\"sw\" style=\"background:var(--border-strong)\"></span><b>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var31 string
-		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Reserved))
+		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Offline))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 155, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 159, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</b> reserved</span> <span><span class=\"sw\" style=\"background:var(--surface-2);border:1px solid var(--border-strong)\"></span><b>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</b> offline</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var32 string
-		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Free))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 156, Col: 130}
+		if r.Unseen > 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<span><span class=\"sw\" style=\"background:var(--warn)\"></span><b>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var32 string
+			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Unseen))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 161, Col: 90}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</b> not seen yet</span> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<span><span class=\"sw\" style=\"background:var(--surface-2);border:1px solid var(--border-strong)\"></span><b>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</b> free</span></div></div>")
+		var templ_7745c5c3_Var33 string
+		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Free))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 163, Col: 130}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</b> free</span> <span><b>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var34 string
+		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(r.Reserved))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/dashboard.templ`, Line: 164, Col: 36}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</b> reserved</span></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -661,12 +701,12 @@ func SubnetsPage(username string, rows []DashRow) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var33 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var33 == nil {
-			templ_7745c5c3_Var33 = templ.NopComponent
+		templ_7745c5c3_Var35 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var35 == nil {
+			templ_7745c5c3_Var35 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var34 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var36 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -678,17 +718,17 @@ func SubnetsPage(username string, rows []DashRow) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<h1>Subnets</h1><p class=\"muted\">Open a subnet to see its occupancy grid — free, reserved, online/offline, and static/DHCP.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<h1>Subnets</h1><p class=\"muted\">Open a subnet to see its occupancy grid — online, offline, not seen yet or free, and static (reserved) or DHCP.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(rows) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<p class=\"muted\">No subnets yet — add one in <a href=\"/settings?tab=subnets\">Settings</a>.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<p class=\"muted\">No subnets yet — add one in <a href=\"/settings?tab=subnets\">Settings</a>.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "<div class=\"cards\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div class=\"cards\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -698,14 +738,14 @@ func SubnetsPage(username string, rows []DashRow) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Subnets", username).Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Subnets", username).Render(templ.WithChildren(ctx, templ_7745c5c3_Var36), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

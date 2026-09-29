@@ -26,7 +26,7 @@ type GridCell struct {
 // cellStates names each grid state in words, for screen readers and anyone
 // who cannot tell the colours apart.
 var cellStates = map[string]string{
-	"online": "online", "offline": "offline", "reserved": "reserved",
+	"online": "online", "offline": "offline", "reserved": "not seen yet",
 	"conflict": "IP conflict", "free": "free",
 }
 
@@ -165,7 +165,7 @@ func GridPage(username string, sn store.Subnet, cells []GridCell, devices []stor
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div><p class=\"muted legend-sq\"><span class=\"sq online\" aria-hidden=\"true\"></span> online <span class=\"sq offline\" aria-hidden=\"true\"></span> offline <span class=\"sq reserved\" aria-hidden=\"true\"></span> reserved <span class=\"sq\" aria-hidden=\"true\"></span> free <span class=\"sq conflict\" aria-hidden=\"true\"></span> conflict <span class=\"sq edge\" aria-hidden=\"true\"></span> network/broadcast · border: <span class=\"sq static\" aria-hidden=\"true\"></span> static <span class=\"sq dhcp\" aria-hidden=\"true\"></span> dhcp</p><p class=\"muted\">The grid shows every IP assigned in this subnet. Devices without an IP here (or on other subnets) aren't listed — see the full <a href=\"/devices\">Devices</a> page.</p><h2>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div><p class=\"muted legend-sq\"><span class=\"sq online\" aria-hidden=\"true\"></span> online <span class=\"sq offline\" aria-hidden=\"true\"></span> offline <span class=\"sq reserved\" aria-hidden=\"true\"></span> not seen yet <span class=\"sq\" aria-hidden=\"true\"></span> free <span class=\"sq conflict\" aria-hidden=\"true\"></span> conflict <span class=\"sq edge\" aria-hidden=\"true\"></span> network/broadcast · border: <span class=\"sq static\" aria-hidden=\"true\"></span> static (reserved) <span class=\"sq dhcp\" aria-hidden=\"true\"></span> dhcp</p><p class=\"muted\">The grid shows every IP assigned in this subnet. Devices without an IP here (or on other subnets) aren't listed — see the full <a href=\"/devices\">Devices</a> page.</p><h2>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

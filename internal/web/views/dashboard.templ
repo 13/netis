@@ -6,14 +6,18 @@ import (
 	"netis/internal/store"
 )
 
+// DashRow is one subnet's occupancy. Online, Unseen and Offline split the
+// used addresses by state; Reserved counts the static assignments (DHCP
+// reservations and fixed IPs) among them whatever their state.
 type DashRow struct {
-	Subnet    store.Subnet
-	Online    int
-	Reserved  int
-	Offline   int
-	Used      int
-	Free      int
-	Hosts     int
+	Subnet   store.Subnet
+	Online   int
+	Unseen   int
+	Offline  int
+	Reserved int
+	Used     int
+	Free     int
+	Hosts    int
 }
 
 type DashStats struct {
@@ -147,13 +151,17 @@ templ subnetCard(r DashRow) {
 		</div>
 		<div class="occ">
 			<i class="on" style={ "width:" + BarPct(r.Online, r.Hosts) }></i>
-			<i class="res" style={ "width:" + BarPct(r.Reserved, r.Hosts) }></i>
+			<i class="res" style={ "width:" + BarPct(r.Unseen, r.Hosts) }></i>
 			<i class="off" style={ "width:" + BarPct(r.Offline, r.Hosts) }></i>
 		</div>
 		<div class="legend">
 			<span><span class="sw" style="background:var(--ok)"></span><b>{ fmt.Sprint(r.Online) }</b> online</span>
-			<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
+			<span><span class="sw" style="background:var(--border-strong)"></span><b>{ fmt.Sprint(r.Offline) }</b> offline</span>
+			if r.Unseen > 0 {
+				<span><span class="sw" style="background:var(--warn)"></span><b>{ fmt.Sprint(r.Unseen) }</b> not seen yet</span>
+			}
 			<span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+			<span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
 		</div>
 	</div>
 }
@@ -161,7 +169,7 @@ templ subnetCard(r DashRow) {
 templ SubnetsPage(username string, rows []DashRow) {
 	@Layout("Subnets", username) {
 		<h1>Subnets</h1>
-		<p class="muted">Open a subnet to see its occupancy grid — free, reserved, online/offline, and static/DHCP.</p>
+		<p class="muted">Open a subnet to see its occupancy grid — online, offline, not seen yet or free, and static (reserved) or DHCP.</p>
 		if len(rows) == 0 {
 			<p class="muted">No subnets yet — add one in <a href="/settings?tab=subnets">Settings</a>.</p>
 		} else {
