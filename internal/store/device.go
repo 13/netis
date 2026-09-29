@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 )
 
 type Device struct {
@@ -533,21 +534,12 @@ func (s *Store) ifaceOnline(ctx context.Context, ifaceID int64) (bool, *string, 
 // ListDeviceEvents returns the most recent events for a single device, same
 // shape as ListEvents but filtered to deviceID.
 func (s *Store) ListDeviceEvents(ctx context.Context, deviceID int64, limit int) ([]Event, error) {
-	rows, err := s.query(ctx, `SELECT id,ts,type,device_id,details FROM event
-		WHERE device_id=? ORDER BY id DESC LIMIT ?`, deviceID, limit)
+	rows, err := s.query(ctx, `SELECT `+eventCols+` FROM event e LEFT JOIN device d ON d.id=e.device_id
+		WHERE e.device_id=? ORDER BY e.id DESC LIMIT ?`, deviceID, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []Event
-	for rows.Next() {
-		var e Event
-		if err := rows.Scan(&e.ID, &e.TS, &e.Type, &e.DeviceID, &e.Details); err != nil {
-			return nil, err
-		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
+	return scanEvents(rows)
 }
 
 // ListChildren returns devices whose parent_device_id is deviceID.
@@ -691,4 +683,31 @@ func (s *Store) CreateDeviceWithIface(ctx context.Context, d Device, mac *string
 		return 0, err
 	}
 	return deviceID, nil
+}
+
+// DeviceNames returns the names of the devices among ids that still exist,
+// keyed by id. Missing ids are simply absent.
+func (s *Store) DeviceNames(ctx context.Context, ids []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.query(ctx, `SELECT id,name FROM device WHERE id IN (?`+strings.Repeat(",?", len(ids)-1)+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
 }

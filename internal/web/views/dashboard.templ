@@ -127,6 +127,9 @@ templ DashboardBody(d DashboardData) {
 			<tr>
 				<td class="mono">{ e.TS }</td>
 				<td><span class={ "badge", e.Type }>{ e.Type }</span></td>
+				<td>
+					@eventDevice(e)
+				</td>
 				<td>{ e.Details }</td>
 			</tr>
 		}

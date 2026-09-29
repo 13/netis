@@ -155,3 +155,27 @@ func TestLayoutHasThemeToggleAndBootstrap(t *testing.T) {
 		}
 	}
 }
+
+// The events page and the dashboard name an event's device and link to it,
+// rather than showing its id; a deleted device is called that.
+func TestEventsNameTheirDevice(t *testing.T) {
+	srv, st := testServer(t)
+	ctx := t.Context()
+	st.SetSetting(ctx, "onboarded", "1")
+	nas, _ := st.CreateDevice(ctx, store.Device{Name: "nas-box", Kind: "server", Source: "manual"})
+	gone, _ := st.CreateDevice(ctx, store.Device{Name: "old-tv", Kind: "other", Source: "manual"})
+	st.AddEvent(ctx, "online", &nas, "is online")
+	st.AddEvent(ctx, "offline", &gone, "went offline")
+	st.AddEvent(ctx, "scan_error", nil, "subnet broke")
+	st.DeleteDevice(ctx, gone)
+
+	for _, path := range []string{"/events", "/"} {
+		body := authedGet(t, srv, st, path).Body.String()
+		if !strings.Contains(body, `<a href="/devices/`+itoa(nas)+`">nas-box</a>`) {
+			t.Errorf("%s: device not named and linked", path)
+		}
+		if strings.Count(body, "deleted device") != 1 {
+			t.Errorf("%s: want one deleted device, got %d", path, strings.Count(body, "deleted device"))
+		}
+	}
+}

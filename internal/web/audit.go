@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -205,8 +206,83 @@ func (s *Server) auditData(r *http.Request) (views.AuditData, error) {
 	if err != nil {
 		return d, err
 	}
+	if d.Targets, err = s.auditTargets(r.Context(), d.Entries); err != nil {
+		return d, err
+	}
 	d.Users, d.Actions, err = s.store.AuditFacets(r.Context())
 	return d, err
+}
+
+var (
+	// auditDeviceByID matches a target recorded from a route wildcard,
+	// "device 12"; auditDeviceNamed one recorded by deviceTarget.
+	auditDeviceByID  = regexp.MustCompile(`^device (\d+)$`)
+	auditDeviceNamed = regexp.MustCompile(`^device (.+) \(#(\d+)\)$`)
+	auditSubnetByID  = regexp.MustCompile(`^subnet (\d+)$`)
+)
+
+// auditTargets resolves the entries whose target names a device or subnet by
+// id to its current name and page, keyed by entry id. One that no longer
+// exists is marked deleted. Other targets are left to render as recorded.
+func (s *Server) auditTargets(ctx context.Context, entries []store.AuditEntry) (map[int64]views.AuditTarget, error) {
+	devIDs := map[int64][]int64{}  // device id -> entry ids
+	snapshot := map[int64]string{} // entry id -> name recorded with the entry
+	subIDs := map[int64][]int64{}
+	for _, e := range entries {
+		if m := auditDeviceByID.FindStringSubmatch(e.Target); m != nil {
+			id, _ := strconv.ParseInt(m[1], 10, 64)
+			devIDs[id] = append(devIDs[id], e.ID)
+		} else if m := auditDeviceNamed.FindStringSubmatch(e.Target); m != nil {
+			id, _ := strconv.ParseInt(m[2], 10, 64)
+			devIDs[id] = append(devIDs[id], e.ID)
+			snapshot[e.ID] = m[1]
+		} else if m := auditSubnetByID.FindStringSubmatch(e.Target); m != nil {
+			id, _ := strconv.ParseInt(m[1], 10, 64)
+			subIDs[id] = append(subIDs[id], e.ID)
+		}
+	}
+	out := map[int64]views.AuditTarget{}
+	if len(devIDs) > 0 {
+		ids := make([]int64, 0, len(devIDs))
+		for id := range devIDs {
+			ids = append(ids, id)
+		}
+		names, err := s.store.DeviceNames(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, entryIDs := range devIDs {
+			for _, eid := range entryIDs {
+				if name, ok := names[id]; ok {
+					out[eid] = views.AuditTarget{Text: name, Href: "/devices/" + strconv.FormatInt(id, 10)}
+				} else if snap := snapshot[eid]; snap != "" {
+					out[eid] = views.AuditTarget{Text: "deleted device " + snap}
+				} else {
+					out[eid] = views.AuditTarget{Text: "deleted device"}
+				}
+			}
+		}
+	}
+	if len(subIDs) > 0 {
+		subnets, err := s.store.ListSubnets(ctx)
+		if err != nil {
+			return nil, err
+		}
+		byID := map[int64]store.Subnet{}
+		for _, sn := range subnets {
+			byID[sn.ID] = sn
+		}
+		for id, entryIDs := range subIDs {
+			for _, eid := range entryIDs {
+				if sn, ok := byID[id]; ok {
+					out[eid] = views.AuditTarget{Text: "subnet " + sn.Name, Href: "/subnets/" + strconv.FormatInt(id, 10)}
+				} else {
+					out[eid] = views.AuditTarget{Text: "deleted subnet"}
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 // deviceTarget names a device in the audit log by name and id: the name is

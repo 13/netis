@@ -21,6 +21,15 @@ type AuditData struct {
 	Action  string
 	Users   []string
 	Actions []string
+	// Targets holds, by entry id, the targets resolved to a current name
+	// and page. An entry absent here shows its target as recorded.
+	Targets map[int64]AuditTarget
+}
+
+// AuditTarget is a resolved audit target. An empty Href means the thing has
+// been deleted since.
+type AuditTarget struct {
+	Text, Href string
 }
 
 templ filterSelect(name, label, current string, options []string) {
@@ -65,7 +74,15 @@ templ auditTab(a AuditData) {
 							}
 						</td>
 						<td class="mono">{ e.Action }</td>
-						<td>{ e.Target }</td>
+						<td>
+							if t, ok := a.Targets[e.ID]; !ok {
+								{ e.Target }
+							} else if t.Href != "" {
+								<a href={ templ.URL(t.Href) }>{ t.Text }</a>
+							} else {
+								<span class="muted">{ t.Text }</span>
+							}
+						</td>
 						<td>{ e.Detail }</td>
 						<td>
 							if e.Status >= 400 {
