@@ -408,6 +408,28 @@ func TestIntegrationFailureDetailIsGeneric(t *testing.T) {
 	}
 }
 
+func TestRunnerCallsAfterOnSuccess(t *testing.T) {
+	st := openTestStore(t)
+	evs := events.NewService(st, events.NewBroker())
+	calls := 0
+	fail := false
+	r := newRunner(st, evs, time.Second, map[string]integrationFunc{
+		"x": func(context.Context) (int, string, error) {
+			if fail {
+				return 0, "", errors.New("boom")
+			}
+			return 1, "", nil
+		},
+	})
+	r.after = func() { calls++ }
+	r.Run(t.Context(), "x")
+	fail = true
+	r.Run(t.Context(), "x")
+	if calls != 1 {
+		t.Fatalf("after calls = %d", calls)
+	}
+}
+
 func TestFailureCategory(t *testing.T) {
 	for _, tc := range []struct {
 		err  error

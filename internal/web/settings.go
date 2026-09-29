@@ -153,7 +153,8 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 	values["offline_after"] = offlineAfter
 
 	for _, k := range []string{"default_scan_interval_sec", "default_subnet_kind", "default_scan_enabled",
-		"event_retention_days", "availability_retention_days", "audit_retention_days", "presence_fallback"} {
+		"event_retention_days", "availability_retention_days", "audit_retention_days", "presence_fallback",
+		"autofill_enabled"} {
 		v, err := s.store.GetSetting(r.Context(), k)
 		if err != nil {
 			return views.SettingsData{}, err
@@ -641,6 +642,17 @@ func (s *Server) handleGeneralSave(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+	}
+	if v := r.FormValue("autofill_enabled"); v != "" {
+		if v != "on" && v != "off" {
+			s.settingsError(w, r, tab, http.StatusBadRequest, "choose whether netis fills in device details: On or Off")
+			return
+		}
+		if err := s.store.SetSetting(r.Context(), "autofill_enabled", v); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		s.kickAutofill()
 	}
 	// Retention windows, in days. Zero is meaningful — keep forever — so it is
 	// accepted rather than treated as unset.

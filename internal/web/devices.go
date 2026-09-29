@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -463,6 +464,7 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.kickAutofill()
 	s.flashToast(w, r, "Device created")
 	redirectAfterForm(w, r, "/devices/"+strconv.FormatInt(devID, 10))
 }
@@ -992,6 +994,13 @@ func (s *Server) handlePortScan(w http.ResponseWriter, r *http.Request) {
 		time.Now().UTC().Format(time.RFC3339)); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	// Open ports are evidence for autofill; run it for this device now so
+	// the page the user lands on already shows what they imply.
+	if s.autofill != nil {
+		if err := s.autofill.Run(r.Context(), id); err != nil {
+			slog.Error("autofill after port scan", "device_id", id, "err", err)
+		}
 	}
 	s.flashToast(w, r, portScanToast(ips[0].IP, len(found)))
 	http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
