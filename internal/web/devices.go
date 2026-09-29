@@ -658,7 +658,7 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, f := range ifaces {
-		if f.MAC == nil {
+		if f.MAC == nil || *f.MAC == "" {
 			continue
 		}
 		targets, err := s.wolTargets(r.Context(), f.ID)
@@ -678,7 +678,7 @@ func (s *Server) handleWOL(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/devices/"+r.PathValue("id"), http.StatusSeeOther)
 		return
 	}
-	http.Error(w, "device has no MAC", 400)
+	http.Error(w, "this device has no MAC address, so it cannot be woken", http.StatusBadRequest)
 }
 
 // wolTargets returns where a magic packet for an interface goes: the directed

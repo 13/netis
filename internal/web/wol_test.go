@@ -92,6 +92,8 @@ func TestWOLButtonUsesToast(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	dev, _ := st.CreateDevice(t.Context(), store.Device{Name: "pc", Kind: "computer", Source: "manual"})
+	mac := "aa:bb:cc:00:11:44"
+	st.AddIface(t.Context(), dev, &mac, nil)
 	body := authedGet(t, srv, st, fmt.Sprintf("/devices/%d", dev)).Body.String()
 	tag := formTag(body, fmt.Sprintf("/devices/%d/wol", dev))
 	if !strings.Contains(tag, `hx-post="/devices/1/wol"`) || !strings.Contains(tag, `hx-target="#toasts"`) {

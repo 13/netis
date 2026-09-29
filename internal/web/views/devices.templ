@@ -45,6 +45,17 @@ type DeviceDetail struct {
 	AlertOffline bool
 }
 
+// HasMAC says whether any of the device's interfaces has a MAC address,
+// which Wake on LAN needs.
+func (d DeviceDetail) HasMAC() bool {
+	for _, f := range d.Ifaces {
+		if f.Iface.MAC != nil && *f.Iface.MAC != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // lowestIPStr returns the numerically-lowest parseable IP among ips (the
 // same order the list view's "ip" sort uses), so the grid tile shows the
 // same address a user would expect from the sorted list. Falls back to the
@@ -651,9 +662,11 @@ templ DevicePage(username string, d DeviceDetail) {
 			if IsAdmin(ctx) {
 				<div class="dev-hero-actions">
 					<a class="btn primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">Edit</a>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
-						<button type="submit">Wake on LAN</button>
-					</form>
+					if d.HasMAC() {
+						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
+							<button type="submit">Wake on LAN</button>
+						</form>
+					}
 					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
 						<button type="submit">Scan ports</button>
 					</form>
