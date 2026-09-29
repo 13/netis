@@ -187,10 +187,24 @@ templ scanningForm(d SettingsData) {
 					}
 				</select>
 			</label>
+			<label>
+				Fill in device details automatically
+				<select name="autofill_enabled">
+					if d.Values["autofill_enabled"] != "off" {
+						<option value="on" selected>On</option>
+						<option value="off">Off</option>
+					} else {
+						<option value="on">On</option>
+						<option value="off" selected>Off</option>
+					}
+				</select>
+			</label>
 		</div>
 		<p class="hint">
 			A device counts as offline after this many scans in a row miss it. With presence without ping on,
 			a host on a directly attached subnet that ignores ping but answers ARP still counts as seen.
+			With fill in device details on, netis sets vendor, model, kind, icon, function and tags from the
+			MAC address, the hostname and open ports. It never changes a value you set.
 		</p>
 		<h3>Defaults for new subnets</h3>
 		<div class="field-grid narrow">

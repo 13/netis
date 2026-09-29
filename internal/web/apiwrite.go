@@ -146,6 +146,7 @@ func (s *Server) handleAPIDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.kickAutofill()
 	s.writeDevice(w, r, id, http.StatusCreated)
 }
 

@@ -1,4 +1,4 @@
-.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker e2e e2e-update e2e-bin screenshots
+.PHONY: generate build test test-pg pg pg-stop race lint vuln run docker e2e e2e-update e2e-bin screenshots oui
 
 generate:
 	go tool templ generate
@@ -37,6 +37,10 @@ run: build
 
 docker:
 	docker build -t netis .
+
+# Refreshes the embedded IEEE OUI registry (internal/oui/oui.txt.gz).
+oui:
+	go run ./internal/oui/gen
 
 # Visual regression and accessibility tests (e2e/). The fixture server is the
 # web package's test binary serving fixed data at a frozen clock; Playwright

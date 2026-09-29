@@ -14,6 +14,9 @@ import (
 	"netis/internal/store"
 )
 
+// Kicker asks for work without waiting for it (autofill.Service).
+type Kicker interface{ Kick() }
+
 type Engine struct {
 	Store   *store.Store
 	Events  *events.Service
@@ -21,6 +24,9 @@ type Engine struct {
 	Sweeper Sweeper
 	ARP     func() (map[string]string, error)
 	Resolve func(context.Context, string) string
+	// Autofill is kicked after each sweep so new and changed devices get
+	// their details filled in. Nil turns that off.
+	Autofill Kicker
 	// Presence confirms a host that answered ARP but not ping (TCPProbe in
 	// production). Nil skips straight to the ARP re-check.
 	Presence func(context.Context, string) (float64, bool)
@@ -167,6 +173,9 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 
 	e.checkConflicts(ctx, sn)
 	e.Broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
+	if e.Autofill != nil {
+		e.Autofill.Kick()
+	}
 	return nil
 }
 
@@ -216,7 +225,7 @@ func (e *Engine) createUnknown(ctx context.Context, sn store.Subnet, r Result, m
 	if resolved != "" {
 		hostP = &resolved
 	}
-	d := store.Device{Name: name, Kind: "other", Source: "scan", Vendor: Vendor(mac)}
+	d := store.Device{Name: name, Kind: "other", Source: "scan"}
 	// Device, interface and IP are created together: a device that got as far
 	// as being inserted without an interface is invisible to MAC matching and
 	// would linger in the list forever.

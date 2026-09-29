@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 
+	"netis/internal/autofill"
 	"netis/internal/macaddr"
 	"netis/internal/store"
 )
@@ -37,6 +38,11 @@ type DeviceDetail struct {
 	// sent as notifications.
 	AlertOffline bool
 	Back         BackLink
+	// Detected is every autofill hint for the device with what became of it.
+	Detected []autofill.Explained
+	// Autofilled holds the values autofill wrote that the device still
+	// shows, by field (vendor, kind, …; tags as tag:<name>).
+	Autofilled map[string]store.AutofillRecord
 }
 
 // HasMAC says whether any of the device's interfaces has a MAC address,
@@ -81,6 +87,7 @@ templ DevicePage(username string, d DeviceDetail) {
 			<h2 id="dd-overview">Overview</h2>
 			<div class="dd-grid">
 				@aboutPanel(d)
+				@detectedPanel(d)
 				@relatedPanel(d)
 				@linksPanel(d)
 				@fieldsPanel(d)
@@ -284,18 +291,30 @@ templ aboutPanel(d DeviceDetail) {
 		}
 		<dl class="facts dd-facts">
 			<dt>Kind</dt>
-			<dd>{ kindName(d.Device.Kind) }</dd>
+			<dd>
+				{ kindName(d.Device.Kind) }
+				@detectedBadge(d.detectedFrom("kind"))
+			</dd>
 			if d.Device.Vendor != "" {
 				<dt>Vendor</dt>
-				<dd>{ d.Device.Vendor }</dd>
+				<dd>
+					{ d.Device.Vendor }
+					@detectedBadge(d.detectedFrom("vendor"))
+				</dd>
 			}
 			if d.Device.Model != "" {
 				<dt>Model</dt>
-				<dd>{ d.Device.Model }</dd>
+				<dd>
+					{ d.Device.Model }
+					@detectedBadge(d.detectedFrom("model"))
+				</dd>
 			}
 			if d.Device.Function != "" {
 				<dt>Function</dt>
-				<dd>{ d.Device.Function }</dd>
+				<dd>
+					{ d.Device.Function }
+					@detectedBadge(d.detectedFrom("function"))
+				</dd>
 			}
 			<dt>Source</dt>
 			<dd>{ sourceName(d.Device.Source) }</dd>
@@ -316,6 +335,58 @@ templ aboutPanel(d DeviceDetail) {
 			<p class="hint">Add notes, tags or a function with Edit.</p>
 		}
 	</div>
+}
+
+// detectedBadge marks a value autofill filled in, naming where it came from.
+templ detectedBadge(title string) {
+	if title != "" {
+		<span class="chip chip-detected" title={ title }>Detected</span>
+	}
+}
+
+// detectedPanel lists every clue autofill has about the device and what
+// became of each. It stays closed: the Detected badges in About say what
+// was used, and this is the why.
+templ detectedPanel(d DeviceDetail) {
+	if len(d.Detected) > 0 {
+		<details class="panel dd-detected">
+			<summary>
+				@Icon("chevron-right", "disc-chev")
+				<h3>What netis detected</h3>
+				<span class="count">{ fmt.Sprint(len(d.Detected)) }</span>
+			</summary>
+			<div class="table-wrap">
+				<table class="table-stack">
+					<thead>
+						<tr><th scope="col">Field</th><th scope="col">Value</th><th scope="col">From</th><th scope="col">Status</th></tr>
+					</thead>
+					<tbody>
+						for _, e := range d.Detected {
+							<tr>
+								<td data-label="Field">{ fieldText[e.Field] }</td>
+								<td data-label="Value">{ hintValue(e) }</td>
+								<td data-label="From">
+									<span>
+										{ Sentence(sourceLabel(e.Source)) }
+										if e.Detail != "" {
+											<span class="muted mono">{ e.Detail }</span>
+										}
+									</span>
+								</td>
+								<td data-label="Status">
+									if e.Status == autofill.StatusApplied {
+										{ d.hintStatus(e) }
+									} else {
+										<span class="muted">{ d.hintStatus(e) }</span>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</details>
+	}
 }
 
 // relatedRow is a parent or child: icon, linked name, IP and status.

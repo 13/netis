@@ -370,6 +370,7 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+		s.kickAutofill()
 		v.Committed = true
 	} else {
 		v.CSV = string(data)

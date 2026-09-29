@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"netis/internal/adguard"
+	"netis/internal/autofill"
 	"netis/internal/buildinfo"
 	"netis/internal/config"
 	"netis/internal/events"
@@ -58,6 +59,9 @@ type integrationRunner struct {
 	evs     *events.Service
 	timeout time.Duration
 	byName  map[string]*integration
+	// after runs once per successful run, after the status is recorded. Nil
+	// turns that hook off (autofill.Kick in production).
+	after func()
 }
 
 func newRunner(st *store.Store, evs *events.Service, timeout time.Duration, funcs map[string]integrationFunc) *integrationRunner {
@@ -92,6 +96,9 @@ func (r *integrationRunner) Run(ctx context.Context, name string) error {
 	recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	r.recordStatus(recCtx, name, in, count, detail, err)
+	if err == nil && r.after != nil {
+		r.after()
+	}
 	return err
 }
 
@@ -380,6 +387,7 @@ func main() {
 	// emit; events queued before Run starts wait for it.
 	notifier := notify.New(st)
 	evs.SetSubscriber(notifier)
+	af := autofill.New(st)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -404,6 +412,7 @@ func main() {
 		// their ARP entry surviving the kernel's re-probe.
 		Presence:  scan.TCPProbe,
 		ARPSettle: scan.DefaultARPSettle,
+		Autofill:  af,
 	}
 	sched := scan.NewScheduler(engine, st)
 	go sched.Start(ctx)
@@ -411,8 +420,10 @@ func main() {
 	// Background loops that write to the store; shutdown waits on bg before
 	// the deferred st.Close().
 	var bg sync.WaitGroup
+	bg.Go(func() { af.Start(ctx) })
 	bg.Go(func() { notifier.Run(ctx) })
 	runNow := newIntegrationRunner(st, evs)
+	runNow.after = af.Kick
 	startIntegrationSyncs(ctx, &bg, runNow, time.Minute)
 	startRetention(ctx, &bg, st, retentionInterval)
 	backups := startBackups(ctx, &bg, cfg, st, evs)
@@ -424,6 +435,7 @@ func main() {
 			MetricsToken:   cfg.MetricsToken,
 			Backups:        backups,
 			OIDC:           oidcCfg,
+			Autofill:       af,
 		}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		// ReadTimeout bounds reading the whole request, so a client cannot

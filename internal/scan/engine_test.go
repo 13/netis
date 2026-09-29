@@ -45,6 +45,24 @@ func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
 	return e, st, fs, snID
 }
 
+type countKicker struct{ n int }
+
+func (k *countKicker) Kick() { k.n++ }
+
+func TestSweepKicksAutofill(t *testing.T) {
+	e, st, fs, snID := testEngine(t)
+	k := &countKicker{}
+	e.Autofill = k
+	fs.results = []Result{{IP: "10.0.0.9", Alive: true, RTTms: 1}}
+	sn, _ := st.GetSubnet(t.Context(), snID)
+	if err := e.RunSubnet(t.Context(), sn); err != nil {
+		t.Fatal(err)
+	}
+	if k.n != 1 {
+		t.Fatalf("kicks = %d", k.n)
+	}
+}
+
 func TestShouldRunScan(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -79,8 +97,7 @@ func TestAutoCreatesUnknownDevice(t *testing.T) {
 		t.Fatalf("devices=%+v", rows)
 	}
 	d := rows[0]
-	if d.Name != "unknown-bc:24:11:00:00:01" || d.Source != "scan" ||
-		d.Vendor != "Proxmox Server Solutions GmbH" || !d.Online {
+	if d.Name != "unknown-bc:24:11:00:00:01" || d.Source != "scan" || !d.Online {
 		t.Fatalf("device=%+v", d)
 	}
 	evs, _ := st.ListEvents(t.Context(), 5)

@@ -46,6 +46,13 @@ type BackupStatus interface {
 	Status() backup.Status
 }
 
+// Autofiller fills in device details (autofill.Service). Run fills the given
+// devices now; Kick asks for a full pass in the background.
+type Autofiller interface {
+	Run(ctx context.Context, ids ...int64) error
+	Kick()
+}
+
 // Options carries deployment settings that are not stored in the database
 // because they describe the environment netis runs in, not the network it
 // tracks.
@@ -64,6 +71,8 @@ type Options struct {
 	// OIDC configures single sign-on through an OpenID Connect provider. The
 	// zero value leaves it off.
 	OIDC config.OIDC
+	// Autofill fills in device details. Nil turns the hooks off (tests).
+	Autofill Autofiller
 }
 
 type Server struct {
@@ -87,6 +96,9 @@ type Server struct {
 	// packet leaves the machine.
 	wolSend func(mac, addr string) error
 	oidc    *oidcAuth // nil when SSO is off
+	// autofill fills in device details after a sweep, integration sync, port
+	// scan, import or manual create. Nil turns the hooks off (tests).
+	autofill Autofiller
 }
 
 func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runner IntegrationRunner, opts ...Options) *Server {
@@ -105,6 +117,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 		backups:        o.Backups,
 		wolSend:        wol.SendTo,
 		oidc:           newOIDCAuth(o.OIDC),
+		autofill:       o.Autofill,
 	}
 	s.mux.HandleFunc("GET /healthz", s.handleHealthz)
 	static := staticHandler()
@@ -372,4 +385,11 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, c templ.Componen
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
+}
+
+// kickAutofill asks for an autofill pass, when autofill is wired in.
+func (s *Server) kickAutofill() {
+	if s.autofill != nil {
+		s.autofill.Kick()
+	}
 }
