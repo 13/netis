@@ -72,8 +72,14 @@ lets a phone or desktop browser install netis as a standalone app.
   subnet cards count the reservations. Each square also names its
   address and state for screen readers. Squares update live over SSE during
   a scan.
-- **Device list** — filterable/searchable table of every known device, with
-  CSV/JSON export and (for admins) a CSV import with a dry-run preview.
+- **Device list** — searchable table of every known device, filtered by
+  status, kind, subnet, tag, new (unreviewed), private MAC or missing
+  upstream. Filters are part of the URL (`/devices?status=offline`,
+  `/devices?new=1`, `/devices?subnet=2&tag=iot`), so a filtered list can be
+  bookmarked. MAC, lease, function and tags are optional columns, addresses
+  two devices share are flagged, and guests sit under their host until you
+  sort by a column. Admins can approve, tag or delete several devices at
+  once. CSV/JSON export and (for admins) a CSV import with a dry-run preview.
 - **Device page** — full device detail: interfaces, IPs, open ports,
   uptime, links, tags, custom fields, parent/child devices (e.g. a
   Proxmox host and its guests), event history, and buttons to send a
