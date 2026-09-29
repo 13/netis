@@ -1,0 +1,179 @@
+/* Subnets index and the subnet page: the patch panel, its LEDs, the details
+   panel beside it (a bottom sheet on narrow screens). Tokens only. */
+@layer pages {
+  /* ---- LEDs: one look shared by the ports, the counts and the legend ----
+     Each state differs in shape as well as colour: online a lit dot, offline
+     an unlit ring, not seen yet a ring with a dot, conflict a diamond. In the
+     dark theme the lit ones glow a little. */
+  .led, .port::before { content:""; display:block; flex:none; width:8px; height:8px; border-radius:50%; }
+  :is(.led, .port).online { --led:var(--link); }
+  :is(.led, .port).reserved { --led:var(--activity); }
+  :is(.led, .port).conflict { --led:var(--fault); }
+  .led.online, .port.online::before {
+    background:var(--led);
+    box-shadow:0 0 0 2px light-dark(var(--link-soft), transparent), 0 0 6px 1px light-dark(transparent, color-mix(in srgb, var(--led) 55%, transparent)); }
+  .led.offline, .port.offline::before { background:transparent; box-shadow:inset 0 0 0 1.5px var(--muted); }
+  .led.reserved, .port.reserved::before {
+    background:radial-gradient(circle, var(--led) 0 32%, transparent 36%);
+    box-shadow:inset 0 0 0 1.5px var(--led), 0 0 5px light-dark(transparent, color-mix(in srgb, var(--led) 45%, transparent)); }
+  .led.conflict, .port.conflict::before {
+    border-radius:1px; transform:rotate(45deg) scale(.9); background:var(--led);
+    box-shadow:0 0 6px 1px light-dark(transparent, color-mix(in srgb, var(--led) 55%, transparent)); }
+  .led.free { border-radius:2px; background:var(--socket); box-shadow:inset 0 0 0 1px var(--border-strong); }
+
+  /* ---- a port: a small recessed socket ---- */
+  .patch-grid, .patch-legend, .sn-stats {
+    --socket:light-dark(color-mix(in srgb, var(--fg) 6%, var(--surface-2)), color-mix(in srgb, #000 30%, var(--surface-2)));
+    --socket-shade:light-dark(color-mix(in srgb, var(--fg) 22%, transparent), color-mix(in srgb, #000 70%, transparent)); }
+  .port { position:relative; display:grid; place-items:center; width:100%; height:100%; padding:0; margin:0;
+          aspect-ratio:1; border-radius:3px; background:var(--socket); border:1px solid var(--border);
+          box-shadow:inset 0 1px 2px var(--socket-shade); color:inherit; cursor:pointer; }
+  .port::before { width:40%; height:40%; min-width:5px; min-height:5px; }
+  .port.free::before, .port.edge::before { display:none; }
+  .port.static { border:1.5px solid var(--border-strong); }
+  .port.dhcp { border:1.5px dashed var(--border-strong); }
+  .port.conflict { border-color:color-mix(in srgb, var(--fault) 70%, var(--border)); }
+  .port.edge { cursor:default; box-shadow:none; background:var(--surface);
+               background-image:repeating-linear-gradient(45deg, transparent 0 3px, var(--border) 3px 4px); }
+  button.port:hover { border-color:var(--accent); }
+  [aria-selected="true"] > .port { border-color:var(--accent); box-shadow:inset 0 1px 2px var(--socket-shade), 0 0 0 2px var(--accent); }
+  .port.flash { animation:portflash .7s var(--ease) 2; }
+  @keyframes portflash { 50% { box-shadow:inset 0 1px 2px var(--socket-shade), 0 0 0 5px var(--accent-soft); } }
+
+  /* ---- the panel: rows of 16 ports as strips, numbered on two edges ---- */
+  .patch { margin:0; }
+  .patch-grid { --port:26px; --gap:4px; --lbl:48px; --n:16; --split:2px;
+                display:flex; flex-direction:column; gap:var(--gap); width:max-content; max-width:100%; }
+  .cols-8 { --n:8; } .cols-4 { --n:4; } .cols-2 { --n:2; } .cols-1 { --n:1; }
+  .patch-cols, .patch-row { display:grid; grid-template-columns:var(--lbl) repeat(var(--n), var(--port)); column-gap:var(--gap); align-items:center; }
+  .patch-row { padding:4px 6px 4px 0; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-control); }
+  .patch-cols { padding:0 7px 0 1px; }
+  /* Two groups of eight in each strip, as on a real panel: an empty track
+     between them that the second group steps over. */
+  .cols-16 :is(.patch-cols, .patch-row) { grid-template-columns:var(--lbl) repeat(8, var(--port)) var(--split) repeat(8, var(--port)); }
+  .cols-16 :is(.patch-cols, .patch-row) > :nth-child(10) { grid-column-start:11; }
+  .patch-cols > span { color:var(--muted); font-family:var(--font-mono); font-size:var(--text-xs); text-align:center; line-height:1.6; }
+  .patch-off { padding-right:var(--sp-2); color:var(--muted); font-size:var(--text-xs); text-align:right; white-space:nowrap; }
+  .patch-sec { display:flex; flex-direction:column; gap:var(--gap); }
+  .patch-sec-label { margin-top:var(--sp-3); color:var(--muted); font-size:var(--text-xs); }
+  .patch-sec-label:first-of-type { margin-top:0; }
+  .patch-row > [role="gridcell"] { display:block; min-width:0; aspect-ratio:1; }
+  /* A long panel keeps its column numbers in view. */
+  .patch-cols { position:sticky; top:0; z-index:1; background:var(--surface); }
+
+  /* width:0 + min-width:100% keeps the legend from widening the panel. */
+  .patch-legend { width:0; min-width:100%; display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); margin:var(--sp-4) 0 0; padding:var(--sp-3) 0 0;
+                  list-style:none; border-top:1px solid var(--border); color:var(--muted); font-size:var(--text-sm); }
+  .patch-legend li { display:inline-flex; align-items:center; gap:var(--sp-2); }
+  .patch-legend .port { width:18px; height:18px; cursor:default; }
+
+  /* ---- page header ---- */
+  .sn-head { display:flex; align-items:flex-end; justify-content:space-between; gap:var(--sp-3) var(--sp-4); flex-wrap:wrap; margin-bottom:var(--sp-4); }
+  .sn-title h1 { margin:0; }
+  .sn-meta { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; margin:var(--sp-1) 0 0; }
+  .sn-title .sn-meta .mono { font-size:var(--text-md); }
+  .sn-actions { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+  .next-free .mono { color:var(--muted); font-size:var(--text-sm); font-weight:var(--w-regular); }
+  .sn-bar { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2) var(--sp-4); flex-wrap:wrap;
+            margin-bottom:var(--sp-4); padding:var(--sp-2) var(--sp-3); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
+  .sn-stats { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-1) var(--sp-4); margin:0; padding:0; list-style:none;
+              color:var(--muted); font-size:var(--text-sm); }
+  .sn-stats li { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .sn-stats b { color:var(--fg); font-weight:var(--w-semibold); }
+  .sn-lease { padding-left:var(--sp-4); border-left:1px solid var(--border); }
+  .scan-ctl { display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); font-size:var(--text-sm); }
+  .scan-when { display:inline-flex; align-items:center; gap:var(--sp-1); white-space:nowrap; }
+  .spin { animation:spin 1.2s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ---- panel and details side by side; details as a sheet when narrow ---- */
+  .sn-body { display:grid; grid-template-columns:max-content minmax(280px, 400px); gap:var(--sp-4); align-items:start; }
+  .patch-wrap { min-width:0; max-width:100%; overflow-x:auto; }
+  .cell-panel { position:sticky; top:var(--sp-5); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
+  .cp { display:flex; flex-direction:column; gap:var(--sp-3); padding:var(--sp-4); }
+  .cp > p { margin:0; }
+  .cp-empty { color:var(--muted); }
+  .cp-hint { color:var(--fg); }
+  .cp-head { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2); }
+  .cp-head h2 { margin:0; font-size:var(--text-lg); font-weight:var(--w-medium); }
+  .cp-head h2:focus { outline:none; }
+  .cp-head h2:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .cp-state { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+  .cp-devs { display:flex; flex-direction:column; gap:var(--sp-3); margin:0; padding:0; list-style:none; }
+  .cp-dev { display:flex; align-items:flex-start; gap:var(--sp-3); }
+  .cp-dev-main { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .cp-dev-name { font-weight:var(--w-semibold); text-decoration:none; overflow-wrap:anywhere; }
+  .cp-dev-name:hover { text-decoration:underline; }
+  .cp-conflict { display:flex; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); background:var(--fault-soft); border-radius:var(--r-control);
+                 color:var(--fg); font-size:var(--text-sm); }
+  .cp-conflict::before { content:""; width:3px; align-self:stretch; border-radius:2px; background:var(--fault); flex:none; }
+  .cp-lease { display:flex; align-items:center; gap:var(--sp-3); }
+  .cp-actions { display:flex; flex-wrap:wrap; gap:var(--sp-2); padding-top:var(--sp-3); border-top:1px solid var(--border); }
+  .sn-devices-h { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+  .sn-devices-h .btn { margin-left:auto; }
+  .sn-devices-h + p { margin-top:calc(-1 * var(--sp-2)); }
+
+  @media (max-width:1099px) {
+    .sn-body { grid-template-columns:minmax(0, 1fr); }
+    .cell-panel { display:none; }
+    .cell-panel[data-open] { display:block; position:fixed; z-index:35; top:auto; right:var(--sp-4); bottom:var(--sp-4); left:auto;
+                              width:min(380px, calc(100% - 32px)); max-height:min(70vh, 560px); overflow-y:auto; box-shadow:var(--overlay-shadow);
+                              animation:sheetin .16s var(--ease); }
+    @keyframes sheetin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  }
+
+  /* ---- subnets index ---- */
+  ul.sn-list { margin:0; padding:0; list-style:none; }
+  .sn-item { display:grid; grid-template-columns:84px minmax(160px, 1fr) minmax(0, 1.6fr) auto; align-items:center; gap:var(--sp-2) var(--sp-4);
+             padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--border); }
+  .sn-item:last-child { border-bottom:0; }
+  .sn-mini { display:block; }
+  .mini-panel { display:block; width:80px; height:auto; }
+  .mini-panel rect { fill:color-mix(in srgb, var(--fg) 9%, var(--surface-2)); }
+  .mini-panel .online { fill:var(--link); }
+  .mini-panel .offline { fill:var(--muted); }
+  .mini-panel .reserved { fill:var(--activity); }
+  .mini-panel .conflict { fill:var(--fault); }
+  .mini-panel .edge { fill:var(--border); }
+  .usage { display:block; width:80px; height:8px; border-radius:var(--r-control); background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--border); overflow:hidden; }
+  .usage .online { fill:var(--link); } .usage .reserved { fill:var(--activity); }
+  .usage .offline { fill:var(--muted); } .usage .conflict { fill:var(--fault); }
+  .sn-id { display:flex; flex-direction:column; gap:var(--sp-1); min-width:0; }
+  .sn-name { color:var(--fg); font-size:var(--text-md); font-weight:var(--w-semibold); text-decoration:none; }
+  .sn-name:hover { color:var(--accent); }
+  .sn-id .sn-meta { margin:0; }
+  .sn-id .mono { font-size:var(--text-sm); }
+  .sn-item .scan-ctl { justify-self:end; }
+
+  @media (max-width:900px) {
+    .sn-item { grid-template-columns:64px minmax(0, 1fr); }
+    .sn-item .sn-mini { grid-row:span 3; align-self:start; }
+    .mini-panel, .usage { width:60px; }
+    .sn-item .scan-ctl { justify-self:start; flex-wrap:wrap; }
+  }
+
+  /* ---- phones: the ports shrink to fit 16 across; the details slide up ---- */
+  @media (max-width:640px) {
+    .patch-wrap { padding:var(--sp-3) var(--sp-2); overflow-x:visible; }
+    .patch-grid { --gap:2px; --lbl:32px; width:100%; }
+    .patch-cols, .patch-row { grid-template-columns:var(--lbl) repeat(var(--n), minmax(0, 1fr)); }
+    .cols-16 :is(.patch-cols, .patch-row) { grid-template-columns:var(--lbl) repeat(8, minmax(0, 1fr)) 0 repeat(8, minmax(0, 1fr)); }
+    .patch-row { padding:3px 3px 3px 0; }
+    .patch-cols { padding:0 4px 0 1px; top:52px; }
+    .patch-cols > span { font-size:10px; }
+    .patch-off { padding-right:var(--sp-1); font-size:10px; }
+    .port { border-radius:2px; }
+    .sn-bar { padding:var(--sp-2) var(--sp-3); }
+    .sn-lease { padding-left:0; border-left:0; }
+    .cell-panel[data-open] { left:0; right:0; bottom:calc(60px + env(safe-area-inset-bottom)); width:auto; max-height:65vh;
+                              border-radius:var(--r-panel) var(--r-panel) 0 0; border-width:1px 0 0; }
+  }
+  /* Below 320px 16 ports no longer fit: each strip wraps into two lines of 8. */
+  @media (max-width:319px) {
+    .cols-16 :is(.patch-cols, .patch-row) { grid-template-columns:var(--lbl) repeat(8, minmax(0, 1fr)); }
+    .cols-16 :is(.patch-cols, .patch-row) > :nth-child(10) { grid-column-start:2; }
+    .cols-16 .patch-cols > :nth-child(n+10) { display:none; }
+    .cols-16 .patch-row > .patch-off { grid-row:span 2; align-self:start; }
+    .patch-row { row-gap:var(--gap); }
+  }
+}

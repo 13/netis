@@ -41,136 +41,384 @@ func cellLabel(c GridCell) string {
 	return strings.Join(parts, ", ")
 }
 
-templ GridPage(username string, sn store.Subnet, cells []GridCell, devices []store.DeviceRow, sortKey, dir string) {
-	@Layout(sn.Name, username) {
-		<h1>{ sn.Name } <span class="mono">{ sn.CIDR }</span></h1>
-		if sn.Kind != "wireguard" && IsAdmin(ctx) {
-			<button class="btn" hx-post={ fmt.Sprintf("/subnets/%d/scan", sn.ID) } hx-target="#toasts" hx-swap="beforeend">
-				@Icon("radar", "")
-				Scan now
-			</button>
-		}
-		<div
-			id="grid"
-			hx-get={ fmt.Sprintf("/subnets/%d/grid", sn.ID) }
-			hx-trigger={ fmt.Sprintf("sse:grid:%d", sn.ID) }
-		>
-			@GridFrag(sn, cells)
+// GridPage is a subnet's page: its header with the counts and the scan
+// control, the patch panel with a details panel beside it (a bottom sheet on
+// narrow screens), and the devices that hold an address in it.
+templ GridPage(d GridPageData) {
+	@Layout(d.Subnet.Name, d.Username) {
+		<div class="sn-head">
+			<div class="sn-title">
+				<h1>{ d.Subnet.Name }</h1>
+				<p class="sn-meta">
+					<span class="mono">{ d.Subnet.CIDR }</span>
+					<span class="chip">{ subnetKindLabel(d.Subnet.Kind) }</span>
+					if d.Subnet.VLANID != nil {
+						<span class="chip">VLAN { fmt.Sprint(*d.Subnet.VLANID) }</span>
+					}
+				</p>
+			</div>
+			<div class="sn-actions">
+				@nextFreeButton(d.Subnet, d.NextFree)
+				if IsAdmin(ctx) {
+					<a class="btn btn-quiet" href={ templ.URL(fmt.Sprintf("/settings/network#subnet-%d", d.Subnet.ID)) }>
+						@Icon("settings", "")
+						Manage subnet
+					</a>
+				}
+			</div>
 		</div>
-		<p class="muted legend-sq">
-			<span class="sq online" aria-hidden="true"></span> online
-			<span class="sq offline" aria-hidden="true"></span> offline
-			<span class="sq reserved" aria-hidden="true"></span> not seen yet
-			<span class="sq" aria-hidden="true"></span> free
-			<span class="sq conflict" aria-hidden="true"></span> conflict
-			<span class="sq edge" aria-hidden="true"></span> network/broadcast
-			· border: <span class="sq static" aria-hidden="true"></span> static (reserved)
-			<span class="sq dhcp" aria-hidden="true"></span> dhcp
-		</p>
-		<p class="muted">
-			The grid shows every IP assigned in this subnet. Devices without an IP here (or on other subnets) aren't listed — see the full <a href="/devices">Devices</a> page.
-		</p>
-		<h2>
-			{ "Devices in this subnet (" + fmt.Sprint(len(devices)) + ")" }
+		<div class="sn-bar">
+			@gridStats(d.Stats)
+			@ScanControl(d.Scan)
+		</div>
+		<div class="sn-body">
+			<section class="panel patch-wrap" aria-label="Address panel">
+				<div
+					id="grid"
+					hx-get={ fmt.Sprintf("/subnets/%d/grid", d.Subnet.ID) }
+					hx-trigger={ fmt.Sprintf("sse:grid:%d, sse:dashboard", d.Subnet.ID) }
+				>
+					@GridFrag(d.Subnet, d.Cells, d.Selected)
+				</div>
+				@gridLegend()
+			</section>
+			<aside
+				id="cell-panel"
+				class="cell-panel"
+				aria-label="Address details"
+				data-subnet={ fmt.Sprint(d.Subnet.ID) }
+				if d.Cell != nil {
+					data-open
+				}
+			>
+				if d.Cell != nil {
+					@CellPanel(d.Subnet, *d.Cell)
+				} else {
+					@cellPanelEmpty(d.Subnet)
+				}
+			</aside>
+			<template id="cp-empty">
+				@cellPanelEmpty(d.Subnet)
+			</template>
+		</div>
+		<h2 class="sn-devices-h">
+			Devices in this subnet <span class="count">{ fmt.Sprint(len(d.Devices)) }</span>
 			if IsAdmin(ctx) {
-				<a class="btn btn-primary btn-sm" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d", sn.ID)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d", sn.ID) } hx-target="#modal">
+				<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d", d.Subnet.ID)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d", d.Subnet.ID) } hx-target="#modal">
 					@Icon("plus", "")
 					New device
 				</a>
 			}
 		</h2>
-		if len(devices) == 0 {
-			<p class="muted">No devices with an IP in this subnet yet.</p>
+		<p class="muted">
+			Devices without an IP here (or on other subnets) aren't listed; see the full <a href="/devices">Devices</a> page.
+		</p>
+		if len(d.Devices) == 0 {
+			<div class="panel empty">
+				@Icon("monitor", "")
+				<h3>No devices in this subnet yet</h3>
+				<p>A scan adds what answers, or pick a free port above to add one by hand.</p>
+			</div>
 		} else {
 			<div class="table-wrap">
-				@deviceTable(devices, "", sortKey, dir, fmt.Sprintf("/subnets/%d", sn.ID), false)
+				@deviceTable(d.Devices, "", d.SortKey, d.Dir, fmt.Sprintf("/subnets/%d", d.Subnet.ID), false)
 			</div>
+		}
+		<script src="/static/grid.js" defer></script>
+	}
+}
+
+// GridRefresh answers the live refresh of the panel: the ports, plus the
+// counts, the next free address and the scan control swapped out of band so
+// the header never disagrees with the grid.
+templ GridRefresh(d GridPageData) {
+	@GridFrag(d.Subnet, d.Cells, d.Selected)
+	<div id="sn-stats" hx-swap-oob="true">
+		@gridStatsBody(d.Stats)
+	</div>
+	@nextFreeButtonOOB(d.Subnet, d.NextFree)
+	@ScanControlOOB(d.Scan)
+}
+
+// gridStats counts the subnet's addresses, each with the mark its port
+// carries in the panel.
+templ gridStats(s GridStats) {
+	<div id="sn-stats">
+		@gridStatsBody(s)
+	</div>
+}
+
+templ gridStatsBody(s GridStats) {
+	<ul class="sn-stats" aria-label="Address counts">
+		<li><span class="led online" aria-hidden="true"></span><b>{ fmt.Sprint(s.Online) }</b> online</li>
+		<li><span class="led offline" aria-hidden="true"></span><b>{ fmt.Sprint(s.Offline) }</b> offline</li>
+		if s.Unseen > 0 {
+			<li><span class="led reserved" aria-hidden="true"></span><b>{ fmt.Sprint(s.Unseen) }</b> not seen yet</li>
+		}
+		if s.Conflict > 0 {
+			<li><span class="led conflict" aria-hidden="true"></span><b>{ fmt.Sprint(s.Conflict) }</b> { pluralWord(s.Conflict, "conflict", "conflicts") }</li>
+		}
+		<li><span class="led free" aria-hidden="true"></span><b>{ fmt.Sprint(s.Free) }</b> free</li>
+		<li class="sn-lease"><b>{ fmt.Sprint(s.Static) }</b> static · <b>{ fmt.Sprint(s.DHCP) }</b> DHCP</li>
+	</ul>
+}
+
+// nextFreeButton jumps to the first free address: a link to the page with
+// that port open, which grid.js turns into opening it in place.
+templ nextFreeButton(sn store.Subnet, ip string) {
+	<span id="next-free" class="next-free">
+		@nextFreeBody(sn, ip)
+	</span>
+}
+
+templ nextFreeButtonOOB(sn store.Subnet, ip string) {
+	<span id="next-free" class="next-free" hx-swap-oob="true">
+		@nextFreeBody(sn, ip)
+	</span>
+}
+
+templ nextFreeBody(sn store.Subnet, ip string) {
+	if ip != "" {
+		<a class="btn" href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", sn.ID, ip)) } data-next-free={ ip }>
+			Next free IP
+			<span class="mono">{ ip }</span>
+		</a>
+	} else {
+		<button type="button" class="btn" disabled>No free IP</button>
+	}
+}
+
+// ScanControl says where scanning of a subnet stands (last scan, running,
+// not scanned) and, for an admin, carries the Scan now button, which stays
+// disabled while a scan is waiting or running. Its id lets the scan
+// response and the live refresh replace it.
+templ ScanControl(s ScanState) {
+	<div id={ fmt.Sprintf("scan-state-%d", s.Subnet.ID) } class="scan-ctl">
+		@scanControlBody(s)
+	</div>
+}
+
+templ ScanControlOOB(s ScanState) {
+	<div id={ fmt.Sprintf("scan-state-%d", s.Subnet.ID) } class="scan-ctl" hx-swap-oob="true">
+		@scanControlBody(s)
+	</div>
+}
+
+templ scanControlBody(s ScanState) {
+	if s.Subnet.Kind == "wireguard" {
+		<span class="muted">Peers come from the WireGuard integration</span>
+	} else {
+		<span class="scan-when muted">
+			if s.Busy() {
+				Scanning…
+			} else if s.LastDone != "" {
+				if s.LastOK {
+					Last scan{ " " }
+				} else {
+					<span class="status is-error">Last scan failed</span>{ " " }
+				}
+				@Time(s.LastDone)
+			} else {
+				{ scanEvery(s.Subnet) }
+			}
+		</span>
+		if IsAdmin(ctx) {
+			if s.Busy() {
+				<button type="button" class="btn btn-sm scan-btn" disabled aria-busy="true">
+					@Icon("refresh-cw", "spin")
+					Scanning…
+				</button>
+			} else {
+				<button
+					type="button"
+					class="btn btn-sm scan-btn"
+					hx-post={ fmt.Sprintf("/subnets/%d/scan", s.Subnet.ID) }
+					hx-target="#toasts"
+					hx-swap="beforeend"
+				>
+					@Icon("radar", "")
+					Scan now
+				</button>
+			}
 		}
 	}
 }
 
-templ GridFrag(sn store.Subnet, cells []GridCell) {
-	<div class="grid">
-		for _, c := range cells {
-			if c.DeviceID > 0 {
-				<button
-					type="button"
-					class={ "sq", c.State, c.Kind }
-					hx-get={ fmt.Sprintf("/subnets/%d/cell?ip=%s", sn.ID, c.IP) }
-					hx-target="#modal"
-					title={ c.Title }
-					aria-label={ cellLabel(c) }
-				></button>
-			} else if c.State == "free" && IsAdmin(ctx) {
-				<button
-					type="button"
-					class={ "sq", c.State }
-					hx-get={ fmt.Sprintf("/devices/new?subnet=%d&ip=%s", sn.ID, c.IP) }
-					hx-target="#modal"
-					title={ c.Title + " — click to add a device" }
-					aria-label={ cellLabel(c) + ", add a device" }
-				></button>
-			} else {
-				<span class={ "sq", c.State } title={ c.Title } role="img" aria-label={ cellLabel(c) }></span>
+// GridFrag is the patch panel: column numbers across the top, rows of 16
+// ports with their starting address down the left, a panel per 256
+// addresses. Every port is a button in one form, so without JavaScript a
+// click loads the page with that port's details open; grid.js turns the
+// form into a keyboard grid (one tab stop, arrow keys between ports) and
+// opens details in place. No port carries its own listener or htmx
+// attributes, which keeps a /22's 1,024 ports cheap to draw and to swap.
+templ GridFrag(sn store.Subnet, cells []GridCell, selected string) {
+	<form class="patch" method="get" action={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) } data-patch={ fmt.Sprint(sn.ID) }>
+		<div
+			class={ "patch-grid", fmt.Sprintf("cols-%d", portColumns(cells)) }
+			role="grid"
+			aria-label={ "Addresses in " + sn.Name + ", " + fmt.Sprint(portColumns(cells)) + " per row" }
+			aria-describedby="patch-help"
+		>
+			<div class="patch-cols" aria-hidden="true">
+				<span></span>
+				for i := range portColumns(cells) {
+					<span>{ fmt.Sprint(i) }</span>
+				}
+			</div>
+			for _, sec := range portSections(cells) {
+				if sec.Label != "" {
+					<div class="patch-sec-label mono" aria-hidden="true">{ sec.Label }</div>
+				}
+				<div class="patch-sec" role="rowgroup">
+					for _, row := range sec.Rows {
+						<div class="patch-row" role="row">
+							<span class="patch-off mono" aria-hidden="true">{ row.Label }</span>
+							for _, c := range row.Cells {
+								<span
+									role="gridcell"
+									if c.IP == selected {
+										aria-selected="true"
+									}
+								>
+									<button type="submit" name="ip" value={ c.IP } class={ "port", c.State, c.Kind } aria-label={ cellLabel(c) }></button>
+								</span>
+							}
+						</div>
+					}
+				</div>
 			}
-		}
-	</div>
+		</div>
+		<p id="patch-help" class="sr-only">Arrow keys move between addresses, Enter opens one.</p>
+	</form>
+}
+
+// gridLegend says in words what each port look means.
+templ gridLegend() {
+	<ul class="patch-legend" aria-label="Legend">
+		<li><span class="port online static" aria-hidden="true"></span>Online</li>
+		<li><span class="port offline static" aria-hidden="true"></span>Offline</li>
+		<li><span class="port reserved static" aria-hidden="true"></span>Not seen yet</li>
+		<li><span class="port conflict static" aria-hidden="true"></span>IP conflict</li>
+		<li><span class="port free" aria-hidden="true"></span>Free</li>
+		<li><span class="port edge" aria-hidden="true"></span>Network or broadcast</li>
+		<li><span class="port free static" aria-hidden="true"></span>Solid rim: static</li>
+		<li><span class="port free dhcp" aria-hidden="true"></span>Dashed rim: DHCP</li>
+	</ul>
 }
 
 templ ScanToast(msg string) {
 	<div class="toast">{ msg }</div>
 }
 
-templ CellDetail(sn store.Subnet, ip string, o store.Occupant) {
-	<dialog class="dialog" aria-labelledby="dlg-title">
-		<div class="dh">
-			<h3 id="dlg-title">{ ip }</h3>
-			<button type="button" class="btn btn-quiet btn-icon btn-sm" data-close aria-label="Close">
-				@Icon("x", "")
-			</button>
-		</div>
-		<div class="db">
-			if o.DeviceID > 0 {
-				<p>
-					<a href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>{ o.DeviceName }</a>
-					if o.MAC != "" {
-						{ " " }<span class="mono muted">{ o.MAC }</span>
-					}
-				</p>
-				<p class="muted">
-					Last seen{ " " }
-					@Time(o.LastSeen)
-					{ " · " }Lease: { o.Kind }
-				</p>
-			} else {
-				<p class="muted">Free — no assignment.</p>
+// cellPanelEmpty is the details panel before a port is picked.
+templ cellPanelEmpty(sn store.Subnet) {
+	<div class="cp cp-empty">
+		<p class="cp-hint">Pick a port to see which device holds the address.</p>
+		<p class="muted text-sm">
+			Arrow keys move between ports and Enter opens one.
+			if IsAdmin(ctx) {
+				{ " " }A free port lets you add a device at that address.
 			}
-		</div>
-		if o.DeviceID > 0 {
-			<div class="df">
-				<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/devices/%d", o.DeviceID)) }>Open</a>
-				if IsAdmin(ctx) {
-					<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", o.DeviceID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", o.DeviceID) } hx-target="#modal">Edit</a>
-					@kindButton(sn.ID, ip, "static", "Set static", o.Kind)
-					@kindButton(sn.ID, ip, "dhcp", "Set DHCP", o.Kind)
-				}
-			</div>
-		}
-	</dialog>
+		</p>
+	</div>
 }
 
-templ kindButton(subnetID int64, ip, kind, label, current string) {
+// CellPanel is the details of one address: its state, every device that
+// claims it (two or more is a conflict), and what can be done from here.
+// grid.js swaps it into the page's details panel; the address heading takes
+// focus when a keyboard opened it.
+templ CellPanel(sn store.Subnet, c CellInfo) {
+	<div class="cp" data-ip={ c.IP }>
+		<div class="cp-head">
+			<h2 id="cp-title" class="mono" tabindex="-1">{ c.IP }</h2>
+			<a class="btn btn-quiet btn-icon btn-sm" href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) } data-cell-close aria-label="Close details">
+				@Icon("x", "")
+			</a>
+		</div>
+		<p class="cp-state">
+			<span class={ "status", cellTone(c.State) }>{ cellWords[c.State] }</span>
+			if len(c.Claims) > 0 {
+				<span class={ "chip", c.Claims[0].Kind }>{ leaseLabel(c.Claims[0].Kind) }</span>
+			}
+		</p>
+		switch {
+			case c.State == "edge":
+				<p class="muted">The { c.Edge } of { sn.CIDR }. It cannot be given to a device.</p>
+			case len(c.Claims) == 0:
+				<p class="muted">No device holds this address.</p>
+				if IsAdmin(ctx) {
+					<div class="cp-actions">
+						<a class="btn btn-primary" href={ templ.URL(fmt.Sprintf("/devices/new?subnet=%d&ip=%s", sn.ID, c.IP)) } hx-get={ fmt.Sprintf("/devices/new?subnet=%d&ip=%s", sn.ID, c.IP) } hx-target="#modal">
+							@Icon("plus", "")
+							New device here
+						</a>
+					</div>
+				}
+			default:
+				if len(c.Claims) > 1 {
+					<p class="cp-conflict">{ fmt.Sprint(len(c.Claims)) } devices claim this address. Give one of them another IP.</p>
+				}
+				<ul class="cp-devs">
+					for _, cl := range c.Claims {
+						<li class="cp-dev">
+							@deviceIcon(cl.DeviceIcon, cl.DeviceKind, "")
+							<div class="cp-dev-main">
+								<a class="cp-dev-name" href={ templ.URL(fmt.Sprintf("/devices/%d", cl.DeviceID)) }>{ cl.DeviceName }</a>
+								if cl.MAC != "" {
+									<span class="mono muted text-sm">{ cl.MAC }</span>
+								}
+								<span class="muted text-sm">
+									if cl.EverSeen {
+										Last seen{ " " }
+										@Time(cl.LastSeen)
+									} else {
+										Never seen by a scan
+									}
+								</span>
+							</div>
+						</li>
+					}
+				</ul>
+				if IsAdmin(ctx) {
+					<div class="cp-lease">
+						<span class="text-sm muted" id="cp-lease-lbl">Lease</span>
+						<div class="seg" role="group" aria-labelledby="cp-lease-lbl">
+							@leaseButton(sn.ID, c.IP, "static", c.Claims[0].Kind)
+							@leaseButton(sn.ID, c.IP, "dhcp", c.Claims[0].Kind)
+						</div>
+					</div>
+				}
+				<div class="cp-actions">
+					<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d", c.Claims[0].DeviceID)) }>
+						@Icon("external-link", "")
+						Open device
+					</a>
+					if IsAdmin(ctx) {
+						<a class="btn" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", c.Claims[0].DeviceID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", c.Claims[0].DeviceID) } hx-target="#modal">
+							@Icon("pencil", "")
+							Edit
+						</a>
+					}
+				</div>
+		}
+	</div>
+}
+
+// leaseButton is one half of the static/DHCP switch. The current kind is
+// pressed and inert; the other posts the change, and grid.js reloads the
+// panel once it has gone through.
+templ leaseButton(subnetID int64, ip, kind, current string) {
 	if kind == current {
-		<button type="button" class="btn btn-primary btn-sm" disabled>{ label }</button>
+		<button type="button" aria-pressed="true">{ leaseLabel(kind) }</button>
 	} else {
 		<button
 			type="button"
-			class="btn btn-sm"
+			aria-pressed="false"
 			hx-post={ fmt.Sprintf("/subnets/%d/cell", subnetID) }
 			hx-vals={ fmt.Sprintf(`{"ip":%q,"kind":%q}`, ip, kind) }
 			hx-target="#toasts"
 			hx-swap="beforeend"
-			hx-on::after-request="this.closest('dialog').close()"
-		>{ label }</button>
+			data-cell-reload
+		>{ leaseLabel(kind) }</button>
 	}
 }

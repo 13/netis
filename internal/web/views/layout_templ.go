@@ -607,7 +607,7 @@ func Layout(title string, username string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<link rel=\"stylesheet\" href=\"/static/app.css\"><link rel=\"stylesheet\" href=\"/static/pages/dashboard.css\"><link rel=\"stylesheet\" href=\"/static/pages/events.css\"><link rel=\"stylesheet\" href=\"/static/pages/devices.css\"><link rel=\"stylesheet\" href=\"/static/pages/device.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body class=\"app\" hx-ext=\"sse\" sse-connect=\"/events/stream\"><a class=\"skip\" href=\"#main\">Skip to content</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<link rel=\"stylesheet\" href=\"/static/app.css\"><link rel=\"stylesheet\" href=\"/static/pages/dashboard.css\"><link rel=\"stylesheet\" href=\"/static/pages/events.css\"><link rel=\"stylesheet\" href=\"/static/pages/devices.css\"><link rel=\"stylesheet\" href=\"/static/pages/device.css\"><link rel=\"stylesheet\" href=\"/static/pages/subnets.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/sse.js\"></script></head><body class=\"app\" hx-ext=\"sse\" sse-connect=\"/events/stream\"><a class=\"skip\" href=\"#main\">Skip to content</a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -622,7 +622,7 @@ func Layout(title string, username string) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 197, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 198, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {

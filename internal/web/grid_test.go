@@ -39,14 +39,14 @@ func TestGridStates(t *testing.T) {
 		t.Fatalf("code=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"sq conflict", "sq offline", "sq reserved", "sq free", "sq edge", "static"} {
+	for _, want := range []string{"port conflict static", "port offline static", "port reserved static", "port free", "port edge"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("grid missing %q", want)
 		}
 	}
-	// /29 full range → 8 squares (network + 6 hosts + broadcast)
-	if n := strings.Count(body, `class="sq`); n != 8 {
-		t.Errorf("squares=%d, want 8", n)
+	// /29 full range → 8 ports (network + 6 hosts + broadcast)
+	if n := strings.Count(body, `class="port `); n != 8 {
+		t.Errorf("ports=%d, want 8", n)
 	}
 }
 
@@ -112,15 +112,15 @@ func TestCellDetailAndSetKind(t *testing.T) {
 	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
 	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
 
-	det := authedGet(t, srv, st, "/subnets/1/cell?ip=10.0.0.1").Body.String()
-	for _, want := range []string{"/devices/1", "Set static", "Set DHCP", `class="dialog"`} {
+	det := htmxRequest(t, srv, st, "GET", "/subnets/1/cell?ip=10.0.0.1", nil).Body.String()
+	for _, want := range []string{"/devices/1", `aria-pressed="true">Static`, `hx-post="/subnets/1/cell"`, `&#34;kind&#34;:&#34;dhcp&#34;`, `class="cp"`} {
 		if !strings.Contains(det, want) {
 			t.Errorf("cell detail missing %q", want)
 		}
 	}
 
 	rec := authedPost(t, srv, st, "/subnets/1/cell", url.Values{"ip": {"10.0.0.1"}, "kind": {"dhcp"}})
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "10.0.0.1 → dhcp") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "10.0.0.1 is now DHCP") {
 		t.Fatalf("set kind code=%d body=%s", rec.Code, rec.Body.String())
 	}
 	occ, _ := st.SubnetOccupancy(t.Context(), snID)
@@ -149,16 +149,20 @@ func TestGridFreeCellOpensNewDevice(t *testing.T) {
 	f, _ := st.AddIface(t.Context(), dev, nil, nil)
 	st.AssignIP(t.Context(), f, snID, "10.0.0.1", "static")
 
-	body := authedGet(t, srv, st, "/subnets/"+strconv.FormatInt(snID, 10)+"/grid").Body.String()
-	// A free host IP is a clickable new-device button. templ HTML-escapes the
-	// "&" query separator in attribute values (see TestDeviceIPKindToggle for
-	// the same convention with escaped quotes).
-	if !strings.Contains(body, `hx-get="/devices/new?subnet=`+strconv.FormatInt(snID, 10)+`&amp;ip=10.0.0.2"`) {
-		t.Fatalf("free cell should open new-device dialog: %q", body)
+	base := "/subnets/" + strconv.FormatInt(snID, 10)
+	// A free host IP's details offer a new device at that address. templ
+	// HTML-escapes the "&" query separator in attribute values (see
+	// TestDeviceIPKindToggle for the same convention with escaped quotes).
+	body := htmxRequest(t, srv, st, "GET", base+"/cell?ip=10.0.0.2", nil).Body.String()
+	if !strings.Contains(body, `hx-get="/devices/new?subnet=`+strconv.FormatInt(snID, 10)+`&amp;ip=10.0.0.2"`) || !strings.Contains(body, "New device here") {
+		t.Fatalf("free cell should offer a new device there: %q", body)
 	}
-	// The network/broadcast edges are NOT new-device buttons.
-	if strings.Contains(body, `ip=10.0.0.0"`) || strings.Contains(body, `ip=10.0.0.7"`) {
-		t.Fatalf("edge cells must not be clickable new-device buttons")
+	// The network/broadcast edges say what they are and offer no device.
+	for _, ip := range []string{"10.0.0.0", "10.0.0.7"} {
+		edge := htmxRequest(t, srv, st, "GET", base+"/cell?ip="+ip, nil).Body.String()
+		if strings.Contains(edge, "/devices/new") || !strings.Contains(edge, "cannot be given to a device") {
+			t.Fatalf("edge cell %s details = %q", ip, edge)
+		}
 	}
 }
 
@@ -170,7 +174,7 @@ func TestCellDetailHasOpenAndEdit(t *testing.T) {
 	f, _ := st.AddIface(t.Context(), dev, nil, nil)
 	st.AssignIP(t.Context(), f, snID, "10.0.0.1", "static")
 
-	body := authedGet(t, srv, st, "/subnets/"+strconv.FormatInt(snID, 10)+"/cell?ip=10.0.0.1").Body.String()
+	body := htmxRequest(t, srv, st, "GET", "/subnets/"+strconv.FormatInt(snID, 10)+"/cell?ip=10.0.0.1", nil).Body.String()
 	did := strconv.FormatInt(dev, 10)
 	if !strings.Contains(body, `href="/devices/`+did+`"`) {
 		t.Fatalf("cell popup missing Open link: %q", body)

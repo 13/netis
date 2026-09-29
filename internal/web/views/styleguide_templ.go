@@ -1094,7 +1094,15 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<div class=\"panel legend-sq\"><span class=\"sq online\" aria-hidden=\"true\"></span> online <span class=\"sq offline\" aria-hidden=\"true\"></span> offline <span class=\"sq reserved\" aria-hidden=\"true\"></span> reserved <span class=\"sq\" aria-hidden=\"true\"></span> free <span class=\"sq conflict\" aria-hidden=\"true\"></span> conflict <span class=\"sq edge\" aria-hidden=\"true\"></span> network/broadcast <span class=\"sq static\" aria-hidden=\"true\"></span> static <span class=\"sq dhcp\" aria-hidden=\"true\"></span> dhcp</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<div class=\"panel\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = gridLegend().Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

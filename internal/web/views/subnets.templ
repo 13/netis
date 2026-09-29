@@ -1,0 +1,86 @@
+package views
+
+import "fmt"
+
+// SubnetsPage lists every subnet with a miniature of its patch panel (a bar
+// for subnets larger than a /24), its counts and its scan state. It follows
+// the scanner live: each finished scan reloads the list.
+templ SubnetsPage(username string, subnets []SubnetSummary) {
+	@Layout("Subnets", username) {
+		<div class="page-head">
+			<h1>Subnets</h1>
+			if IsAdmin(ctx) && len(subnets) > 0 {
+				<div class="row">
+					<button hx-post="/scan" hx-target="#toasts" hx-swap="beforeend" class="btn">
+						@Icon("radar", "")
+						Scan all
+					</button>
+					<a class="btn" href="/settings/network">
+						@Icon("settings", "")
+						Manage subnets
+					</a>
+				</div>
+			}
+		</div>
+		if len(subnets) == 0 {
+			<div class="panel empty">
+				@Icon("network", "")
+				<h3>No subnets yet</h3>
+				if IsAdmin(ctx) {
+					<p>Add the networks netis should scan, and their devices show up here.</p>
+					<a class="btn btn-primary" href="/settings/network">
+						@Icon("plus", "")
+						Add a subnet
+					</a>
+				} else {
+					<p>An admin adds the networks netis scans.</p>
+				}
+			</div>
+		} else {
+			<ul class="panel sn-list" id="subnet-list" hx-get="/subnets" hx-select="#subnet-list" hx-swap="outerHTML" hx-trigger="sse:dashboard">
+				for _, s := range subnets {
+					@subnetItem(s)
+				}
+			</ul>
+		}
+	}
+}
+
+templ subnetItem(s SubnetSummary) {
+	<li class="sn-item">
+		<a class="sn-mini" href={ templ.URL(fmt.Sprintf("/subnets/%d", s.Subnet.ID)) } tabindex="-1" aria-hidden="true">
+			if s.Cells != nil {
+				<svg class="mini-panel" viewBox={ miniViewBox(s.Cells) } preserveAspectRatio="xMinYMin meet">
+					for _, p := range miniPorts(s.Cells) {
+						<rect class={ p.Class } x={ fmt.Sprint(p.X) } y={ fmt.Sprint(p.Y) } width="4" height="4" rx="1"></rect>
+					}
+				</svg>
+			} else {
+				<svg class="usage" aria-hidden="true">
+					for _, seg := range usageSegments(s) {
+						<rect class={ seg.Class } x={ percent(seg.X) } width={ percent(seg.W) } height="100%"></rect>
+					}
+				</svg>
+			}
+		</a>
+		<div class="sn-id">
+			<a class="sn-name" href={ templ.URL(fmt.Sprintf("/subnets/%d", s.Subnet.ID)) }>{ s.Subnet.Name }</a>
+			<span class="sn-meta">
+				<span class="mono">{ s.Subnet.CIDR }</span>
+				<span class="chip">{ subnetKindLabel(s.Subnet.Kind) }</span>
+			</span>
+		</div>
+		<ul class="sn-stats sn-item-stats">
+			<li><span class="led online" aria-hidden="true"></span><b>{ fmt.Sprint(s.Stats.Online) }</b> online</li>
+			<li><span class="led offline" aria-hidden="true"></span><b>{ fmt.Sprint(s.Stats.Offline) }</b> offline</li>
+			if s.Stats.Unseen > 0 {
+				<li><span class="led reserved" aria-hidden="true"></span><b>{ fmt.Sprint(s.Stats.Unseen) }</b> not seen yet</li>
+			}
+			if s.Stats.Conflict > 0 {
+				<li><span class="led conflict" aria-hidden="true"></span><b>{ fmt.Sprint(s.Stats.Conflict) }</b> { pluralWord(s.Stats.Conflict, "conflict", "conflicts") }</li>
+			}
+			<li><span class="led free" aria-hidden="true"></span><b>{ fmt.Sprint(s.Stats.Free) }</b> free</li>
+		</ul>
+		@ScanControl(s.Scan)
+	</li>
+}

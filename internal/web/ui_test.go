@@ -150,7 +150,7 @@ func TestDialogsAndGridCellsAreAccessible(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{"/devices/new", "/devices/" + itoa(devID) + "/edit", "/subnets/" + itoa(snID) + "/cell?ip=10.0.0.1"} {
+	for _, path := range []string{"/devices/new", "/devices/" + itoa(devID) + "/edit"} {
 		body := htmxRequest(t, srv, st, "GET", path, nil).Body.String()
 		if !strings.Contains(body, "<dialog") || !strings.Contains(body, `aria-labelledby="dlg-title"`) ||
 			!strings.Contains(body, `id="dlg-title"`) {
@@ -164,8 +164,13 @@ func TestDialogsAndGridCellsAreAccessible(t *testing.T) {
 			t.Errorf("grid missing %q", want)
 		}
 	}
-	if !strings.Contains(grid, `role="img" aria-label="10.0.0.0`) {
-		t.Error("non-interactive grid cells need role=img to carry their label")
+	if !strings.Contains(grid, `role="grid"`) || !strings.Contains(grid, `role="gridcell"`) {
+		t.Error("the subnet grid should be an ARIA grid of cells")
+	}
+	// A port's details are a labelled region whose heading is the address.
+	panel := htmxRequest(t, srv, st, "GET", "/subnets/"+itoa(snID)+"/cell?ip=10.0.0.1", nil).Body.String()
+	if !strings.Contains(panel, `id="cp-title"`) || !strings.Contains(grid, `aria-label="Address details"`) {
+		t.Errorf("cell details are not a labelled panel: %s", panel)
 	}
 }
 
