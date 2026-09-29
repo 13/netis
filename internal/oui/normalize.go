@@ -38,6 +38,8 @@ var overrides = map[string]string{
 	"beijing xiaomi mobile software":      "Xiaomi",
 	"routerboard.com":                     "MikroTik",
 	"shenzhen gongjin electronics co.,lt": "Shenzhen Gongjin Electronics",
+	"espressif systems (singapore)":       "Espressif",
+	"shelly europe":                       "Shelly",
 }
 
 // Normalize turns an IEEE registry organisation name into a short vendor

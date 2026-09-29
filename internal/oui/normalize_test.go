@@ -32,6 +32,11 @@ func TestNormalize(t *testing.T) {
 		"Routerboard.com":                         "MikroTik",
 		"SHENZHEN GONGJIN ELECTRONICS CO.,LT":     "Shenzhen Gongjin Electronics",
 		"Renesas Electronics (Penang) Sdn. Bhd.":  "Renesas Electronics (Penang)",
+		// Real registry variants for makers autofill's vendorKinds keys on
+		// by exact name: a regional branch spelling ("Espressif Systems
+		// (Singapore)") and a subsidiary name ("Shelly Europe").
+		"Espressif Systems (Singapore)": "Espressif",
+		"Shelly Europe":                 "Shelly",
 	}
 	for in, want := range cases {
 		if got := Normalize(in); got != want {
