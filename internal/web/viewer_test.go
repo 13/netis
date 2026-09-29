@@ -107,8 +107,16 @@ func TestViewerSettingsHideAdminConfig(t *testing.T) {
 			t.Errorf("viewer account tab missing %q", want)
 		}
 	}
-	if subnets := viewerGet(t, srv, st, "/settings?tab=subnets"); !strings.Contains(subnets, "10.0.0.0/24") {
-		t.Error("viewer subnets tab should still list the subnets")
+	// The viewer's subnets are a read-only table, not edit cards with their
+	// forms taken out, each linked to its grid.
+	subnets := viewerGet(t, srv, st, "/settings?tab=subnets")
+	for _, want := range []string{"10.0.0.0/24", `">lab</a>`, "every 2m", "<th>Auto-scan</th>"} {
+		if !strings.Contains(subnets, want) {
+			t.Errorf("viewer subnets tab missing %q", want)
+		}
+	}
+	if strings.Contains(subnets, `class="sc-head"`) {
+		t.Error("viewer subnets tab renders empty edit cards")
 	}
 }
 

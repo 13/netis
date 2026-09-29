@@ -153,7 +153,7 @@ func TestDialogsAndGridCellsAreAccessible(t *testing.T) {
 	}
 
 	grid := authedGet(t, srv, st, "/subnets/"+itoa(snID)).Body.String()
-	for _, want := range []string{`aria-label="10.0.0.1 reserved, static, gw`, `aria-label="10.0.0.2 free`, `aria-label="10.0.0.0 network address`} {
+	for _, want := range []string{`aria-label="10.0.0.1 not seen yet, static, gw`, `aria-label="10.0.0.2 free`, `aria-label="10.0.0.0 network address`} {
 		if !strings.Contains(grid, want) {
 			t.Errorf("grid missing %q", want)
 		}

@@ -67,6 +67,32 @@ func TestCannotDeleteLastAdmin(t *testing.T) {
 	}
 }
 
+// An admin cannot delete their own account, even with other admins around,
+// and their own row offers no delete button.
+func TestCannotDeleteSelf(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	authedGet(t, srv, st, "/")
+	ben, _, _ := st.GetUserByName(t.Context(), "ben")
+	other, _ := st.CreateUser(t.Context(), "admin2", "hash", "admin")
+
+	del := authedPost(t, srv, st, "/settings/users/"+itoa(ben.ID)+"/delete", url.Values{})
+	if del.Code != http.StatusBadRequest || !strings.Contains(del.Body.String(), "you cannot delete your own account") {
+		t.Fatalf("self delete: code=%d", del.Code)
+	}
+	if _, found, _ := st.GetUser(t.Context(), ben.ID); !found {
+		t.Fatal("admin deleted themselves")
+	}
+
+	body := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	if strings.Contains(body, "/settings/users/"+itoa(ben.ID)+"/delete") {
+		t.Error("own row offers delete")
+	}
+	if !strings.Contains(body, "/settings/users/"+itoa(other)+"/delete") {
+		t.Error("other admin's row lacks delete")
+	}
+}
+
 func TestPiholeSecretNeverEchoedAndBlankKeeps(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
@@ -188,17 +214,19 @@ func TestConcurrentAdminDeleteKeepsOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ids := []int64{ben.ID, admin2ID}
+	// Each admin deletes the other, since nobody may delete themselves.
+	st.CreateSession(t.Context(), "admin2tok", admin2ID, "2099-01-01T00:00:00Z")
+	deletes := map[int64]string{ben.ID: "admin2tok", admin2ID: "testtok"}
 	var wg sync.WaitGroup
-	for _, id := range ids {
+	for id, tok := range deletes {
 		wg.Add(1)
-		go func(id int64) {
+		go func(id int64, tok string) {
 			defer wg.Done()
 			req := httptest.NewRequest("POST", "/settings/users/"+strconv.FormatInt(id, 10)+"/delete", nil)
-			req.AddCookie(&http.Cookie{Name: "netis_session", Value: "testtok"})
+			req.AddCookie(&http.Cookie{Name: "netis_session", Value: tok})
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
-		}(id)
+		}(id, tok)
 	}
 	wg.Wait()
 

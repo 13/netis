@@ -210,12 +210,13 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 	}
 
+	me, _ := userFrom(r)
 	return views.SettingsData{
 		Notify:  notifyData,
 		Audit:   audit,
 		SSO:     sso,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
-		Sessions: sessions, CurrentSessionID: currentSessionID,
+		Sessions: sessions, CurrentSessionID: currentSessionID, CurrentUserID: me.ID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses, Tokens: tokens,
 		About: views.AboutData{
 			Info:    buildinfo.Get(),
@@ -429,6 +430,12 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if u, found, err := s.store.GetUser(r.Context(), id); err == nil && found {
 		auditNote(r).Target = "user " + u.Username
+	}
+	// Deleting yourself would sign you out mid-click and, for the last
+	// admin with SSO off, lock everyone out; another admin has to do it.
+	if me, ok := userFrom(r); ok && me.ID == id {
+		s.settingsError(w, r, "users", http.StatusBadRequest, "you cannot delete your own account")
+		return
 	}
 	// DeleteUserGuarded performs the existence check, admin count, and
 	// delete atomically in a single SQL statement so two concurrent

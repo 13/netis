@@ -310,7 +310,7 @@ func authShell(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<link rel=\"stylesheet\" href=\"/static/app.css\"></head><body class=\"auth\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<link rel=\"stylesheet\" href=\"/static/app.css\"></head><body class=\"onboard\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -407,7 +407,7 @@ func LoginPage(errMsg string, o LoginOptions) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<form method=\"post\" action=\"/login\" class=\"auth-form\"><input name=\"username\" placeholder=\"username\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<form method=\"post\" action=\"/login\" class=\"auth-form\"><input name=\"username\" placeholder=\"username\" autocomplete=\"username\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -417,7 +417,7 @@ func LoginPage(errMsg string, o LoginOptions) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " required> <input name=\"password\" type=\"password\" placeholder=\"password\" required> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, " required> <input name=\"password\" type=\"password\" placeholder=\"password\" autocomplete=\"current-password\" required> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -507,7 +507,7 @@ func SetupPage(errMsg string) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <form method=\"post\" action=\"/setup\"><input name=\"username\" placeholder=\"username\" autofocus required> <input name=\"password\" type=\"password\" placeholder=\"password (min 8 chars)\" required minlength=\"8\"> <button type=\"submit\" class=\"primary\">Create account</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, " <form method=\"post\" action=\"/setup\"><input name=\"username\" placeholder=\"username\" autocomplete=\"username\" autofocus required> <input name=\"password\" type=\"password\" placeholder=\"password (min 8 chars)\" autocomplete=\"new-password\" required minlength=\"8\"> <button type=\"submit\" class=\"primary\">Create account</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

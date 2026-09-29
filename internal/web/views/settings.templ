@@ -15,7 +15,10 @@ var subnetKinds = []string{"lan", "wireguard", "proxmox-bridge"}
 // opnsense_secret) — those fields always render blank so the stored secrets
 // are never echoed back.
 type SettingsData struct {
-	Subnets []store.Subnet
+	// CurrentUserID is the signed-in user, whose own row on the users tab
+	// offers no delete.
+	CurrentUserID int64
+	Subnets       []store.Subnet
 	Users   []store.User
 	// Sessions are the signed-in user's own sessions, newest first, and
 	// CurrentSessionID names the one that asked for this page.
@@ -73,7 +76,7 @@ templ tabLink(active, tab, label string) {
 templ proxmoxFields(values map[string]string) {
 	<label>URL <input type="text" name="proxmox_url" value={ values["proxmox_url"] } placeholder="https://proxmox.local:8006"/></label>
 	<label>Token ID <input type="text" name="proxmox_token_id" value={ values["proxmox_token_id"] }/></label>
-	<label>Secret <input type="password" name="proxmox_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>Secret <input type="password" name="proxmox_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -96,7 +99,7 @@ templ wireguardFields(values map[string]string) {
 
 templ piholeFields(values map[string]string) {
 	<label>URL <input type="text" name="pihole_url" value={ values["pihole_url"] } placeholder="https://pi.hole"/></label>
-	<label>App password <input type="password" name="pihole_password" placeholder="leave blank to keep current password"/></label>
+	<label>App password <input type="password" name="pihole_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -112,7 +115,7 @@ templ piholeFields(values map[string]string) {
 templ adguardFields(values map[string]string) {
 	<label>URL <input type="text" name="adguard_url" value={ values["adguard_url"] } placeholder="http://adguard.lan:3000"/></label>
 	<label>Username <input type="text" name="adguard_user" value={ values["adguard_user"] }/></label>
-	<label>Password <input type="password" name="adguard_password" placeholder="leave blank to keep current password"/></label>
+	<label>Password <input type="password" name="adguard_password" autocomplete="off" placeholder="leave blank to keep current password"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -128,7 +131,7 @@ templ adguardFields(values map[string]string) {
 templ opnsenseFields(values map[string]string) {
 	<label>URL <input type="text" name="opnsense_url" value={ values["opnsense_url"] } placeholder="https://opnsense.lan"/></label>
 	<label>API key <input type="text" name="opnsense_key" value={ values["opnsense_key"] }/></label>
-	<label>API secret <input type="password" name="opnsense_secret" placeholder="leave blank to keep current secret"/></label>
+	<label>API secret <input type="password" name="opnsense_secret" autocomplete="off" placeholder="leave blank to keep current secret"/></label>
 	<label>
 		<input
 			type="checkbox"
@@ -246,22 +249,41 @@ templ integrationsTab(d SettingsData) {
 }
 
 // subnetsListTab is the read-only subnet list a viewer sees.
+// scanEvery describes a subnet's periodic scan for the read-only list.
+func scanEvery(sn store.Subnet) string {
+	if !sn.ScanEnabled {
+		return "off"
+	}
+	switch sec := sn.ScanIntervalSec; {
+	case sec > 0 && sec%3600 == 0:
+		return fmt.Sprintf("every %dh", sec/3600)
+	case sec > 0 && sec%60 == 0:
+		return fmt.Sprintf("every %dm", sec/60)
+	default:
+		return fmt.Sprintf("every %ds", sec)
+	}
+}
+
+// subnetsListTab is the viewer's Subnets tab: the subnets as a read-only
+// table, each linked to its grid.
 templ subnetsListTab(d SettingsData) {
 	<h2>Subnets</h2>
 	if len(d.Subnets) == 0 {
 		<p class="muted">No subnets configured.</p>
-	}
-	for _, sn := range d.Subnets {
+	} else {
 		<div class="setting-card">
-			<div class="sc-head">
-				<h3>{ sn.Name }</h3>
-				<span class="mono muted">{ sn.CIDR }</span>
-				<span class="badge">{ sn.Kind }</span>
-				if sn.ScanEnabled {
-					<span class="badge online">auto-scan on</span>
-				} else {
-					<span class="badge">auto-scan off</span>
-				}
+			<div class="table-wrap">
+				<table>
+					<tr><th>Name</th><th>CIDR</th><th>Kind</th><th>Auto-scan</th></tr>
+					for _, sn := range d.Subnets {
+						<tr>
+							<td><a href={ templ.URL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a></td>
+							<td class="mono">{ sn.CIDR }</td>
+							<td><span class="badge">{ sn.Kind }</span></td>
+							<td>{ scanEvery(sn) }</td>
+						</tr>
+					}
+				</table>
 			</div>
 		</div>
 	}
@@ -391,12 +413,14 @@ templ usersTab(d SettingsData) {
 								<button type="submit" class="ghost">set role</button>
 							</form>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/password", u.ID)) } class="inline">
-								<input type="password" name="new_password" placeholder="new password" minlength="8" required/>
+								<input type="password" name="new_password" placeholder="new password" autocomplete="new-password" minlength="8" required/>
 								<button type="submit" class="ghost">reset password</button>
 							</form>
-							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
-								<button type="submit" class="ghost">delete</button>
-							</form>
+							if u.ID != d.CurrentUserID {
+								<form method="post" action={ templ.URL(fmt.Sprintf("/settings/users/%d/delete", u.ID)) } class="inline" data-confirm={ "Delete the user " + u.Username + "?" }>
+									<button type="submit" class="ghost">delete</button>
+								</form>
+							}
 						</td>
 					</tr>
 				}
@@ -408,8 +432,8 @@ templ usersTab(d SettingsData) {
 		<div class="sc-head"><h3>Add user</h3></div>
 		<form method="post" action="/settings/users">
 			<div class="field-grid">
-				<label>Username <input type="text" name="username" required/></label>
-				<label>Password <input type="password" name="password" minlength="8" required/></label>
+				<label>Username <input type="text" name="username" autocomplete="off" required/></label>
+				<label>Password <input type="password" name="password" autocomplete="new-password" minlength="8" required/></label>
 				<label>
 					Role
 					<select name="role">
@@ -441,7 +465,7 @@ templ myAccount(d SettingsData) {
 						</td>
 						<td>{ orDash(sess.IP) }</td>
 						<td>{ shortAgent(sess.UserAgent) }</td>
-						<td>{ relTime(sess.ExpiresAt) }</td>
+						<td title={ sess.ExpiresAt }>{ relTime(sess.ExpiresAt) }</td>
 						<td>
 							<form method="post" action={ templ.URL(fmt.Sprintf("/settings/sessions/%s/delete", sess.ID)) } class="inline" data-confirm="Revoke this session?">
 								<button type="submit" class="ghost">revoke</button>
@@ -472,9 +496,9 @@ templ myAccount(d SettingsData) {
 		<div class="sc-head"><h3>Change my password</h3></div>
 		<form method="post" action="/settings/password">
 			<div class="field-grid">
-				<label>Current password <input type="password" name="current_password" required/></label>
-				<label>New password <input type="password" name="new_password" minlength="8" required/></label>
-				<label>Confirm new password <input type="password" name="confirm_password" minlength="8" required/></label>
+				<label>Current password <input type="password" name="current_password" autocomplete="current-password" required/></label>
+				<label>New password <input type="password" name="new_password" autocomplete="new-password" minlength="8" required/></label>
+				<label>Confirm new password <input type="password" name="confirm_password" autocomplete="new-password" minlength="8" required/></label>
 			</div>
 			<p class="muted" style="margin:6px 0 4px">Your other sessions are signed out when the password changes.</p>
 			<button type="submit" class="primary">Change password</button>

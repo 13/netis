@@ -68,12 +68,29 @@ func TestSetupCreatesAdminOnce(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != 303 {
-		t.Fatalf("code=%d", rec.Code)
+	if rec.Code != 303 || rec.Header().Get("Location") != "/welcome" {
+		t.Fatalf("code=%d loc=%q, want redirect to /welcome", rec.Code, rec.Header().Get("Location"))
 	}
 	u, ok, _ := st.GetUserByName(t.Context(), "ben")
 	if !ok || u.Role != "admin" {
 		t.Fatalf("user=%+v", u)
+	}
+	// The new admin is signed in and lands on the wizard's next step.
+	var sess *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "netis_session" {
+			sess = c
+		}
+	}
+	if sess == nil || sess.Value == "" {
+		t.Fatal("setup did not sign the admin in")
+	}
+	wreq := httptest.NewRequest("GET", "/welcome", nil)
+	wreq.AddCookie(sess)
+	wrec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(wrec, wreq)
+	if wrec.Code != 200 || !strings.Contains(wrec.Body.String(), `action="/welcome/subnets"`) {
+		t.Fatalf("welcome after setup: code=%d", wrec.Code)
 	}
 	// second setup attempt rejected
 	req2 := httptest.NewRequest("POST", "/setup", strings.NewReader(form.Encode()))
@@ -279,5 +296,48 @@ func TestLoginRateLimitIsPerForwardedClient(t *testing.T) {
 	}
 	if code := post("203.0.113.8"); code != http.StatusUnauthorized {
 		t.Fatalf("first attempt from another client: code=%d, want 401", code)
+	}
+}
+
+// Password fields tell password managers what they hold, and the login page
+// shares the onboarding layout, so the logo sits right above the form.
+func TestPasswordFieldsCarryAutocomplete(t *testing.T) {
+	srv, st := testServer(t)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/setup", nil))
+	setup := rec.Body.String()
+	for _, want := range []string{`autocomplete="username"`, `autocomplete="new-password"`} {
+		if !strings.Contains(setup, want) {
+			t.Errorf("setup page missing %s", want)
+		}
+	}
+
+	st.SetSetting(t.Context(), "onboarded", "1")
+	addAdmin(t, st)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/login", nil))
+	login := rec.Body.String()
+	for _, want := range []string{`autocomplete="username"`, `autocomplete="current-password"`, `<body class="onboard">`} {
+		if !strings.Contains(login, want) {
+			t.Errorf("login page missing %s", want)
+		}
+	}
+
+	users := authedGet(t, srv, st, "/settings?tab=users").Body.String()
+	for _, want := range []string{
+		`name="current_password" autocomplete="current-password"`,
+		`name="confirm_password" autocomplete="new-password"`,
+		`name="password" autocomplete="new-password"`,
+	} {
+		if !strings.Contains(users, want) {
+			t.Errorf("users tab missing %s", want)
+		}
+	}
+	for _, page := range []string{setup, login, users} {
+		for _, in := range strings.Split(page, `<input type="password"`)[1:] {
+			if tag, _, _ := strings.Cut(in, ">"); !strings.Contains(tag, "autocomplete=") {
+				t.Errorf("password input without autocomplete: %s", tag)
+			}
+		}
 	}
 }

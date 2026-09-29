@@ -175,6 +175,15 @@ func TestCreateTokenFromSettings(t *testing.T) {
 	if tok == "" {
 		t.Fatal("new token not shown")
 	}
+	// It sits in a selectable read-only field with a Copy button, which the
+	// script reveals, pointed at it.
+	if !strings.Contains(rec.Body.String(), `id="new-token" readonly value="`+tok+`"`) ||
+		!strings.Contains(rec.Body.String(), `data-copy="new-token" hidden>Copy</button>`) {
+		t.Error("new token lacks its field or Copy button")
+	}
+	if js := getAs(t, srv, "evesess", "/static/dialog.js"); !strings.Contains(js, "[data-copy]") {
+		t.Error("dialog.js does not handle Copy buttons")
+	}
 	if rec := bearer(t, srv, "GET", "/api/status", tok, ""); rec.Code != http.StatusOK {
 		t.Fatalf("new token rejected: %d", rec.Code)
 	}

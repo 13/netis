@@ -102,6 +102,39 @@
 		pick.dataset.kindDefault = newDefault;
 	});
 
+	// Copy buttons ([data-copy] naming an input's id) copy that input's
+	// value. They start hidden, since without JS there is nothing to click and
+	// the text itself stays selectable. The Clipboard API needs a secure
+	// context, which a plain-http LAN install is not, so fall back to
+	// selecting the text and execCommand.
+	document.querySelectorAll('[data-copy][hidden]').forEach(function (b) { b.hidden = false; });
+	document.addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('[data-copy]');
+		if (!b) { return; }
+		var src = document.getElementById(b.getAttribute('data-copy'));
+		if (!src) { return; }
+		var done = function () {
+			b.textContent = 'Copied';
+			setTimeout(function () { b.textContent = 'Copy'; }, 2000);
+		};
+		var legacy = function () {
+			src.focus();
+			src.select();
+			try { if (document.execCommand('copy')) { done(); } } catch (err) {}
+		};
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(src.value).then(done, legacy);
+		} else {
+			legacy();
+		}
+	});
+
+	// Read-only fields marked data-select-all select their whole value on
+	// focus, so a token can be copied by hand in one go.
+	document.addEventListener('focusin', function (e) {
+		if (e.target.matches && e.target.matches('input[data-select-all]')) { e.target.select(); }
+	});
+
 	function selectSwatch(pick, icon) {
 		var hidden = pick.parentNode.querySelector('input[name=icon]') ||
 			pick.closest('.dialog').querySelector('input[name=icon]');

@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSubnetCRUD(t *testing.T) {
 	s := openTest(t)
@@ -25,5 +28,27 @@ func TestSubnetCRUD(t *testing.T) {
 	}
 	if list, _ = s.ListSubnets(t.Context()); len(list) != 0 {
 		t.Fatalf("want empty, got %+v", list)
+	}
+}
+
+// Subnets list by network address, numerically, IPv4 before IPv6.
+func TestListSubnetsSortsByAddress(t *testing.T) {
+	s := openTest(t)
+	for _, cidr := range []string{"fd00::/64", "192.168.1.0/24", "10.10.10.0/24", "10.6.0.0/24", "10.6.0.0/16"} {
+		if _, err := s.CreateSubnet(t.Context(), Subnet{CIDR: cidr, Name: cidr, Kind: "lan", ScanIntervalSec: 120}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := s.ListSubnets(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, sn := range list {
+		got = append(got, sn.CIDR)
+	}
+	want := []string{"10.6.0.0/16", "10.6.0.0/24", "10.10.10.0/24", "192.168.1.0/24", "fd00::/64"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("order %v, want %v", got, want)
 	}
 }

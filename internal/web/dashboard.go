@@ -35,9 +35,14 @@ func (s *Server) subnetRows(ctx context.Context) ([]views.DashRow, []views.Atten
 			case o.Online:
 				row.Online++
 			case !o.EverSeen:
-				row.Reserved++
+				row.Unseen++
 			default:
 				row.Offline++
+			}
+			// A reservation is stored as a static assignment, and it stays
+			// one whether or not its device is up.
+			if o.Kind == "static" {
+				row.Reserved++
 			}
 			if o.Count > 1 {
 				conflicts = append(conflicts, views.AttentionConflict{IP: ip, SubnetID: sn.ID, SubnetName: sn.Name})

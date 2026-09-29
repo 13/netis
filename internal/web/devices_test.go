@@ -78,11 +78,20 @@ func TestWOLDeviceWithoutMAC400(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "nomac", Kind: "other", Source: "manual"})
 	st.AddIface(t.Context(), devID, nil, nil) // iface but no MAC
-	rec := authedPost(t, srv, st, "/devices/1/wol", url.Values{})
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("WOL on device without MAC = %d, want 400", rec.Code)
+	path := "/devices/" + itoa(devID)
+	rec := authedPost(t, srv, st, path+"/wol", url.Values{})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "no MAC address") {
+		t.Errorf("WOL on device without MAC = %d %q, want 400", rec.Code, rec.Body.String())
 	}
-	_ = devID
+	// Nor is the button offered, until an interface has a MAC.
+	if body := authedGet(t, srv, st, path).Body.String(); strings.Contains(body, "Wake on LAN") {
+		t.Error("device without a MAC offers Wake on LAN")
+	}
+	mac := "aa:bb:cc:dd:ee:ff"
+	st.AddIface(t.Context(), devID, &mac, nil)
+	if body := authedGet(t, srv, st, path).Body.String(); !strings.Contains(body, "Wake on LAN") {
+		t.Error("device with a MAC lacks Wake on LAN")
+	}
 }
 
 func TestDetailPageHasEditButtonNoInlineForm(t *testing.T) {

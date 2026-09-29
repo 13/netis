@@ -311,3 +311,27 @@ func TestGeneralSavesAuditRetention(t *testing.T) {
 		t.Errorf("negative retention: code=%d", rec.Code)
 	}
 }
+
+// Audit targets recorded by id show the device's or subnet's current name,
+// linked, and say when it has been deleted.
+func TestAuditTargetsShowNames(t *testing.T) {
+	srv, st := testServer(t)
+	ctx := t.Context()
+	st.SetSetting(ctx, "onboarded", "1")
+	nas, _ := st.CreateDevice(ctx, store.Device{Name: "nas-box", Kind: "server", Source: "manual"})
+	snID, _ := st.CreateSubnet(ctx, store.Subnet{CIDR: "10.0.0.0/24", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
+	for _, target := range []string{"device " + itoa(nas), "device tv (#999)", "device 998", "subnet " + itoa(snID), "user eve"} {
+		st.AddAudit(ctx, store.AuditEntry{Username: "ben", Action: "x", Target: target, Status: 303})
+	}
+
+	body := authedGet(t, srv, st, "/settings?tab=audit").Body.String()
+	for _, want := range []string{
+		`<a href="/devices/` + itoa(nas) + `">nas-box</a>`,
+		`<a href="/subnets/` + itoa(snID) + `">subnet lab</a>`,
+		"deleted device tv", ">deleted device<", "user eve",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("audit tab missing %q", want)
+		}
+	}
+}

@@ -95,18 +95,18 @@ func TestDashboardPageHasFragmentContainer(t *testing.T) {
 func TestSubnetCardOccupancyCounts(t *testing.T) {
 	srv, st := testServer(t)
 	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/29", Name: "lab", Kind: "lan", ScanIntervalSec: 120})
-	mk := func(name, ip string) int64 {
+	mk := func(name, ip, kind string) int64 {
 		devID, _ := st.CreateDevice(t.Context(), store.Device{Name: name, Kind: "other", Source: "manual"})
 		ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
-		st.AssignIP(t.Context(), ifID, snID, ip, "static")
+		st.AssignIP(t.Context(), ifID, snID, ip, kind)
 		return ifID
 	}
-	onIf := mk("on", "10.0.0.1")
-	st.MarkSeen(t.Context(), onIf, 1, time.Now()) // online
-	offIf := mk("off", "10.0.0.2")
+	onIf := mk("on", "10.0.0.1", "static")
+	st.MarkSeen(t.Context(), onIf, 1, time.Now()) // online, reserved
+	offIf := mk("off", "10.0.0.2", "static")
 	st.MarkSeen(t.Context(), offIf, 1, time.Now())
-	st.MarkMissed(t.Context(), offIf, 1) // seen then offline
-	mk("res", "10.0.0.3")                // assigned, never seen → reserved
+	st.MarkMissed(t.Context(), offIf, 1) // seen then offline, reserved
+	mk("new", "10.0.0.3", "dhcp")        // assigned, never seen, not reserved
 
 	data, err := srv.assembleDashboard(httptest.NewRequest("GET", "/", nil))
 	if err != nil {
@@ -118,8 +118,12 @@ func TestSubnetCardOccupancyCounts(t *testing.T) {
 			row = r
 		}
 	}
-	if row.Online != 1 || row.Reserved != 1 || row.Offline != 1 {
-		t.Fatalf("counts: online=%d reserved=%d offline=%d (want 1/1/1)", row.Online, row.Reserved, row.Offline)
+	if row.Online != 1 || row.Unseen != 1 || row.Offline != 1 {
+		t.Fatalf("counts: online=%d unseen=%d offline=%d (want 1/1/1)", row.Online, row.Unseen, row.Offline)
+	}
+	// Reservations are the static assignments, seen or not.
+	if row.Reserved != 2 {
+		t.Fatalf("reserved=%d, want 2", row.Reserved)
 	}
 	// /29 has 6 host IPs; 3 used → 3 free; Hosts=6.
 	if row.Hosts != 6 || row.Free != 3 || row.Used != 3 {
@@ -152,6 +156,30 @@ func TestLayoutHasThemeToggleAndBootstrap(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard layout missing %q", want)
+		}
+	}
+}
+
+// The events page and the dashboard name an event's device and link to it,
+// rather than showing its id; a deleted device is called that.
+func TestEventsNameTheirDevice(t *testing.T) {
+	srv, st := testServer(t)
+	ctx := t.Context()
+	st.SetSetting(ctx, "onboarded", "1")
+	nas, _ := st.CreateDevice(ctx, store.Device{Name: "nas-box", Kind: "server", Source: "manual"})
+	gone, _ := st.CreateDevice(ctx, store.Device{Name: "old-tv", Kind: "other", Source: "manual"})
+	st.AddEvent(ctx, "online", &nas, "is online")
+	st.AddEvent(ctx, "offline", &gone, "went offline")
+	st.AddEvent(ctx, "scan_error", nil, "subnet broke")
+	st.DeleteDevice(ctx, gone)
+
+	for _, path := range []string{"/events", "/"} {
+		body := authedGet(t, srv, st, path).Body.String()
+		if !strings.Contains(body, `<a href="/devices/`+itoa(nas)+`">nas-box</a>`) {
+			t.Errorf("%s: device not named and linked", path)
+		}
+		if strings.Count(body, "deleted device") != 1 {
+			t.Errorf("%s: want one deleted device, got %d", path, strings.Count(body, "deleted device"))
 		}
 	}
 }

@@ -503,9 +503,21 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "already set up", http.StatusForbidden)
 		return
 	}
-	if u, ok, err := s.store.GetUserByName(r.Context(), username); err == nil && ok {
-		note := auditNote(r)
-		note.UserID, note.Username = &u.ID, u.Username
+	u, ok, err := s.store.GetUserByName(r.Context(), username)
+	if err != nil || !ok {
+		// The account exists but cannot be read back; signing in by hand
+		// still works.
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	note := auditNote(r)
+	note.UserID, note.Username = &u.ID, u.Username
+	// The admin who just chose the password is signed in straight away and
+	// carries on with the setup wizard, rather than typing it again.
+	if err := s.startSession(w, r, u.ID); err != nil {
+		slog.Error("create session", "err", err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/welcome", http.StatusSeeOther)
 }
