@@ -637,9 +637,9 @@ func TestConformanceListDevicesAggregation(t *testing.T) {
 			t.Errorf("alpha MACs = %v, want them in interface order", a.MACs)
 		}
 		wantIPs := []IPInfo{
-			{IP: "10.2.0.11", Kind: "dhcp"},
-			{IP: "10.2.0.12", Kind: "dhcp"},
-			{IP: "10.2.0.13", Kind: "static"},
+			{IP: "10.2.0.11", Kind: "dhcp", SubnetID: snID},
+			{IP: "10.2.0.12", Kind: "dhcp", SubnetID: snID},
+			{IP: "10.2.0.13", Kind: "static", SubnetID: snID},
 		}
 		if !slices.Equal(a.IPs, wantIPs) {
 			t.Errorf("alpha IPs = %+v, want %+v", a.IPs, wantIPs)

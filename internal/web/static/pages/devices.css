@@ -1,0 +1,146 @@
+/* Devices list (and the subnet page's devices table, which is the same
+   component). Built from the tokens in app.css. */
+@layer pages {
+  /* ---- header and actions ---- */
+  .devices .page-head { margin-bottom:var(--sp-4); }
+  .dl-actions { display:flex; align-items:center; gap:var(--sp-2); }
+  .dl-menu, .dl-cols { position:relative; }
+  .dl-menu > summary, .dl-cols > summary, .dl-more > summary { list-style:none; }
+  .dl-menu > summary::-webkit-details-marker, .dl-cols > summary::-webkit-details-marker,
+  .dl-more > summary::-webkit-details-marker { display:none; }
+  .dl-menu .menu { right:0; top:calc(100% + var(--sp-1)); min-width:180px; }
+  .dl-cols .menu { right:0; top:calc(100% + var(--sp-1)); min-width:180px; }
+  .dl-cols .menu-item { margin:0; font-weight:var(--w-regular); gap:var(--sp-2); }
+  .dl-menu[open] > summary, .dl-cols[open] > summary { background:var(--surface-2); }
+
+  /* ---- filter bar ---- */
+  .dl-filters { margin:0 0 var(--sp-3); }
+  .dl-bar { display:flex; align-items:flex-start; gap:var(--sp-2); flex-wrap:wrap; }
+  .dl-search { position:relative; display:block; flex:1 1 220px; min-width:200px; max-width:320px; margin:0; }
+  .dl-search .icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+  .dl-search input { width:100%; padding-left:32px; }
+  .dl-more > summary { display:none; }
+  .dl-fields { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; }
+  .dl-fields label { margin:0; }
+  .dl-fields select { max-width:200px; }
+  .dl-toggles { display:flex; gap:var(--sp-2); flex-wrap:wrap; }
+  .dl-toggle { flex-direction:row; align-items:center; gap:6px; height:var(--h-md); padding:0 var(--sp-3) 0 10px; margin:0;
+               border:1px solid var(--border); border-radius:var(--r-control); background:var(--surface);
+               color:var(--muted); font-size:var(--text-sm); font-weight:var(--w-medium); white-space:nowrap; cursor:pointer; }
+  .dl-toggle:hover { border-color:var(--border-strong); color:var(--fg); }
+  .dl-toggle:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); color:var(--fg); }
+  .dl-more { flex:1 1 480px; min-width:0; }
+  .dl-view { display:flex; align-items:center; gap:var(--sp-2); }
+  .dl-summary .dl-view { margin-left:auto; }
+  .dl-bulk:not([data-empty]) + .dl-view { margin-left:0; }
+
+  /* ---- summary line: count, clear, bulk actions ---- */
+  .dl-summary { display:flex; align-items:center; gap:var(--sp-2) var(--sp-3); flex-wrap:wrap; min-height:var(--h-md); margin-bottom:var(--sp-2); }
+  .dl-count { margin:0; color:var(--muted); }
+  .dl-count strong { color:var(--fg); }
+  .dl-bulk { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; margin:0 0 0 auto; }
+  .dl-bulk[data-empty], .view-grid .dl-bulk { display:none; }
+  .dl-selected { font-size:var(--text-sm); }
+  .dl-selected:empty { display:none; }
+  .dl-tag { display:inline-flex; gap:var(--sp-1); }
+  .dl-tag input { width:120px; height:var(--h-sm); min-height:var(--h-sm); font-size:var(--text-sm); }
+
+  /* ---- table ----
+     No scroll box around it: the default columns fit the page, and without
+     one the header can stick to the top of the window. */
+  .dl-table { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
+  .dl-table thead th:first-child { border-top-left-radius:var(--r-panel); }
+  .dl-table thead th:last-child { border-top-right-radius:var(--r-panel); }
+  .dl-table tbody tr:last-child > td:first-child { border-bottom-left-radius:var(--r-panel); }
+  .dl-table tbody tr:last-child > td:last-child { border-bottom-right-radius:var(--r-panel); }
+  .devtable .opt { display:none; }
+  .show-mac .devtable .col-mac, .show-lease .devtable .col-lease,
+  .show-func .devtable .col-func, .show-tags .devtable .col-tags { display:table-cell; }
+  .devtable .col-sel { width:40px; padding-right:0; }
+  .devtable .col-sel input { display:block; }
+  .devtable th a { display:inline-flex; align-items:center; gap:4px; }
+  .devtable .sort-mark { font-size:.625rem; color:var(--accent); }
+  .devtable td.col-ip, .devtable td.col-mac { font-size:var(--text-sm); white-space:nowrap; }
+  .devtable .ip-line { display:flex; align-items:center; gap:6px; }
+  .devtable .ip-line + .ip-line { margin-top:2px; }
+  .devtable .col-lease .chip + .chip { margin-left:var(--sp-1); }
+  .devtable .col-tags { max-width:220px; }
+  .devtable .col-seen, .devtable .col-status { white-space:nowrap; }
+  .devtable .col-tags .chip { margin:1px var(--sp-1) 1px 0; }
+  .devtable td.col-tags { line-height:1.9; }
+  /* With the optional columns on, the busiest cells give up room first. */
+  :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable :is(th, td) { padding-left:var(--sp-2); padding-right:var(--sp-2); }
+  :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable .dev { min-width:150px; gap:var(--sp-2); }
+  .devtable .col-act { width:1%; white-space:nowrap; text-align:right; }
+  .devtable .col-act form { margin:0; }
+  .devtable .dev { gap:var(--sp-3); min-width:200px; }
+  .devtable .dev-text { min-width:0; }
+  .devtable .dev-name a { overflow-wrap:anywhere; }
+  .devtable .dev-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .devtable .dev .status, .devtable .dev .chip { margin-left:0; }
+  .devtable .dev .sub { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:1px; }
+  .devtable .dev .sub .chip { height:18px; }
+  .devtable .tree-branch { margin-right:-6px; }
+
+  /* ---- tiles ---- */
+  .devgrid { grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); }
+  .devtile { display:flex; flex-direction:column; gap:2px; min-width:0; padding:var(--sp-3); }
+  .devtile-head { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2); margin-bottom:var(--sp-2); }
+  .devtile .nm { display:block; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:var(--w-medium); color:var(--fg); }
+  .devtile .ip { margin:0; font-size:var(--text-sm); color:var(--muted); }
+  .devtile-foot { display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap; margin-top:auto; padding-top:var(--sp-2); font-size:var(--text-xs); }
+  .devtile:hover .nm { color:var(--accent); }
+
+  /* ---- empty states and the delete question ---- */
+  .dl-results > .empty .row { justify-content:center; margin-top:var(--sp-2); }
+  .dl-results > .empty .row .btn { margin-top:0; }
+  .dl-confirm { max-width:560px; }
+  .dl-confirm h1 { font-size:var(--text-lg); margin-bottom:var(--sp-3); }
+  .dl-confirm ul { max-height:240px; overflow-y:auto; }
+
+  /* ---- phones: filters fold into a sheet, rows stack ---- */
+  @media (max-width:640px) {
+    .devices .page-head { margin-bottom:var(--sp-3); }
+    .dl-search { flex-basis:100%; max-width:none; }
+    .dl-more { position:relative; }
+    .dl-more > summary { display:inline-flex; }
+    .dl-more[open] > summary { background:var(--surface-2); }
+    .dl-more[open] .dl-fields { position:absolute; left:0; top:calc(100% + var(--sp-1)); z-index:25;
+      width:min(320px, calc(100vw - 2 * var(--sp-4))); flex-direction:column; align-items:stretch; padding:var(--sp-3);
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); box-shadow:var(--overlay-shadow); }
+    .dl-fields select { width:100%; max-width:none; min-height:44px; }
+    .dl-toggles { flex-direction:column; }
+    .dl-toggle { height:44px; }
+    .dl-cols { display:none; }
+    .dl-view .seg .lbl { display:none; }
+    .dl-more { flex:0 0 auto; }
+    /* While rows are selected the actions float above the tab bar, in reach
+       wherever the list is scrolled to. */
+    .dl-bulk:not([data-empty]) { position:fixed; left:var(--sp-2); right:var(--sp-2); bottom:calc(64px + env(safe-area-inset-bottom));
+      z-index:25; margin:0; padding:var(--sp-2) var(--sp-3); background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--r-panel); box-shadow:var(--overlay-shadow); }
+    .dl-tag input { width:96px; }
+
+    .dl-table { background:var(--surface); }
+    .devtable thead { display:none; }
+    .devtable, .devtable tbody { display:block; }
+    .devtable tr { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; grid-template-areas:"sel dev status" "sel ip act";
+                   align-items:center; column-gap:var(--sp-2); row-gap:2px; padding:var(--sp-3); border-bottom:1px solid var(--border); }
+    .devtable tr:last-child { border-bottom:0; }
+    /* Doubled class: outranks the desktop column rules without !important. */
+    .devtable.devtable td { display:block; padding:0; border:0; }
+    .devtable tbody tr:hover > td { background:none; }
+    .devtable.devtable td.col-sel { grid-area:sel; width:auto; padding-right:var(--sp-1); }
+    .devtable td.col-sel input { width:20px; height:20px; }
+    .devtable td.col-dev { grid-area:dev; min-width:0; }
+    .devtable td.col-status { grid-area:status; justify-self:end; }
+    .devtable.devtable td.col-ip { grid-area:ip; padding-left:42px; min-width:0; }
+    .devtable td.col-act { grid-area:act; width:auto; }
+    .devtable.devtable.devtable :is(td.col-kind, td.col-seen, td.opt) { display:none; }
+    .devtable .dev { min-width:0; }
+    .devtable .dev-name a { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+    .devtable .tree-indent { width:8px; }
+    .devtable.devtable tr.is-child td.col-ip { padding-left:58px; }
+    .devgrid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+  }
+}

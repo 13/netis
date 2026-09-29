@@ -616,26 +616,55 @@ func TestDeviceDetailRedesign(t *testing.T) {
 	}
 }
 
+// The default order nests children under their parent; a sort the reader
+// picks flattens the list, so the rows really follow the column that says it
+// is sorted.
 func TestDeviceListParentChildGrouping(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
-	pid, _ := st.CreateDevice(t.Context(), store.Device{Name: "aaa-parent", Kind: "switch", Source: "manual"})
-	st.CreateDevice(t.Context(), store.Device{Name: "mmm-mid", Kind: "computer", Source: "manual"})
-	st.CreateDevice(t.Context(), store.Device{Name: "zzz-child", Kind: "computer", Source: "manual", ParentDeviceID: &pid})
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+	mk := func(name, ip string, parent *int64) int64 {
+		id, _ := st.CreateDevice(t.Context(), store.Device{Name: name, Kind: "computer", Source: "manual", ParentDeviceID: parent})
+		f, _ := st.AddIface(t.Context(), id, nil, nil)
+		st.AssignIP(t.Context(), f, snID, ip, "static")
+		return id
+	}
+	pid := mk("aaa-parent", "10.0.0.1", nil)
+	mk("mmm-mid", "10.0.0.2", nil)
+	mk("zzz-child", "10.0.0.3", &pid)
 
-	body := authedGet(t, srv, st, "/devices?sort=name&dir=asc").Body.String()
-	iParent := strings.Index(body, "aaa-parent")
-	iMid := strings.Index(body, "mmm-mid")
-	iChild := strings.Index(body, "zzz-child")
+	order := func(body string) (parent, mid, child int) {
+		return strings.Index(body, "aaa-parent"), strings.Index(body, "mmm-mid"), strings.Index(body, "zzz-child")
+	}
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	iParent, iMid, iChild := order(body)
 	if iParent < 0 || iMid < 0 || iChild < 0 {
 		t.Fatalf("rows missing: parent=%d mid=%d child=%d", iParent, iMid, iChild)
 	}
 	// Grouping pulls the child up under its parent, ahead of the later root.
 	if !(iParent < iChild && iChild < iMid) {
-		t.Fatalf("expected parent<child<mid, got parent=%d child=%d mid=%d", iParent, iChild, iMid)
+		t.Fatalf("default: expected parent<child<mid, got parent=%d child=%d mid=%d", iParent, iChild, iMid)
 	}
 	if !strings.Contains(body, "tree-branch") {
 		t.Fatalf("child row missing tree-branch marker")
+	}
+	// The tree follows no one column, so no header claims a sort.
+	if strings.Contains(body, `aria-sort="ascending"`) || strings.Contains(body, `aria-sort="descending"`) {
+		t.Error("grouped default list marks a column as sorted")
+	}
+
+	for _, q := range []string{"sort=name&dir=asc", "sort=ip&dir=asc"} {
+		body = authedGet(t, srv, st, "/devices?"+q).Body.String()
+		iParent, iMid, iChild = order(body)
+		if !(iParent < iMid && iMid < iChild) {
+			t.Errorf("%s: expected a flat parent<mid<child, got parent=%d mid=%d child=%d", q, iParent, iMid, iChild)
+		}
+		if strings.Contains(body, `class="tree-branch"`) {
+			t.Errorf("%s: sorted list still nests rows", q)
+		}
+		if !strings.Contains(body, `aria-sort="ascending"`) {
+			t.Errorf("%s: sorted column not marked", q)
+		}
 	}
 }
 

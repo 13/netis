@@ -3,7 +3,8 @@ package views
 import (
 	"fmt"
 	"net/url"
-	
+	"strconv"
+
 	"netis/internal/macaddr"
 	"netis/internal/store"
 )
@@ -57,97 +58,113 @@ func GroupByParent(rows []store.DeviceRow) []DeviceGroupRow {
 	return out
 }
 
-templ sortHeader(label, col, curSort, curDir, q, base string) {
-	<th>
-		<a href={ templ.URL(sortURL(base, q, col, curSort, curDir)) }>
+templ sortHeader(label, col, class string, o deviceTableOpts) {
+	<th class={ class } aria-sort={ o.ariaSort(col) }>
+		<a href={ templ.URL(o.sortLink(col)) }>
 			{ label }
-			if curSort == col {
-				if curDir == "asc" {
-					{ " ▲" }
+			if o.Sort == col {
+				if o.Dir == "asc" {
+					<span class="sort-mark" aria-hidden="true">{ "▲" }</span>
 				} else {
-					{ " ▼" }
+					<span class="sort-mark" aria-hidden="true">{ "▼" }</span>
 				}
 			}
 		</a>
 	</th>
 }
 
-templ deviceRow(row store.DeviceRow, depth int) {
-	<tr>
-		<td>
+templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
+	<tr
+		if depth > 0 {
+			class="is-child"
+		}
+	>
+		if o.Bulk {
+			<td class="col-sel">
+				<input type="checkbox" name="id" value={ strconv.FormatInt(row.ID, 10) } form="bulk" aria-label={ "Select " + row.Name }/>
+			</td>
+		}
+		<td class="col-dev">
 			<div class="dev">
 				for i := 0; i < depth; i++ {
 					<span class="tree-indent"></span>
 				}
 				if depth > 0 {
-					<span class="tree-branch">↳</span>
+					<span class="tree-branch" aria-hidden="true">↳</span>
 				}
 				@deviceIcon(row.Icon, row.Kind, "")
-				<div>
-					<div>
+				<div class="dev-text">
+					<div class="dev-name">
 						<a href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>{ row.Name }</a>
-						if row.Reviewed {
-							<span class="muted" title="reviewed">
-								@Icon("check", "")
-							</span>
-						} else {
+						if !row.Reviewed {
 							<span class="status is-new">new</span>
 						}
 						@missingUpstreamPill(row.Device)
 					</div>
-					for i, mac := range row.MACs {
-						if i == 0 {
-							<div class="mono muted sub">
-								{ mac }
-								if macaddr.AnyPrivate(row.MACs) {
-									<span class="chip" title={ privateMACTitle }>private MAC</span>
-								}
-							</div>
-						}
-					}
-					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" {
-						<div class="muted sub">{ joinNonEmpty(" · ", row.Vendor, row.Model) }</div>
+					if joinNonEmpty(" · ", row.Vendor, row.Model) != "" || macaddr.AnyPrivate(row.MACs) {
+						<div class="muted sub">
+							{ joinNonEmpty(" · ", row.Vendor, row.Model) }
+							if macaddr.AnyPrivate(row.MACs) {
+								<span class="chip" title={ privateMACTitle }>private MAC</span>
+							}
+						</div>
 					}
 				</div>
 			</div>
 		</td>
-		<td class="mono">
+		<td class="col-ip mono">
+			if len(row.IPs) == 0 {
+				<span class="muted">—</span>
+			}
 			for _, ip := range row.IPs {
-				<span>{ ip.IP }</span>{ " " }
+				<div class="ip-line">
+					<span>{ ip.IP }</span>
+					if o.Conflicts[ConflictKey(ip.SubnetID, ip.IP)] {
+						<span class="status is-conflict" title="Another device holds this address in the same subnet">conflict</span>
+					}
+				</div>
 			}
 		</td>
-		<td>
+		<td class="col-mac opt mono">
+			if len(row.MACs) == 0 {
+				<span class="muted">—</span>
+			} else {
+				{ row.MACs[0] }
+			}
+		</td>
+		<td class="col-lease opt">
 			for _, ip := range row.IPs {
 				if ip.Kind == "static" {
-					<span class="chip static">static</span>{ " " }
+					<span class="chip static">static</span>
 				} else {
-					<span class="chip dhcp">dhcp</span>{ " " }
+					<span class="chip dhcp">dhcp</span>
 				}
 			}
 		</td>
-		<td>
+		<td class="col-status">
 			if row.Online {
 				<span class="status is-online">online</span>
 			} else {
 				<span class="status is-offline">offline</span>
 			}
 		</td>
-		<td>{ row.Kind }</td>
-		<td>{ row.Function }</td>
-		<td>
+		<td class="col-kind">{ KindLabel(row.Kind) }</td>
+		<td class="col-func opt">{ row.Function }</td>
+		<td class="col-tags opt">
 			for _, tn := range row.TagNames {
-				<span class="chip">{ tn }</span>{ " " }
+				<span class="chip">{ tn }</span>
 			}
 		</td>
-		<td class="muted">
-			if row.LastSeen != nil {
-				@Time(*row.LastSeen)
-			}
+		<td class="col-seen muted">
+			@TimePtr(row.LastSeen)
 		</td>
-		<td>
+		<td class="col-act">
 			if !row.Reviewed && IsAdmin(ctx) {
 				<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/approve", row.ID)) } class="inline">
-					<button type="submit" class="btn btn-sm">Approve</button>
+					<button type="submit" class="btn btn-sm">
+						@Icon("check", "")
+						Approve
+					</button>
 				</form>
 			}
 		</td>
@@ -155,135 +172,418 @@ templ deviceRow(row store.DeviceRow, depth int) {
 }
 
 // deviceTable renders the sortable devices table. `base` is the page hosting
-// the table (its sort links point there); when `grouped`, child rows are nested
-// under their parent.
+// the table (its sort links point there, keeping q); when `grouped`, child
+// rows are nested under their parent. The subnet page uses this form.
 templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped bool) {
-	<table>
+	@deviceTableWith(rows, deviceTableOpts{Base: base, Keep: keepQ(q), Sort: sortKey, Dir: dir, Grouped: grouped})
+}
+
+// deviceTableWith is the devices table with every option. Default columns
+// are device, IP, status, kind and last seen; MAC, lease, function and tags
+// (class opt) are hidden unless the column picker on the devices page turns
+// them on.
+templ deviceTableWith(rows []store.DeviceRow, o deviceTableOpts) {
+	<table class="devtable">
 		<thead>
 			<tr>
-				@sortHeader("Device", "name", sortKey, dir, q, base)
-				@sortHeader("IP", "ip", sortKey, dir, q, base)
-				<th>Lease</th>
-				@sortHeader("Status", "status", sortKey, dir, q, base)
-				@sortHeader("Kind", "kind", sortKey, dir, q, base)
-				<th>Function</th>
-				<th>Tags</th>
-				@sortHeader("Last seen", "seen", sortKey, dir, q, base)
-				<th></th>
+				if o.Bulk {
+					<th class="col-sel">
+						<input type="checkbox" id="dl-all" aria-label="Select all shown devices" hidden/>
+					</th>
+				}
+				@sortHeader("Device", "name", "col-dev", o)
+				@sortHeader("IP", "ip", "col-ip", o)
+				<th class="col-mac opt">MAC</th>
+				<th class="col-lease opt">Lease</th>
+				@sortHeader("Status", "status", "col-status", o)
+				@sortHeader("Kind", "kind", "col-kind", o)
+				<th class="col-func opt">Function</th>
+				<th class="col-tags opt">Tags</th>
+				@sortHeader("Last seen", "seen", "col-seen", o)
+				<th class="col-act"><span class="sr-only">Actions</span></th>
 			</tr>
 		</thead>
 		<tbody>
-			if grouped {
+			if o.Grouped {
 				for _, g := range GroupByParent(rows) {
-					@deviceRow(g.Row, g.Depth)
+					@deviceRow(g.Row, g.Depth, o)
 				}
 			} else {
 				for _, row := range rows {
-					@deviceRow(row, 0)
+					@deviceRow(row, 0, o)
 				}
 			}
 		</tbody>
 	</table>
 }
 
-// DeviceList renders the devices page. total is how many devices matched before
-// the handler capped the rows it sends, so the page can say when it is showing
-// a prefix rather than silently presenting a truncated list as the whole fleet.
-templ DeviceList(username string, rows []store.DeviceRow, q, sortKey, dir string, total int) {
+// keepQ is the query parameters a sort link keeps: the text filter, if any.
+func keepQ(q string) url.Values {
+	if q == "" {
+		return nil
+	}
+	return url.Values{"q": {q}}
+}
+
+// DeviceList renders the devices page: its header and actions, the filter
+// bar, and the results.
+templ DeviceList(username string, p DeviceListPage) {
 	@Layout("Devices", username) {
-		<h1>Devices</h1>
-		if total > len(rows) {
-			<p class="muted">
-				Showing { fmt.Sprint(len(rows)) } of { fmt.Sprint(total) } matching devices. Narrow the filter to see the rest.
-			</p>
-		}
-		<div class="toolbar">
-			<form method="get" action="/devices" class="grow" role="search">
-				<input type="hidden" name="sort" value={ sortKey }/>
-				<input type="hidden" name="dir" value={ dir }/>
-				<input
-					type="search"
-					name="q"
-					value={ q }
-					placeholder="filter devices, IP, MAC, tag…"
-					aria-label="Filter devices"
-					hx-get="/devices"
-					hx-trigger="input changed delay:300ms"
-					hx-target="body"
-					hx-push-url="true"
-					hx-vals={ fmt.Sprintf(`{"sort":%q,"dir":%q}`, sortKey, dir) }
-				/>
-			</form>
-			<div class="seg" id="dev-view">
-				<button type="button" data-view="list">
-					@Icon("list", "")
-					List
-				</button>
-				<button type="button" data-view="grid">
-					@Icon("layout-grid", "")
-					Grid
-				</button>
+		<div id="devices" class="devices">
+			<div class="page-head">
+				<h1>Devices</h1>
+				<div class="dl-actions">
+					if IsAdmin(ctx) {
+						<a class="btn btn-primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">
+							@Icon("plus", "")
+							New device
+						</a>
+						<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">
+							@Icon("radar", "")
+							Scan all
+						</button>
+					}
+					<details class="dl-menu">
+						<summary class="btn btn-icon" aria-label="Import and export">
+							@Icon("ellipsis", "")
+						</summary>
+						<div class="menu">
+							if IsAdmin(ctx) {
+								<a class="menu-item" href="/devices/import">
+									@Icon("upload", "")
+									Import CSV
+								</a>
+							}
+							<a class="menu-item" href="/api/export/devices.csv" download>
+								@Icon("download", "")
+								Export CSV
+							</a>
+							<a class="menu-item" href="/api/export/devices.json" download>
+								@Icon("download", "")
+								Export JSON
+							</a>
+						</div>
+					</details>
+				</div>
 			</div>
-			if IsAdmin(ctx) {
-				<a class="btn btn-primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">
-					@Icon("plus", "")
-					New device
-				</a>
-				<button type="button" class="btn" hx-post="/scan" hx-target="#toasts" hx-swap="beforeend">
-					@Icon("radar", "")
-					Scan all
-				</button>
-				<a class="btn btn-quiet" href="/devices/import">
-					@Icon("upload", "")
-					Import CSV
-				</a>
+			if p.All > 0 {
+				@deviceFilters(p)
 			}
-			<a class="btn btn-quiet" href="/api/export/devices.csv" download>
-				@Icon("download", "")
-				Export CSV
-			</a>
-			<a class="btn btn-quiet" href="/api/export/devices.json" download>JSON</a>
-		</div>
-		<div id="dev-list" class="table-wrap">
-			@deviceTable(rows, q, sortKey, dir, "/devices", true)
-		</div>
-		<div id="dev-grid" class="devgrid" hidden>
-			for _, row := range rows {
-				<a class="panel devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
-					<span class="st">
-						if row.Online {
-							<span class="dot is-online" role="img" aria-label="online"></span>
-						} else {
-							<span class="dot" role="img" aria-label="offline"></span>
-						}
-					</span>
-					@deviceIcon(row.Icon, row.Kind, "")
-					<div class="nm">
-						{ row.Name }
-						if !row.Reviewed {
-							<span class="status is-new">new</span>
-						}
-						@missingUpstreamPill(row.Device)
-					</div>
-					<div class="ip mono">
-						{ lowestIPStr(row.IPs) }
-					</div>
-				</a>
-			}
+			@DeviceResults(p)
 		</div>
 		<script src="/static/devices.js"></script>
 	}
 }
 
-func nextDir(col, curSort, curDir string) string {
-	if curSort == col && curDir == "asc" {
-		return "desc"
-	}
-	return "asc"
+// deviceFilters is the filter bar: a plain GET form, so every filter is a
+// URL that works without JavaScript; htmx replaces the results as it changes.
+// On phones the menus and toggles fold into a disclosure.
+templ deviceFilters(p DeviceListPage) {
+	<form
+		id="dev-filters"
+		class="dl-filters"
+		method="get"
+		action="/devices"
+		role="search"
+		hx-get="/devices"
+		hx-trigger="submit, input delay:250ms"
+		hx-target="#dev-results"
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		hx-sync="this:replace"
+	>
+		if p.Explicit {
+			<input type="hidden" name="sort" value={ p.Sort }/>
+			<input type="hidden" name="dir" value={ p.Dir }/>
+		}
+		<div class="dl-bar">
+			<label class="dl-search">
+				<span class="sr-only">Search devices</span>
+				@Icon("search", "")
+				<input type="search" name="q" value={ p.Filter.Q } placeholder="Name, IP, MAC, vendor, tag…" autocomplete="off"/>
+			</label>
+			<details class="dl-more" open>
+				<summary class="btn">
+					@Icon("filter", "")
+					Filters
+					<span
+						class="count dl-fcount"
+						if p.Filter.Count() == 0 {
+							hidden
+						}
+					>{ strconv.Itoa(p.Filter.Count()) }</span>
+				</summary>
+				<div class="dl-fields">
+					<label>
+						<span class="sr-only">Status</span>
+						<select name="status">
+							<option value="">Any status</option>
+							<option value="online" selected?={ p.Filter.Status == "online" }>Online</option>
+							<option value="offline" selected?={ p.Filter.Status == "offline" }>Offline</option>
+						</select>
+					</label>
+					<label>
+						<span class="sr-only">Kind</span>
+						<select name="kind">
+							<option value="">Any kind</option>
+							for _, k := range deviceKinds {
+								<option value={ k } selected?={ p.Filter.Kind == k }>{ KindLabel(k) }</option>
+							}
+						</select>
+					</label>
+					if len(p.Subnets) > 0 {
+						<label>
+							<span class="sr-only">Subnet</span>
+							<select name="subnet">
+								<option value="">Any subnet</option>
+								for _, sn := range p.Subnets {
+									<option value={ strconv.FormatInt(sn.ID, 10) } selected?={ p.Filter.Subnet == sn.ID }>{ subnetLabel(sn) }</option>
+								}
+							</select>
+						</label>
+					}
+					if len(p.Tags) > 0 {
+						<label>
+							<span class="sr-only">Tag</span>
+							<select name="tag">
+								<option value="">Any tag</option>
+								for _, t := range p.Tags {
+									<option value={ t } selected?={ p.Filter.Tag == t }>{ t }</option>
+								}
+							</select>
+						</label>
+					}
+					<div class="dl-toggles" role="group" aria-label="Show only">
+						<label class="dl-toggle">
+							<input type="checkbox" name="new" value="1" checked?={ p.Filter.New }/>
+							New
+						</label>
+						<label class="dl-toggle">
+							<input type="checkbox" name="private" value="1" checked?={ p.Filter.PrivateMAC }/>
+							Private MAC
+						</label>
+						<label class="dl-toggle">
+							<input type="checkbox" name="missing" value="1" checked?={ p.Filter.Missing }/>
+							Missing upstream
+						</label>
+					</div>
+				</div>
+			</details>
+			<button type="submit" class="btn dl-apply">Apply</button>
+		</div>
+	</form>
 }
 
-// sortURL builds a link on `base` that preserves the filter (URL-encoded) and
-// toggles the sort direction for the clicked column.
-func sortURL(base, q, col, curSort, curDir string) string {
-	return base + "?q=" + url.QueryEscape(q) + "&sort=" + col + "&dir=" + nextDir(col, curSort, curDir)
+// DeviceResults is the part of the devices page the filter bar replaces: the
+// count, the bulk actions, and the table and tiles (or the empty state).
+templ DeviceResults(p DeviceListPage) {
+	<div id="dev-results" class="dl-results">
+		if p.All == 0 {
+			@devicesEmpty()
+		} else {
+			<div class="dl-summary">
+				<p class="dl-count" aria-live="polite">
+					if p.Filter.Active() {
+						<strong>{ strconv.Itoa(p.Matched) }</strong> of { deviceCount(p.All) }
+					} else {
+						{ deviceCount(p.All) }
+					}
+				</p>
+				if p.Filter.Active() {
+					<a class="btn btn-quiet btn-sm dl-clear" href="/devices">
+						@Icon("x", "")
+						Clear filters
+					</a>
+				}
+				if IsAdmin(ctx) && len(p.Rows) > 0 {
+					@bulkBar(p)
+				}
+				<div class="dl-view">
+					<details class="dl-cols" hidden>
+						<summary class="btn">
+							Columns
+							@Icon("chevron-down", "")
+						</summary>
+						<div class="menu" role="group" aria-label="Optional columns">
+							<label class="menu-item"><input type="checkbox" data-col="mac"/> MAC address</label>
+							<label class="menu-item"><input type="checkbox" data-col="lease"/> Lease</label>
+							<label class="menu-item"><input type="checkbox" data-col="func"/> Function</label>
+							<label class="menu-item"><input type="checkbox" data-col="tags"/> Tags</label>
+						</div>
+					</details>
+					<div class="seg" id="dev-view" role="group" aria-label="View" hidden>
+						<button type="button" data-view="list" aria-label="List">
+							@Icon("list", "")
+							<span class="lbl">List</span>
+						</button>
+						<button type="button" data-view="grid" aria-label="Tiles">
+							@Icon("layout-grid", "")
+							<span class="lbl">Tiles</span>
+						</button>
+					</div>
+				</div>
+			</div>
+			if p.Matched > len(p.Rows) {
+				<p class="muted">
+					Showing { strconv.Itoa(len(p.Rows)) } of { strconv.Itoa(p.Matched) } matching devices. Narrow the filter to see the rest.
+				</p>
+			}
+			if len(p.Rows) == 0 {
+				<div class="panel empty">
+					@Icon("search", "")
+					<h3>No devices match</h3>
+					<p>Nothing on the network fits these filters.</p>
+					<a class="btn" href="/devices">Clear filters</a>
+				</div>
+			} else {
+				<div id="dev-list" class="dl-table">
+					@deviceTableWith(p.Rows, deviceTableOpts{
+						Base: "/devices", Keep: p.Filter.Values(), Sort: sortMark(p), Dir: p.Dir,
+						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts,
+					})
+				</div>
+				<div id="dev-grid" class="devgrid" hidden>
+					for _, row := range p.Rows {
+						@deviceTile(row)
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+// sortMark is the column the table marks as sorted: none in the default,
+// grouped order, since the tree does not follow a single column.
+func sortMark(p DeviceListPage) string {
+	if p.Explicit {
+		return p.Sort
+	}
+	return ""
+}
+
+// bulkBar acts on the checked rows. The row checkboxes join this form through
+// their form attribute. return carries the filter back to the list.
+templ bulkBar(p DeviceListPage) {
+	<form id="bulk" class="dl-bulk" method="post" action="/devices/bulk/approve">
+		<input type="hidden" name="return" value={ bulkReturn(p) }/>
+		<span class="dl-selected muted" aria-live="polite"></span>
+		<button type="submit" class="btn btn-sm" formaction="/devices/bulk/approve">
+			@Icon("check", "")
+			Approve
+		</button>
+		<span class="dl-tag">
+			<input type="text" name="tag" placeholder="Tag" aria-label="Tag to add" list="dl-tags" autocomplete="off"/>
+			<button type="submit" class="btn btn-sm" formaction="/devices/bulk/tag">Add tag</button>
+		</span>
+		<datalist id="dl-tags">
+			for _, t := range p.Tags {
+				<option value={ t }></option>
+			}
+		</datalist>
+		<button type="submit" class="btn btn-sm btn-danger" formaction="/devices/bulk/delete" data-confirm>
+			@Icon("trash-2", "")
+			Delete
+		</button>
+	</form>
+}
+
+// bulkReturn is the list's query string (filter and sort) for the bulk
+// handlers to send the browser back to.
+func bulkReturn(p DeviceListPage) string {
+	v := p.Filter.Values()
+	if p.Explicit {
+		v.Set("sort", p.Sort)
+		v.Set("dir", p.Dir)
+	}
+	return v.Encode()
+}
+
+templ deviceTile(row store.DeviceRow) {
+	<a class="panel devtile" href={ templ.URL(fmt.Sprintf("/devices/%d", row.ID)) }>
+		<div class="devtile-head">
+			@deviceIcon(row.Icon, row.Kind, "")
+			if row.Online {
+				<span class="status is-online">online</span>
+			} else {
+				<span class="status is-offline">offline</span>
+			}
+		</div>
+		<div class="nm" title={ row.Name }>{ row.Name }</div>
+		<div class="ip mono">
+			if ip := lowestIPStr(row.IPs); ip != "" {
+				{ ip }
+			} else {
+				<span class="muted">no IP</span>
+			}
+		</div>
+		<div class="devtile-foot">
+			<span class="muted">{ KindLabel(row.Kind) }</span>
+			if !row.Reviewed {
+				<span class="status is-new">new</span>
+			}
+			@missingUpstreamPill(row.Device)
+		</div>
+	</a>
+}
+
+// devicesEmpty explains an empty inventory and offers the ways to fill it.
+templ devicesEmpty() {
+	<div class="panel empty">
+		@Icon("radar", "")
+		<h3>No devices yet</h3>
+		<p>netis lists what it finds when it scans a subnet, what your integrations report, and anything you add by hand.</p>
+		if IsAdmin(ctx) {
+			<div class="row">
+				<a class="btn btn-primary" href="/devices/new" hx-get="/devices/new" hx-target="#modal">
+					@Icon("plus", "")
+					Add device
+				</a>
+				<a class="btn" href="/settings/network">
+					@Icon("network", "")
+					Add a subnet to scan
+				</a>
+			</div>
+		} else {
+			<p>An admin can add a subnet to scan or add devices by hand.</p>
+		}
+	</div>
+}
+
+// DeviceBulkDeleteConfirm asks before deleting the chosen devices. The list
+// asks in a browser dialog when JavaScript runs; this page is the same
+// question without it.
+templ DeviceBulkDeleteConfirm(username string, devices []store.Device, ret string) {
+	@Layout("Delete devices", username) {
+		<div class="panel dl-confirm">
+			<h1>Delete { deviceCount(len(devices)) }?</h1>
+			<p>This removes them with their interfaces, addresses and history. A scan may find them again.</p>
+			<ul>
+				for _, d := range devices {
+					<li>{ d.Name }</li>
+				}
+			</ul>
+			<form method="post" action="/devices/bulk/delete" class="row">
+				for _, d := range devices {
+					<input type="hidden" name="id" value={ strconv.FormatInt(d.ID, 10) }/>
+				}
+				<input type="hidden" name="return" value={ ret }/>
+				<input type="hidden" name="confirm" value="1"/>
+				<button type="submit" class="btn btn-danger">
+					@Icon("trash-2", "")
+					Delete { deviceCount(len(devices)) }
+				</button>
+				<a class="btn btn-quiet" href={ templ.URL(ReturnURL(ret)) }>Cancel</a>
+			</form>
+		</div>
+	}
+}
+
+// ReturnURL is the devices list with a query string the bulk form carried,
+// re-encoded so it can only ever point at the list.
+func ReturnURL(ret string) string {
+	v, err := url.ParseQuery(ret)
+	if err != nil || len(v) == 0 {
+		return "/devices"
+	}
+	return "/devices?" + v.Encode()
 }

@@ -47,6 +47,10 @@ type IPRow struct {
 type IPInfo struct {
 	IP   string
 	Kind string
+	// SubnetID is the subnet the address is assigned in. ListDevices fills
+	// it, so the device list can filter by subnet and spot an address two
+	// devices hold in the same subnet.
+	SubnetID int64
 }
 
 type DeviceRow struct {
@@ -415,13 +419,13 @@ func (s *Store) ListDevices(ctx context.Context) ([]DeviceRow, error) {
 	// IPs, ordered by interface then assignment so the list matches what a
 	// per-device walk produced.
 	if err := s.eachRow(ctx,
-		`SELECT f.device_id, a.ip, a.kind FROM ip_assignment a
+		`SELECT f.device_id, a.ip, a.kind, a.subnet_id FROM ip_assignment a
 			JOIN iface f ON f.id=a.iface_id
 			ORDER BY f.device_id, f.id, a.id`,
 		func(rows *sql.Rows) error {
 			var devID int64
 			var ip IPInfo
-			if err := rows.Scan(&devID, &ip.IP, &ip.Kind); err != nil {
+			if err := rows.Scan(&devID, &ip.IP, &ip.Kind, &ip.SubnetID); err != nil {
 				return err
 			}
 			if i, ok := byID[devID]; ok {

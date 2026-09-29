@@ -119,11 +119,16 @@ func TestWideTablesAndNavFitPhones(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	st.CreateDevice(t.Context(), store.Device{Name: "nas", Kind: "server", Source: "manual"})
-	for _, path := range []string{"/devices", "/settings/users", "/settings/sessions"} {
+	for _, path := range []string{"/settings/users", "/settings/sessions"} {
 		body := authedGet(t, srv, st, path).Body.String()
 		if !strings.Contains(body, `class="table-wrap"`) {
 			t.Errorf("%s: table not wrapped in a scroll container", path)
 		}
+	}
+	// The devices table does not scroll sideways: it fits the page with its
+	// default columns, and on phones its rows stack (pages/devices.css).
+	if body := authedGet(t, srv, st, "/devices").Body.String(); !strings.Contains(body, `class="devtable"`) {
+		t.Error("/devices: no devices table")
 	}
 	css := authedGet(t, srv, st, "/static/app.css").Body.String()
 	for _, want := range []string{".table-wrap", "@media (max-width:640px)", ":focus-visible"} {

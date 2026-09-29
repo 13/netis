@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"netis/internal/macaddr"
 	"netis/internal/scan"
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -70,28 +73,154 @@ func parseDeviceSort(r *http.Request) (sortKey, dir string) {
 }
 
 func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
+	// A plain GET form sends every field, the empty ones too. Send the
+	// browser to the same list without them, so the URL says only what is
+	// filtered.
+	if !isHTMX(r) && hasEmptyParams(r.URL.Query()) {
+		v := r.URL.Query()
+		for k, vals := range v {
+			if len(vals) == 0 || vals[0] == "" {
+				v.Del(k)
+			}
+		}
+		target := "/devices"
+		if len(v) > 0 {
+			target += "?" + v.Encode()
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
+
 	rows, err := s.store.ListDevices(r.Context())
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	rows = filterDevices(rows, r.URL.Query().Get("q"))
+	subnets, err := s.store.ListSubnets(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	tags, err := s.store.ListTags(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	p := views.DeviceListPage{All: len(rows), Subnets: subnets, Conflicts: ipConflicts(rows)}
+	for _, t := range tags {
+		p.Tags = append(p.Tags, t.Name)
+	}
+	p.Filter = parseDeviceFilter(r)
+	rows = filterDevices(rows, p.Filter.Q)
+	rows = applyDeviceFilter(rows, p.Filter)
 
-	sortKey, dir := parseDeviceSort(r)
-	sortDeviceRows(rows, sortKey, dir)
+	p.Sort, p.Dir = parseDeviceSort(r)
+	p.Explicit = r.URL.Query().Get("sort") != ""
+	sortDeviceRows(rows, p.Sort, p.Dir)
 
 	// Bound what goes into the page. The query behind this is a fixed five
 	// statements whatever the fleet size, but the HTML is one row plus one grid
 	// tile per device, and a page with tens of thousands of them is unusable
 	// before it is slow. The filter is applied first, so narrowing it reaches
 	// anything the cap cuts off.
-	total := len(rows)
+	p.Matched = len(rows)
 	if len(rows) > maxDeviceRows {
 		rows = rows[:maxDeviceRows]
 	}
+	p.Rows = rows
 
+	// The filter bar asks htmx for the results alone.
+	if isHTMX(r) && r.Header.Get("HX-Target") == "dev-results" {
+		s.render(w, r, views.DeviceResults(p))
+		return
+	}
 	u, _ := userFrom(r)
-	s.render(w, r, views.DeviceList(u.Username, rows, r.URL.Query().Get("q"), sortKey, dir, total))
+	s.render(w, r, views.DeviceList(u.Username, p))
+}
+
+// hasEmptyParams reports whether any query parameter is present but blank.
+func hasEmptyParams(v url.Values) bool {
+	for _, vals := range v {
+		if len(vals) == 0 || vals[0] == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseDeviceFilter reads the devices page filter from the query string.
+// Values it does not know (a kind that does not exist, a subnet id that is
+// not a number) are dropped rather than matching nothing.
+func parseDeviceFilter(r *http.Request) views.DeviceFilter {
+	q := r.URL.Query()
+	f := views.DeviceFilter{
+		Q:          strings.TrimSpace(q.Get("q")),
+		Tag:        strings.TrimSpace(q.Get("tag")),
+		New:        q.Get("new") == "1",
+		PrivateMAC: q.Get("private") == "1",
+		Missing:    q.Get("missing") == "1",
+	}
+	if st := q.Get("status"); st == "online" || st == "offline" {
+		f.Status = st
+	}
+	if k := q.Get("kind"); validKinds[k] {
+		f.Kind = k
+	}
+	if id, err := strconv.ParseInt(q.Get("subnet"), 10, 64); err == nil && id > 0 {
+		f.Subnet = id
+	}
+	return f
+}
+
+// applyDeviceFilter keeps the rows that pass every filter set in f except the
+// text search (filterDevices does that).
+func applyDeviceFilter(rows []store.DeviceRow, f views.DeviceFilter) []store.DeviceRow {
+	kept := rows[:0]
+	for _, row := range rows {
+		if deviceMatches(row, f) {
+			kept = append(kept, row)
+		}
+	}
+	return kept
+}
+
+func deviceMatches(row store.DeviceRow, f views.DeviceFilter) bool {
+	switch {
+	case f.Status == "online" && !row.Online,
+		f.Status == "offline" && row.Online,
+		f.Kind != "" && row.Kind != f.Kind,
+		f.New && row.Reviewed,
+		f.PrivateMAC && !macaddr.AnyPrivate(row.MACs),
+		f.Missing && row.UpstreamMissingSince == nil:
+		return false
+	}
+	if f.Subnet > 0 && !slices.ContainsFunc(row.IPs, func(ip store.IPInfo) bool { return ip.SubnetID == f.Subnet }) {
+		return false
+	}
+	if f.Tag != "" && !slices.ContainsFunc(row.TagNames, func(t string) bool { return strings.EqualFold(t, f.Tag) }) {
+		return false
+	}
+	return true
+}
+
+// ipConflicts finds the addresses more than one device holds in the same
+// subnet, keyed by views.ConflictKey. It looks at every device, not only the
+// ones a filter shows, so a conflict is flagged even when the other holder is
+// filtered out.
+func ipConflicts(rows []store.DeviceRow) map[string]bool {
+	holders := map[string]int64{}
+	out := map[string]bool{}
+	for _, row := range rows {
+		for _, ip := range row.IPs {
+			k := views.ConflictKey(ip.SubnetID, ip.IP)
+			if id, ok := holders[k]; ok && id != row.ID {
+				out[k] = true
+			} else if !ok {
+				holders[k] = row.ID
+			}
+		}
+	}
+	return out
 }
 
 // filterDevices keeps the rows whose name, IPs, MACs, tags, vendor, model
