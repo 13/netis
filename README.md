@@ -506,7 +506,7 @@ a generic webhook, an [ntfy](https://ntfy.sh) topic, or both:
 | Kind | When |
 | --- | --- |
 | New devices | A scan or an integration finds a device netis has not seen before. |
-| Offline / online | A device goes offline or comes back — **only** for devices you mark with **Alert when offline** on their page. The mark is off for every device by default, so phones and laptops coming and going stay quiet. |
+| Offline / online | A device goes offline or comes back — **only** for devices you mark with **More › Turn on offline alerts** on their page. The mark is off for every device by default, so phones and laptops coming and going stay quiet. |
 | IP conflicts | After a subnet sweep, an address is newly claimed by more than one interface. Announced once per conflict; one still present after a restart is announced again. |
 | Scan and integration errors | A subnet sweep fails (the same error at most once an hour), an integration starts failing (once per outage), and when it works again. |
 | Missing upstream | A Proxmox guest or WireGuard peer is no longer listed by its integration, and when it comes back. |

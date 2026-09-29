@@ -2,7 +2,7 @@ package views
 
 import (
 	"fmt"
-	
+
 	"netis/internal/macaddr"
 	"netis/internal/store"
 )
@@ -25,12 +25,18 @@ type DeviceDetail struct {
 	Tags     []store.Tag
 	Fields   []store.CustomField
 	Links    []store.Link
-	Children []store.Device
-	Parent   *store.Device
+	Children []store.DeviceRow
+	Parent   *store.DeviceRow
 	Events   []store.Event
+	// Subnets are the subnets the device's IPs belong to, by id, so each
+	// address can link to its grid.
+	Subnets map[int64]store.Subnet
+	// Availability is the device's last 30 days, one entry per day.
+	Availability Availability
 	// AlertOffline is whether the device's offline and online events are
 	// sent as notifications.
 	AlertOffline bool
+	Back         BackLink
 }
 
 // HasMAC says whether any of the device's interfaces has a MAC address,
@@ -54,114 +60,444 @@ func anyOnline(ifds []IfaceDetail) bool {
 	return false
 }
 
+// onlineStatus is the status label for a device or interface.
+templ onlineStatus(online bool) {
+	if online {
+		<span class="status is-online">online</span>
+	} else {
+		<span class="status is-offline">offline</span>
+	}
+}
+
 templ DevicePage(username string, d DeviceDetail) {
 	@Layout(d.Device.Name, username) {
-		<div class="dev-hero panel">
-			<div class="dev-hero-main">
-				@deviceIcon(d.Device.Icon, d.Device.Kind, "ic-lg")
-				<div class="dev-hero-head">
-					<h1>
-						{ d.Device.Name }
-						<span class="chip">{ d.Device.Kind }</span>
-						if d.Device.Kind == "vm" || d.Device.Kind == "lxc" {
-							for _, f := range d.Fields {
-								if f.Key == "proxmox_status" {
-									<span class="chip">{ f.Value }</span>
-								}
-							}
-						}
-						if anyOnline(d.Ifaces) {
-							<span class="status is-online">online</span>
-						} else {
-							<span class="status is-offline">offline</span>
-						}
-						@missingUpstreamPill(d.Device)
-						if d.AlertOffline {
-							<span class="chip" title="Offline and online changes are sent as notifications">
-								@Icon("bell", "")
-								offline alerts on
-							</span>
-						}
-					</h1>
-					if joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) != "" {
-						<p class="muted">{ joinNonEmpty(" · ", d.Device.Vendor, d.Device.Model, d.Device.Function) }</p>
-					}
-					if d.Device.Notes != "" {
-						<p class="dev-notes">{ d.Device.Notes }</p>
-					}
-				</div>
+		<a class="dd-back" href={ templ.SafeURL(d.Back.URL) }>
+			@Icon("arrow-left", "")
+			{ d.Back.Label }
+		</a>
+		@deviceHeader(d)
+		@availabilityPanel(d.Availability)
+		<section class="dd-section" aria-labelledby="dd-overview">
+			<h2 id="dd-overview">Overview</h2>
+			<div class="dd-grid">
+				@aboutPanel(d)
+				@relatedPanel(d)
+				@linksPanel(d)
+				@fieldsPanel(d)
 			</div>
-			if IsAdmin(ctx) {
-				<div class="dev-hero-actions">
-					<a class="btn btn-primary" href={ templ.URL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) } hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) } hx-target="#modal">
-							@Icon("pencil", "")
-							Edit
-						</a>
-					if d.HasMAC() {
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="inline" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
-							<button type="submit" class="btn">
-									@Icon("power", "")
-									Wake on LAN
-								</button>
-						</form>
-					}
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="inline">
-						<button type="submit" class="btn">
-								@Icon("radar", "")
-								Scan ports
-							</button>
-					</form>
-					<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/alert", d.Device.ID)) } class="inline">
-						if d.AlertOffline {
-							<input type="hidden" name="alert_offline" value="0"/>
-							<button type="submit" class="btn">Stop offline alerts</button>
-						} else {
-							<input type="hidden" name="alert_offline" value="1"/>
-							<button type="submit" class="btn" title="Send a notification when this device goes offline or comes back">
-									@Icon("bell", "")
-									Alert when offline
-								</button>
-						}
-					</form>
+		</section>
+		<section class="dd-section" aria-labelledby="dd-network">
+			<h2 id="dd-network">Network</h2>
+			if len(d.Ifaces) == 0 {
+				<div class="panel">
+					<div class="empty">
+						@Icon("network", "")
+						<h3>No network interfaces</h3>
+						<p>netis has not seen this device on a subnet, and it has no MAC or IP recorded.</p>
+					</div>
 				</div>
 			}
+			for _, ifd := range d.Ifaces {
+				@ifacePanel(d, ifd)
+			}
+		</section>
+		<section class="dd-section" aria-labelledby="dd-activity">
+			<h2 id="dd-activity">Activity</h2>
+			@deviceActivityPanel(d)
+		</section>
+	}
+}
+
+// deviceHeader is the page head: icon, name, what the device is and its
+// state, and on the right what an admin can do with it.
+templ deviceHeader(d DeviceDetail) {
+	<header class="dd-head">
+		@deviceIcon(d.Device.Icon, d.Device.Kind, "ic-lg")
+		<div class="dd-title">
+			<h1>{ d.Device.Name }</h1>
+			<div class="dd-meta">
+				@onlineStatus(anyOnline(d.Ifaces))
+				if !d.Device.Reviewed {
+					<span class="status is-new" title="Found by a scan and not reviewed yet">new</span>
+				}
+				@missingUpstreamPill(d.Device)
+				if ip := d.primaryIP(); ip != "" {
+					<span class="mono">{ ip }</span>
+				}
+				<span>{ kindName(d.Device.Kind) }</span>
+				if vm := joinNonEmpty(" ", d.Device.Vendor, d.Device.Model); vm != "" {
+					<span class="muted">{ vm }</span>
+				}
+				if ps := d.proxmoxStatus(); ps != "" {
+					<span class="chip" title="State in Proxmox">{ ps }</span>
+				}
+				if d.hasPrivateMAC() {
+					<span class="chip" title={ privateMACTitle }>private MAC</span>
+				}
+				if d.AlertOffline {
+					<span class="chip" title="Offline and online changes are sent as notifications">
+						@Icon("bell", "")
+						offline alerts on
+					</span>
+				}
+			</div>
 		</div>
-		<div class="dev-cols">
-			<div class="dev-main">
-				<div class="panel">
-					<h2>Interfaces</h2>
-					for _, ifd := range d.Ifaces {
-						<div class="iface">
-							<p class="mono">
-								if ifd.Iface.MAC != nil {
-									{ *ifd.Iface.MAC }
-									if macaddr.IsPrivate(*ifd.Iface.MAC) {
-										{ " " }
-										<span class="chip" title={ privateMACTitle }>private MAC</span>
-									}
-								}
-								if ifd.Iface.Hostname != nil {
-									{ " " } { *ifd.Iface.Hostname }
-								}
-								if ifd.Online {
-									<span class="status is-online">online</span>
-								} else {
-									<span class="status is-offline">offline</span>
-								}
-							</p>
-							<p class="muted">
-								Last seen{ " " }
-								@Time(ifd.LastSeen)
-								{ " · " }Availability (30d): { fmt.Sprintf("%.1f%%", ifd.AvailabilityPct) }
-							</p>
-							<table>
-								<tr>
-									<th>IP</th>
-									<th>Lease</th>
-								</tr>
+		if IsAdmin(ctx) {
+			<div class="dd-actions">
+				if !d.Device.Reviewed {
+					<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/approve", d.Device.ID)) } class="inline">
+						<input type="hidden" name="next" value={ fmt.Sprintf("/devices/%d", d.Device.ID) }/>
+						<button type="submit" class="btn btn-primary">
+							@Icon("check", "")
+							Approve
+						</button>
+					</form>
+				}
+				<a
+					if d.Device.Reviewed {
+						class="btn btn-primary"
+					} else {
+						class="btn"
+					}
+					href={ templ.SafeURL(fmt.Sprintf("/devices/%d/edit", d.Device.ID)) }
+					hx-get={ fmt.Sprintf("/devices/%d/edit", d.Device.ID) }
+					hx-target="#modal"
+				>
+					@Icon("pencil", "")
+					Edit
+				</a>
+				@moreMenu(d)
+			</div>
+		}
+	</header>
+}
+
+// moreMenu holds the device's less frequent actions, Delete last and set
+// apart.
+templ moreMenu(d DeviceDetail) {
+	<details class="more dd-more">
+		<summary class="btn" aria-label="More actions">
+			@Icon("ellipsis", "")
+			<span class="lbl">More</span>
+		</summary>
+		<div class="menu" role="group" aria-label="More actions">
+			if d.HasMAC() {
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/wol", d.Device.ID)) } class="menu-form" hx-post={ fmt.Sprintf("/devices/%d/wol", d.Device.ID) } hx-target="#toasts" hx-swap="beforeend">
+					<button type="submit" class="menu-item">
+						@Icon("power", "")
+						Wake on LAN
+					</button>
+				</form>
+			}
+			if d.primaryIP() != "" {
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/portscan", d.Device.ID)) } class="menu-form">
+					<button type="submit" class="menu-item">
+						@Icon("radar", "")
+						Scan ports
+					</button>
+				</form>
+			}
+			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/alert", d.Device.ID)) } class="menu-form">
+				if d.AlertOffline {
+					<input type="hidden" name="alert_offline" value="0"/>
+					<button type="submit" class="menu-item" aria-pressed="true">
+						@Icon("bell", "")
+						Turn off offline alerts
+					</button>
+				} else {
+					<input type="hidden" name="alert_offline" value="1"/>
+					<button type="submit" class="menu-item" aria-pressed="false" title="Send a notification when this device goes offline or comes back">
+						@Icon("bell", "")
+						Turn on offline alerts
+					</button>
+				}
+			</form>
+			<hr/>
+			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) } class="menu-form" data-confirm={ "Delete " + d.Device.Name + " and everything recorded about it? This cannot be undone." }>
+				<button type="submit" class="menu-item danger">
+					@Icon("trash-2", "")
+					Delete device
+				</button>
+			</form>
+		</div>
+	</details>
+}
+
+// availabilityPanel draws the last 30 days as one bar per day, the online
+// share filled from the bottom, with the figure in words beside it.
+templ availabilityPanel(a Availability) {
+	<section class="panel dd-avail" aria-labelledby="dd-avail-h">
+		<div class="panel-head">
+			<h2 id="dd-avail-h">Availability</h2>
+			if a.HasData {
+				<span class="dd-avail-pct">{ fmtPct(a.Pct) }</span>
+			}
+			<span class="muted">last 30 days</span>
+		</div>
+		<svg class="avail-bar" viewBox="0 0 300 40" preserveAspectRatio="none" role="img" aria-label={ availSummary(a) }>
+			for _, b := range availBars(a) {
+				<g class={ "day", b.Tone }>
+					<title>{ availBarTitle(b.Day) }</title>
+					<rect class="track" x={ b.X } y="0" width="8" height="40" rx="1"></rect>
+					if b.Day.HasData {
+						<rect class="fill" x={ b.X } y={ b.FillY } width="8" height={ b.FillH } rx="1"></rect>
+					}
+				</g>
+			}
+		</svg>
+		<div class="avail-axis muted" aria-hidden="true">
+			<span>30 days ago</span>
+			<span>Today</span>
+		</div>
+		<p class="hint">{ availSummary(a) }</p>
+	</section>
+}
+
+// sourceName says where the device came from.
+func sourceName(src string) string {
+	switch src {
+	case "manual":
+		return "Added by hand"
+	case "scan":
+		return "Found by a scan"
+	case "proxmox":
+		return "Proxmox"
+	case "wireguard":
+		return "WireGuard"
+	case "pihole":
+		return "Pi-hole"
+	case "adguard":
+		return "AdGuard Home"
+	case "opnsense":
+		return "OPNsense"
+	case "":
+		return "Unknown"
+	}
+	return src
+}
+
+templ aboutPanel(d DeviceDetail) {
+	<div class="panel">
+		<h3>About</h3>
+		if d.Device.Notes != "" {
+			<p class="dd-notes">{ d.Device.Notes }</p>
+		}
+		<dl class="facts dd-facts">
+			<dt>Kind</dt>
+			<dd>{ kindName(d.Device.Kind) }</dd>
+			if d.Device.Vendor != "" {
+				<dt>Vendor</dt>
+				<dd>{ d.Device.Vendor }</dd>
+			}
+			if d.Device.Model != "" {
+				<dt>Model</dt>
+				<dd>{ d.Device.Model }</dd>
+			}
+			if d.Device.Function != "" {
+				<dt>Function</dt>
+				<dd>{ d.Device.Function }</dd>
+			}
+			<dt>Source</dt>
+			<dd>{ sourceName(d.Device.Source) }</dd>
+			<dt>Tags</dt>
+			<dd>
+				if len(d.Tags) > 0 {
+					<span class="dd-tags">
+						for _, t := range d.Tags {
+							<span class="chip">{ t.Name }</span>
+						}
+					</span>
+				} else {
+					<span class="muted">None</span>
+				}
+			</dd>
+		</dl>
+		if d.Device.Notes == "" && d.Device.Function == "" && len(d.Tags) == 0 && IsAdmin(ctx) {
+			<p class="hint">Add notes, tags or a function with Edit.</p>
+		}
+	</div>
+}
+
+// relatedRow is a parent or child: icon, linked name, IP and status.
+templ relatedRow(r store.DeviceRow) {
+	<li>
+		@deviceIcon(r.Icon, r.Kind, "")
+		<a href={ templ.SafeURL(fmt.Sprintf("/devices/%d", r.ID)) }>{ r.Name }</a>
+		if ip := relatedIP(r); ip != "" {
+			<span class="mono muted">{ ip }</span>
+		}
+		<span class="spacer"></span>
+		@onlineStatus(r.Online)
+	</li>
+}
+
+templ relatedPanel(d DeviceDetail) {
+	<div class="panel">
+		<h3>Connected to</h3>
+		if d.Parent == nil && len(d.Children) == 0 {
+			<p class="muted">No parent or child devices. Set a parent with Edit, for example the switch this device is plugged into.</p>
+		} else {
+			if d.Parent != nil {
+				<p class="dd-sub">Parent</p>
+				<ul class="dd-related">
+					@relatedRow(*d.Parent)
+				</ul>
+			}
+			if len(d.Children) > 0 {
+				<p class="dd-sub">Children <span class="count">{ fmt.Sprint(len(d.Children)) }</span></p>
+				<ul class="dd-related">
+					for _, c := range d.Children {
+						@relatedRow(c)
+					}
+				</ul>
+			}
+		}
+	</div>
+}
+
+templ linksPanel(d DeviceDetail) {
+	<div class="panel">
+		<h3>Links</h3>
+		if len(d.Links) == 0 {
+			<p class="muted">No links yet. Add the device's web interface or documentation.</p>
+		} else {
+			<ul class="dd-list">
+				for _, l := range d.Links {
+					<li>
+						<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">
+							{ l.Label }
+							@Icon("external-link", "")
+						</a>
+						<span class="muted dd-url">{ l.URL }</span>
+						if IsAdmin(ctx) {
+							<form method="post" action={ templ.SafeURL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Remove the link " + l.Label + "?" }>
+								<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
+								<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Remove link " + l.Label } title="Remove link">
+									@Icon("x", "")
+								</button>
+							</form>
+						}
+					</li>
+				}
+			</ul>
+		}
+		if IsAdmin(ctx) {
+			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="dd-add">
+				<label>
+					<span class="sr-only">Link label</span>
+					<input type="text" name="label" placeholder="Label" required autocomplete="off"/>
+				</label>
+				<label class="grow">
+					<span class="sr-only">Link URL</span>
+					<input type="url" name="url" placeholder="https://…" required autocomplete="off"/>
+				</label>
+				<button type="submit" class="btn btn-sm">
+					@Icon("plus", "")
+					Add link
+				</button>
+			</form>
+		}
+	</div>
+}
+
+templ fieldsPanel(d DeviceDetail) {
+	<div class="panel">
+		<h3>Custom fields</h3>
+		if len(d.Fields) == 0 {
+			<p class="muted">No custom fields. Record anything else worth knowing, like a rack slot or a serial number.</p>
+		} else {
+			<dl class="dd-fields">
+				for _, f := range d.Fields {
+					<div>
+						<dt>{ f.Key }</dt>
+						<dd>
+							<span>{ f.Value }</span>
+							if IsAdmin(ctx) {
+								<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Remove the field " + f.Key + "?" }>
+									<input type="hidden" name="key" value={ f.Key }/>
+									<button type="submit" class="btn btn-quiet btn-icon btn-sm" aria-label={ "Remove field " + f.Key } title="Remove field">
+										@Icon("x", "")
+									</button>
+								</form>
+							}
+						</dd>
+					</div>
+				}
+			</dl>
+		}
+		if IsAdmin(ctx) {
+			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="dd-add">
+				<label>
+					<span class="sr-only">Field name</span>
+					<input type="text" name="key" placeholder="Name" required autocomplete="off"/>
+				</label>
+				<label class="grow">
+					<span class="sr-only">Field value</span>
+					<input type="text" name="value" placeholder="Value" autocomplete="off"/>
+				</label>
+				<button type="submit" class="btn btn-sm">
+					@Icon("plus", "")
+					Save field
+				</button>
+			</form>
+		}
+	</div>
+}
+
+// ifacePanel is one interface: its identity and state on top, then its
+// addresses and open ports side by side.
+templ ifacePanel(d DeviceDetail, ifd IfaceDetail) {
+	<div class="panel dd-iface">
+		<div class="panel-head">
+			<h3>
+				if ifd.Iface.MAC != nil && *ifd.Iface.MAC != "" {
+					<span class="mono">{ *ifd.Iface.MAC }</span>
+				} else {
+					Interface without MAC
+				}
+			</h3>
+			if ifd.Iface.MAC != nil && macaddr.IsPrivate(*ifd.Iface.MAC) {
+				<span class="chip" title={ privateMACTitle }>private MAC</span>
+			}
+			if ifd.Iface.Hostname != nil && *ifd.Iface.Hostname != "" {
+				<span class="muted">{ *ifd.Iface.Hostname }</span>
+			}
+			@onlineStatus(ifd.Online)
+			<span class="spacer"></span>
+			<span class="muted text-sm">
+				if ifd.LastSeen != "" {
+					Last seen{ " " }
+					@Time(ifd.LastSeen)
+					{ " · " }
+				} else {
+					Never seen{ " · " }
+				}
+				{ fmtPct(ifd.AvailabilityPct) } over 30 days
+			</span>
+		</div>
+		<div class="dd-iface-body">
+			<div>
+				<h4>Addresses</h4>
+				if len(ifd.IPs) == 0 {
+					<p class="muted">No IP addresses.</p>
+				} else {
+					<div class="table-wrap">
+						<table>
+							<thead>
+								<tr><th>IP</th><th>Subnet</th><th>Lease</th></tr>
+							</thead>
+							<tbody>
 								for _, ip := range ifd.IPs {
 									<tr>
 										<td class="mono">{ ip.IP }</td>
+										<td>
+											if sn, ok := d.subnetOf(ip.SubnetID); ok {
+												<a href={ templ.SafeURL(fmt.Sprintf("/subnets/%d", sn.ID)) }>{ sn.Name }</a>
+												<span class="mono muted text-sm">{ sn.CIDR }</span>
+											} else {
+												<span class="muted">—</span>
+											}
+										</td>
 										<td>
 											if ip.SubnetID != 0 && IsAdmin(ctx) {
 												@LeaseToggle(d.Device.ID, ip.SubnetID, ip.IP, ip.Kind)
@@ -171,132 +507,86 @@ templ DevicePage(username string, d DeviceDetail) {
 										</td>
 									</tr>
 								}
-							</table>
-							if len(ifd.Ports) > 0 {
-								<table>
-									<tr>
-										<th>Port</th>
-										<th>Proto</th>
-										<th>Service</th>
-										<th>Last seen</th>
-									</tr>
-									for _, p := range ifd.Ports {
-										<tr>
-											<td>{ fmt.Sprint(p.Port) }</td>
-											<td>{ p.Proto }</td>
-											<td>{ p.ServiceGuess }</td>
-											<td>@Time(p.LastSeen)</td>
-										</tr>
-									}
-								</table>
-							}
-						</div>
-					}
-				</div>
+							</tbody>
+						</table>
+					</div>
+				}
 			</div>
-			<div class="dev-aside">
-				<div class="panel">
-					<h2>Tags</h2>
-					<p>
-						for _, t := range d.Tags {
-							<span class="chip">{ t.Name }</span>{ " " }
+			<div>
+				<h4>Open ports</h4>
+				if len(ifd.Ports) == 0 {
+					<p class="muted">
+						No open ports recorded.
+						if IsAdmin(ctx) && len(ifd.IPs) > 0 {
+							{ " " }Run Scan ports from the More menu to check.
 						}
 					</p>
-				</div>
-				<div class="panel">
-					<h2>Links</h2>
-					<ul class="linklist">
-						for _, l := range d.Links {
-							<li>
-								<a href={ templ.URL(l.URL) } target="_blank" rel="noopener">{ l.Label }</a>
-								if IsAdmin(ctx) {
-									<form method="post" action={ templ.URL(fmt.Sprintf("/links/%d/delete", l.ID)) } class="inline" data-confirm={ "Remove the link " + l.Label + "?" }>
-										<input type="hidden" name="device_id" value={ fmt.Sprint(d.Device.ID) }/>
-										<button type="submit" class="btn btn-quiet btn-sm">remove</button>
-									</form>
+				} else {
+					<div class="table-wrap">
+						<table>
+							<thead>
+								<tr><th>Port</th><th>Service</th><th>Last seen</th></tr>
+							</thead>
+							<tbody>
+								for _, p := range ifd.Ports {
+									<tr>
+										<td class="mono">{ fmt.Sprint(p.Port) }/{ p.Proto }</td>
+										<td>
+											if p.ServiceGuess != "" {
+												{ p.ServiceGuess }
+											} else {
+												<span class="muted">unknown</span>
+											}
+										</td>
+										<td class="muted">
+											@Time(p.LastSeen)
+										</td>
+									</tr>
 								}
-							</li>
-						}
-					</ul>
-					if IsAdmin(ctx) {
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/links", d.Device.ID)) } class="rowform">
-							<input type="text" name="label" placeholder="label" required/>
-							<input type="text" name="url" placeholder="https://…" required/>
-							<button type="submit" class="btn">Add link</button>
-						</form>
-					}
-				</div>
-				<div class="panel">
-					<h2>Custom fields</h2>
-					<table>
-						<tr>
-							<th>Key</th>
-							<th>Value</th>
-							<th></th>
-						</tr>
-						for _, f := range d.Fields {
-							<tr>
-								<td class="mono">{ f.Key }</td>
-								<td>{ f.Value }</td>
-								<td>
-									if IsAdmin(ctx) {
-										<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields/delete", d.Device.ID)) } class="inline" data-confirm={ "Remove the field " + f.Key + "?" }>
-											<input type="hidden" name="key" value={ f.Key }/>
-											<button type="submit" class="btn btn-quiet btn-sm">remove</button>
-										</form>
-									}
-								</td>
-							</tr>
-						}
-					</table>
-					if IsAdmin(ctx) {
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/fields", d.Device.ID)) } class="rowform">
-							<input type="text" name="key" placeholder="key" required/>
-							<input type="text" name="value" placeholder="value"/>
-							<button type="submit" class="btn">Set field</button>
-						</form>
-					}
-				</div>
-				<div class="panel">
-					<h2>Parent / children</h2>
-					if d.Parent != nil {
-						<p>Parent: <a href={ templ.URL(fmt.Sprintf("/devices/%d", d.Parent.ID)) }>{ d.Parent.Name }</a></p>
-					}
-					if len(d.Children) > 0 {
-						<ul>
-							for _, c := range d.Children {
-								<li><a href={ templ.URL(fmt.Sprintf("/devices/%d", c.ID)) }>{ c.Name }</a></li>
-							}
-						</ul>
-					}
-					if d.Parent == nil && len(d.Children) == 0 {
-						<p class="muted">No parent or children.</p>
-					}
-				</div>
-				<div class="panel">
-					<h2>Event history</h2>
-					<table>
-						for _, e := range d.Events {
-							<tr>
-								<td>@Time(e.TS)</td>
-								<td>@EventStatus(e)</td>
-								<td>{ EventDetail(e) }</td>
-							</tr>
-						}
-					</table>
-				</div>
-				if IsAdmin(ctx) {
-					<div class="panel">
-						<h2>Danger zone</h2>
-						<form method="post" action={ templ.URL(fmt.Sprintf("/devices/%d/delete", d.Device.ID)) } data-confirm={ "Delete " + d.Device.Name + " and everything recorded about it?" }>
-							<button type="submit" class="btn btn-danger">
-									@Icon("trash-2", "")
-									Delete device
-								</button>
-						</form>
+							</tbody>
+						</table>
 					</div>
 				}
 			</div>
 		</div>
-	}
+	</div>
+}
+
+templ deviceActivityPanel(d DeviceDetail) {
+	<div class="panel">
+		if len(d.Events) == 0 {
+			<div class="empty">
+				@Icon("activity", "")
+				<h3>No events yet</h3>
+				<p>Changes such as going offline, a new IP or a conflict show up here.</p>
+			</div>
+		} else {
+			<div class="table-wrap">
+				<table class="dd-events">
+					<thead>
+						<tr><th>When</th><th>Event</th><th>Details</th></tr>
+					</thead>
+					<tbody>
+						for _, e := range d.Events {
+							<tr>
+								<td class="muted">
+									@Time(e.TS)
+								</td>
+								<td>
+									@EventStatus(e)
+								</td>
+								<td>{ EventDetail(e) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if len(d.Events) >= DeviceEventLimit {
+				<p class="hint">
+					Showing the latest { fmt.Sprint(len(d.Events)) } events.{ " " }
+					<a href="/events">See all events</a>
+				</p>
+			}
+		}
+	</div>
 }

@@ -120,7 +120,7 @@ func TestDeviceAlertToggle(t *testing.T) {
 	devID, _ := seedInventory(t, st)
 	path := fmt.Sprintf("/devices/%d", devID)
 
-	if body := authedGet(t, srv, st, path).Body.String(); !strings.Contains(body, "Alert when offline") {
+	if body := authedGet(t, srv, st, path).Body.String(); !strings.Contains(body, "Turn on offline alerts") {
 		t.Fatal("device page has no alert toggle")
 	}
 	wantRedirect(t, authedPost(t, srv, st, path+"/alert", url.Values{"alert_offline": {"1"}}), path)
@@ -128,7 +128,7 @@ func TestDeviceAlertToggle(t *testing.T) {
 		t.Fatal("flag not set")
 	}
 	body := authedGet(t, srv, st, path).Body.String()
-	if !strings.Contains(body, "offline alerts on") || !strings.Contains(body, "Stop offline alerts") {
+	if !strings.Contains(body, "offline alerts on") || !strings.Contains(body, "Turn off offline alerts") {
 		t.Fatal("device page does not show the flag as on")
 	}
 	// Viewers see the state but not the button.

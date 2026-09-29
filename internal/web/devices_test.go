@@ -335,7 +335,7 @@ func TestDeviceNewDialogFragment(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	body := htmxRequest(t, srv, st, "GET", "/devices/new", nil).Body.String()
-	for _, want := range []string{`class="dialog"`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
+	for _, want := range []string{`<dialog class="dialog`, "ic-swatch", `name="parent_device_id"`, `name="tags"`, `name="mac"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("new dialog fragment missing %q", want)
 		}
@@ -367,7 +367,7 @@ func TestDeviceEditDialogPrefilled(t *testing.T) {
 		t.Error("edit dialog should pre-select the parent device")
 	}
 	// The edited device must not appear as a selectable parent of itself.
-	if strings.Contains(body, "nas — ") || strings.Contains(body, ">nas<") {
+	if strings.Contains(body, `<option value="2"`) {
 		t.Error("edit dialog should exclude the device itself from parent options")
 	}
 	_ = devID
@@ -560,13 +560,18 @@ func TestDeviceIPKindToggle(t *testing.T) {
 	}
 }
 
-func TestEditServesDrawer(t *testing.T) {
+// New and Edit open the same dialog (a full-screen sheet on a phone), not
+// a centred modal for one and a drawer for the other.
+func TestEditServesSameDialog(t *testing.T) {
 	srv, st := testServer(t)
 	st.SetSetting(t.Context(), "onboarded", "1")
 	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
 	body := htmxRequest(t, srv, st, "GET", "/devices/"+strconv.FormatInt(devID, 10)+"/edit", nil).Body.String()
-	if !strings.Contains(body, "drawer") {
-		t.Fatalf("edit form is not a drawer: %q", body)
+	if !strings.Contains(body, `<dialog class="dialog device-dialog"`) || strings.Contains(body, "drawer") {
+		t.Fatalf("edit form is not the device dialog: %q", body)
+	}
+	if !strings.Contains(body, ">Save changes<") {
+		t.Error("edit form's submit does not say Save changes")
 	}
 	if !strings.Contains(body, `action="/devices/`+strconv.FormatInt(devID, 10)+`"`) {
 		t.Fatalf("edit form action missing: %q", body)
@@ -609,7 +614,8 @@ func TestDeviceDetailRedesign(t *testing.T) {
 	st.AssignIP(t.Context(), ifID, snID, "10.0.0.1", "static")
 
 	body := authedGet(t, srv, st, "/devices/"+strconv.FormatInt(devID, 10)).Body.String()
-	for _, want := range []string{"dev-hero", "dev-cols", "gw", "TP-Link", "Interfaces", "/devices/" + strconv.FormatInt(devID, 10) + "/ip/kind"} {
+	for _, want := range []string{"dd-head", "dd-grid", "gw", "TP-Link", "Network", "Overview", "Activity",
+		`href="/subnets/` + strconv.FormatInt(snID, 10) + `"`, "/devices/" + strconv.FormatInt(devID, 10) + "/ip/kind"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail page missing %q", want)
 		}
