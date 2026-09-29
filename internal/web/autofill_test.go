@@ -12,8 +12,11 @@ type fakeAutofill struct {
 	kicks int
 }
 
-func (f *fakeAutofill) Run(_ context.Context, ids ...int64) error { f.runs = append(f.runs, ids); return nil }
-func (f *fakeAutofill) Kick()                                     { f.kicks++ }
+func (f *fakeAutofill) Run(_ context.Context, ids ...int64) error {
+	f.runs = append(f.runs, ids)
+	return nil
+}
+func (f *fakeAutofill) Kick() { f.kicks++ }
 
 func TestAutofillSettingSavesAndKicks(t *testing.T) {
 	srv, st := testServer(t)

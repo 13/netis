@@ -229,3 +229,26 @@ func TestRunSerialisesConcurrentPasses(t *testing.T) {
 		}
 	})
 }
+
+func TestServiceAppliesHintsFromOtherSources(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		ctx := t.Context()
+		id := discovered(t, st, "unknown-10.0.0.7", "da:a1:19:00:00:07", "", "10.0.0.7")
+		if err := st.ReplaceHints(ctx, id, "mdns", []store.Hint{
+			{Field: "model", Value: "Chromecast", Confidence: 80, SeenAt: "2026-09-29T00:00:00Z"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 2; i++ {
+			if err := New(st).Run(ctx, id); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if d, _ := st.GetDevice(ctx, id); d.Model != "Chromecast" {
+			t.Fatalf("mdns hint not applied: %+v", d)
+		}
+		if hs, _ := st.ListHints(ctx, id); len(hs) != 1 {
+			t.Fatalf("hints = %+v", hs)
+		}
+	})
+}

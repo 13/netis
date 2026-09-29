@@ -160,11 +160,13 @@ func (s *Service) runOne(ctx context.Context, id int64) error {
 		for i := range src.hints {
 			src.hints[i].DeviceID, src.hints[i].Source = id, src.name
 		}
-		if hintsEqual(existingBySource[src.name], src.hints) {
+		stored := existingBySource[src.name]
+		delete(existingBySource, src.name)
+		if hintsEqual(stored, src.hints) {
 			// Unchanged from last pass: skip the write (and the seen_at
 			// bump) rather than paying a transaction to restate the same
 			// content, and keep resolving from what is already stored.
-			hints = append(hints, existingBySource[src.name]...)
+			hints = append(hints, stored...)
 			continue
 		}
 		for i := range src.hints {
@@ -174,6 +176,11 @@ func (s *Service) runOne(ctx context.Context, id int64) error {
 			return err
 		}
 		hints = append(hints, src.hints...)
+	}
+	// Hints from sources this pass does not recompute (mDNS, UPnP) still
+	// count: they are written by their own probes.
+	for _, hs := range existingBySource {
+		hints = append(hints, hs...)
 	}
 
 	tagRows, err := s.st.DeviceTags(ctx, id)
