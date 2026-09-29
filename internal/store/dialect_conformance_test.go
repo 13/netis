@@ -526,6 +526,13 @@ func TestConformanceUsersSettingsAndGrid(t *testing.T) {
 		if o.Count != 2 {
 			t.Errorf("Count = %d, want 2 (conflict)", o.Count)
 		}
+		claims, err := s.IPClaims(ctx, snID, "192.168.1.10")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(claims) != 2 || claims[0].MAC != macA || !claims[0].Online || claims[1].Online || claims[0].DeviceKind != "other" {
+			t.Errorf("IPClaims = %+v, want both ifaces in order, only the first online", claims)
+		}
 		if err := s.SetIPKind(ctx, snID, "192.168.1.10", "static"); err != nil {
 			t.Fatal(err)
 		}

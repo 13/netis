@@ -203,3 +203,31 @@ func TestParallelScansAreBounded(t *testing.T) {
 	close(b.release)
 	sched.Wait()
 }
+
+// The subnet page shows whether a scan is waiting, running or when the last
+// one finished, so Status has to follow a scan through each of those.
+func TestStatusFollowsAScan(t *testing.T) {
+	sched, _, b, ids := testScheduler(t, "10.0.0.0/24")
+	if st := sched.Status(ids[0]); st.Queued || st.Running || !st.LastDone.IsZero() {
+		t.Fatalf("status before any scan = %+v, want zero", st)
+	}
+	sched.Trigger(ids[0])
+	if st := sched.Status(ids[0]); !st.Queued {
+		t.Fatalf("status after trigger = %+v, want queued", st)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sched.Start(ctx)
+	waitFor(t, "the sweep to start", func() bool { return b.count("10.0.0.0/24") == 1 })
+	if st := sched.Status(ids[0]); st.Queued || !st.Running {
+		t.Fatalf("status during the sweep = %+v, want running", st)
+	}
+	close(b.release)
+	waitFor(t, "the sweep to finish", func() bool { return !sched.Status(ids[0]).Running })
+	st := sched.Status(ids[0])
+	if st.LastDone.IsZero() || !st.LastOK {
+		t.Fatalf("status after the sweep = %+v, want a successful finish time", st)
+	}
+	sched.Wait()
+}

@@ -64,3 +64,47 @@ func (s *Store) SetIPKind(ctx context.Context, subnetID int64, ip, kind string) 
 		kind, subnetID, ip)
 	return err
 }
+
+// IPClaim is one interface holding an address in a subnet, with the device
+// kind and icon the grid's details panel draws it with.
+type IPClaim struct {
+	Occupant
+	DeviceKind string
+	DeviceIcon string
+}
+
+// IPClaims lists every interface holding ip in subnetID, oldest interface
+// first. More than one is an IP conflict, and the details panel names each
+// device involved rather than only the first. Count on each claim is the
+// number of claims.
+func (s *Store) IPClaims(ctx context.Context, subnetID int64, ip string) ([]IPClaim, error) {
+	rows, err := s.query(ctx, `SELECT d.id, d.name, d.kind, d.icon,
+			COALESCE(f.mac,''), COALESCE(st.last_seen,''),
+			COALESCE(st.online,FALSE), st.first_seen IS NOT NULL, a.kind
+		FROM ip_assignment a
+		JOIN iface f ON f.id=a.iface_id
+		JOIN device d ON d.id=f.device_id
+		LEFT JOIN iface_status st ON st.iface_id=f.id
+		WHERE a.subnet_id=? AND a.ip=?
+		ORDER BY f.id`, subnetID, ip)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []IPClaim
+	for rows.Next() {
+		var c IPClaim
+		if err := rows.Scan(&c.DeviceID, &c.DeviceName, &c.DeviceKind, &c.DeviceIcon, &c.MAC,
+			&c.LastSeen, &c.Online, &c.EverSeen, &c.Kind); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Count = len(out)
+	}
+	return out, nil
+}
