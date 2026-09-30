@@ -65,7 +65,7 @@ func TestTokenContrast(t *testing.T) {
 		pairs = append(pairs, pair{"muted", soft, 4.5})
 	}
 	pairs = append(pairs,
-		pair{"accent-fg", "accent", 4.5},  // primary button
+		pair{"accent-fg", "accent", 4.5},   // primary button
 		pair{"accent", "accent-soft", 4.5}, // selected icon swatch
 		pair{"fault", "fault-soft", 4.5},   // danger button hover
 	)

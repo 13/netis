@@ -45,7 +45,7 @@ func TestEventDetailUsesDisplayNames(t *testing.T) {
 		{"device_new", "opnsense device tv at 10.0.0.9"}:                "OPNsense device tv at 10.0.0.9",
 		{"offline", "nas (10.0.0.2) went offline"}:                      "nas (10.0.0.2) went offline",
 		{"scan_error", "subnet 10.0.0.0/24: boom"}:                      "subnet 10.0.0.0/24: boom",
-		{"offline", "pihole went offline"}:                                            "pihole went offline",
+		{"offline", "pihole went offline"}:                              "pihole went offline",
 	}
 	for in, want := range cases {
 		if got := EventDetail(store.Event{Type: in[0], Details: in[1]}); got != want {

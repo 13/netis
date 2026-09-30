@@ -8,14 +8,14 @@ import (
 
 func TestDeviceIcon(t *testing.T) {
 	cases := []struct{ icon, kind, want string }{
-		{"gamepad-2", "phone", "gamepad-2"},  // explicit choice wins
-		{"", "phone", "smartphone"},          // no choice: kind default
-		{"", "nonsense", "circle-help"},      // unknown kind
-		{"🎮", "phone", "gamepad-2"},          // stored emoji keeps the owner's pick
-		{"🖥️", "computer", "server"},          // with the variation selector
-		{"🖥", "computer", "server"},          // and without
-		{"🗄️", "server", "hard-drive"},        // an extra from the old palette
-		{"not-an-icon", "router", "router"},  // anything else: kind default
+		{"gamepad-2", "phone", "gamepad-2"}, // explicit choice wins
+		{"", "phone", "smartphone"},         // no choice: kind default
+		{"", "nonsense", "circle-help"},     // unknown kind
+		{"🎮", "phone", "gamepad-2"},         // stored emoji keeps the owner's pick
+		{"🖥️", "computer", "server"},        // with the variation selector
+		{"🖥", "computer", "server"},         // and without
+		{"🗄️", "server", "hard-drive"},      // an extra from the old palette
+		{"not-an-icon", "router", "router"}, // anything else: kind default
 		{"<script>", "nonsense", "circle-help"},
 	}
 	for _, c := range cases {
