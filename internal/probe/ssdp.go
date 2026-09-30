@@ -59,6 +59,9 @@ func ssdpClient() *http.Client {
 	return &http.Client{
 		Timeout:       2 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		// A description is on the LAN, next to the responder: never send it
+		// through an HTTP_PROXY, and keep no idle connections to devices.
+		Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true},
 	}
 }
 
