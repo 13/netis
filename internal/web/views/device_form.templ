@@ -1,6 +1,7 @@
 package views
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,11 +19,27 @@ func tagNamesJoin(tags []store.Tag) string {
 	return strings.Join(names, ", ")
 }
 
+// tagsJSON renders every existing tag, with its colour resolved to a palette
+// key, for the chip editor's suggestions (static/tags.js).
+func tagsJSON(tags []store.Tag) string {
+	type tagJSON struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	}
+	out := make([]tagJSON, 0, len(tags))
+	for _, t := range tags {
+		out = append(out, tagJSON{t.Name, TagColor(t.Name, t.Color)})
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
 // DeviceForm is the view-model for the create/edit device form. On a failed
 // submit it carries what was typed back, with Error saying what was wrong.
 type DeviceForm struct {
 	Device     store.Device
 	Tags       []store.Tag
+	AllTags    []store.Tag // every tag, for the chip editor's suggestions
 	Subnets    []store.Subnet
 	AllDevices []store.DeviceRow
 	IsEdit     bool
@@ -260,7 +277,7 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 					</label>
 					<div class="field">
 						<label for="df-tags">Tags</label>
-						<input type="text" id="df-tags" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="media, upstairs" autocomplete="off"/>
+						<input type="text" id="df-tags" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="media, upstairs" autocomplete="off" data-tag-editor data-tags={ tagsJSON(f.AllTags) }/>
 						<span class="hint">Separate tags with commas.</span>
 						for _, t := range f.DetectedTags {
 							<button type="button" class="btn-link df-use" data-append-tag={ t }>Add detected tag: { t }</button>

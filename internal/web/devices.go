@@ -331,14 +331,17 @@ func sortDeviceRows(rows []store.DeviceRow, key, dir string) {
 // isHTMX reports whether r came from htmx rather than a plain browser request.
 func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
 
-// deviceFormLists loads the subnets and devices the device form offers as
-// choices.
+// deviceFormLists loads the subnets, devices and tags the device form offers
+// as choices.
 func (s *Server) deviceFormLists(r *http.Request, f *views.DeviceForm) error {
 	var err error
 	if f.Subnets, err = s.store.ListSubnets(r.Context()); err != nil {
 		return err
 	}
 	if f.AllDevices, err = s.store.ListDevices(r.Context()); err != nil {
+		return err
+	}
+	if f.AllTags, err = s.store.ListTags(r.Context()); err != nil {
 		return err
 	}
 	return s.deviceFormSuggest(r.Context(), f)

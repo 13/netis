@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"netis/internal/store"
+	"netis/internal/web/views"
 )
 
 // The edit form offers known values as suggestions and, where autofill
@@ -60,5 +61,28 @@ func TestDeviceFormHidesDetectedItHas(t *testing.T) {
 	body := authedGet(t, srv, st, "/devices/"+itoa(id)+"/edit").Body.String()
 	if strings.Contains(body, "Use detected") || strings.Contains(body, "Add detected tag") {
 		t.Error("offers values the device already has")
+	}
+}
+
+// The tags input carries what the chip editor (static/tags.js) needs: the
+// marker, and every existing tag with its colour already resolved.
+func TestDeviceFormTagEditorData(t *testing.T) {
+	srv, st := testServer(t)
+	ctx := t.Context()
+	st.SetSetting(ctx, "onboarded", "1")
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "p", Kind: "other", Source: "manual"})
+	st.SetDeviceTags(ctx, id, []string{"nas", "media"})
+	if _, err := st.DB.Exec(`UPDATE tag SET color = 'violet' WHERE name = 'nas'`); err != nil {
+		t.Fatal(err)
+	}
+	body := authedGet(t, srv, st, "/devices/"+itoa(id)+"/edit").Body.String()
+	for _, want := range []string{
+		`data-tag-editor`,
+		`{&#34;name&#34;:&#34;nas&#34;,&#34;color&#34;:&#34;violet&#34;}`,
+		`{&#34;name&#34;:&#34;media&#34;,&#34;color&#34;:&#34;` + views.TagColor("media", "") + `&#34;}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("edit form lacks %q", want)
+		}
 	}
 }

@@ -152,6 +152,8 @@
 			var tags = b.form.elements.tags;
 			if (!tags) { return; }
 			var tag = b.getAttribute('data-append-tag');
+			// With the chip editor (tags.js) on the field, it adds the chip.
+			if (window.netisTags && window.netisTags.add(tags, tag)) { b.hidden = true; return; }
 			var have = tags.value.split(',').map(function (t) { return t.trim().toLowerCase(); });
 			if (have.indexOf(tag.toLowerCase()) < 0) {
 				tags.value = tags.value.trim() === '' ? tag : tags.value.replace(/[\s,]*$/, '') + ', ' + tag;
