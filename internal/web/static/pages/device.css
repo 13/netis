@@ -115,10 +115,14 @@
   dialog.dialog.device-dialog, .device-dialog.page-dialog { max-width:560px; }
   dialog.dialog.device-dialog { width:min(560px, calc(100% - 32px)); }
   .device-form .df-row { display:flex; gap:var(--sp-3); }
-  .device-form .df-row > label { margin:0; min-width:0; }
+  .device-form .df-row > label, .device-form .df-row > .field { margin:0; min-width:0; }
   .device-form .df-row > .grow { flex:1 1 0; }
   .device-form .field { margin:0; }
   .device-form .hint { margin:0; }
+  /* "Use detected: …" under a field: a quiet link-style button. */
+  .device-form .df-use { align-self:flex-start; padding:0; border:0; background:none; color:var(--accent);
+                         font:inherit; font-size:var(--text-sm); font-weight:var(--w-medium); text-align:left; }
+  .device-form .df-use:hover { text-decoration:underline; }
   .df-prefill { display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); border-radius:var(--r-control);
                 background:var(--accent-soft); color:var(--fg); font-size:var(--text-sm); }
   .df-prefill > .icon { color:var(--accent); }
@@ -184,6 +188,7 @@
     .device-form .df-row { flex-direction:column; gap:var(--sp-3); }
     .device-form input, .device-form select { min-height:var(--h-lg); font-size:1rem; }
     .device-dialog .df .btn { height:var(--h-lg); flex:1; }
+    .device-form .df-use { min-height:44px; }
     @keyframes sheetin { from { transform:translateY(16px); opacity:.6; } to { transform:none; opacity:1; } }
   }
 }

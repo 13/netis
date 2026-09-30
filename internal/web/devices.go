@@ -318,8 +318,61 @@ func (s *Server) deviceFormLists(r *http.Request, f *views.DeviceForm) error {
 	if f.Subnets, err = s.store.ListSubnets(r.Context()); err != nil {
 		return err
 	}
-	f.AllDevices, err = s.store.ListDevices(r.Context())
-	return err
+	if f.AllDevices, err = s.store.ListDevices(r.Context()); err != nil {
+		return err
+	}
+	return s.deviceFormSuggest(r.Context(), f)
+}
+
+// suggestFields are the text fields the device form offers known values for.
+var suggestFields = []string{autofill.FieldVendor, autofill.FieldModel, autofill.FieldFunction}
+
+// deviceFormSuggest fills the form's suggestions: the values other devices
+// hold, and on the edit form the device's own hints, plus what autofill
+// detected where it differs from what the device holds.
+func (s *Server) deviceFormSuggest(ctx context.Context, f *views.DeviceForm) error {
+	f.Suggest = map[string][]string{}
+	for _, field := range suggestFields {
+		vals, err := s.store.DistinctDeviceValues(ctx, field)
+		if err != nil {
+			return err
+		}
+		f.Suggest[field] = vals
+	}
+	if !f.IsEdit || f.Device.ID == 0 {
+		return nil
+	}
+	hints, err := s.store.ListHints(ctx, f.Device.ID)
+	if err != nil {
+		return err
+	}
+	for _, field := range suggestFields {
+		vals := f.Suggest[field]
+		for _, h := range hints {
+			if h.Field == field && h.Value != "" && !slices.Contains(vals, h.Value) {
+				vals = append(vals, h.Value)
+			}
+		}
+		slices.Sort(vals)
+		f.Suggest[field] = vals
+	}
+	fields, tags := autofill.Resolve(hints)
+	current := map[string]string{
+		autofill.FieldVendor: f.Device.Vendor, autofill.FieldModel: f.Device.Model,
+		autofill.FieldFunction: f.Device.Function, autofill.FieldKind: f.Device.Kind,
+	}
+	f.Detected = map[string]string{}
+	for field, cur := range current {
+		if c, ok := fields[field]; ok && c.Value != cur {
+			f.Detected[field] = c.Value
+		}
+	}
+	for _, c := range tags {
+		if !slices.ContainsFunc(f.Tags, func(t store.Tag) bool { return strings.EqualFold(t.Name, c.Value) }) {
+			f.DetectedTags = append(f.DetectedTags, c.Value)
+		}
+	}
+	return nil
 }
 
 // renderDeviceForm answers with the device form: the dialog alone for htmx, which swaps it into #modal, and a page of its own

@@ -218,3 +218,29 @@ func (s *Store) DeviceIDs(ctx context.Context) ([]int64, error) {
 	}
 	return out, rows.Err()
 }
+
+// suggestColumns are the device columns the form offers known values for.
+var suggestColumns = map[string]bool{"vendor": true, "model": true, "function": true}
+
+// DistinctDeviceValues returns the distinct non-empty values of a device
+// column (vendor, model or function), sorted, at most 200.
+func (s *Store) DistinctDeviceValues(ctx context.Context, field string) ([]string, error) {
+	col, ok := autofillColumns[field]
+	if !ok || !suggestColumns[field] {
+		return nil, fmt.Errorf("distinct values: unknown field %q", field)
+	}
+	rows, err := s.query(ctx, `SELECT DISTINCT `+col+` FROM device WHERE `+col+` <> '' ORDER BY `+col+` LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}

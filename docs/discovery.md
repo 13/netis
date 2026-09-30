@@ -68,7 +68,9 @@ It only fills a field that is empty (kind counts as empty while it is Other),
 and it never changes a value you set: once you edit or clear a value netis
 filled, that field is yours. A tag you remove stays removed. On a device's
 page, **Detected** marks values netis filled, and **What netis detected**
-lists every clue and whether it was used.
+lists every clue and whether it was used. When you edit a device, the vendor,
+model and function fields suggest values as you type, and "Use detected"
+fills in what netis detected where it differs from what the device holds.
 
 Turn it off under Settings, Network, "Fill in device details automatically".
 Every change is recorded in the audit log as user `netis`.

@@ -34,6 +34,14 @@ type DeviceForm struct {
 	// free cell of the subnet grid: the title and a line at the top say
 	// which one.
 	Prefilled bool
+	// Suggest holds datalist values per field: vendor, model, function.
+	Suggest map[string][]string
+	// Detected holds, on the edit form, the value autofill resolved for a
+	// field (vendor, model, function, kind) when it differs from the
+	// device's current value.
+	Detected map[string]string
+	// DetectedTags are resolved tags the device does not have.
+	DetectedTags []string
 }
 
 func (f DeviceForm) title() string {
@@ -173,6 +181,9 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 					}
 				</select>
 			</label>
+			if v, ok := f.Detected["kind"]; ok {
+				<button type="button" class="btn-link df-use" data-fill="kind" data-value={ v }>Use detected: { kindName(v) }</button>
+			}
 			@iconPicker(f)
 			if !f.IsEdit {
 				<label>
@@ -208,19 +219,22 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 				</summary>
 				<div class="df-more-body">
 					<div class="df-row">
-						<label class="grow">
-							Vendor
-							<input type="text" name="vendor" value={ f.Device.Vendor } autocomplete="off"/>
-						</label>
-						<label class="grow">
-							Model
-							<input type="text" name="model" value={ f.Device.Model } autocomplete="off"/>
-						</label>
+						<div class="field grow">
+							<label for="df-vendor">Vendor</label>
+							<input type="text" id="df-vendor" name="vendor" value={ f.Device.Vendor } autocomplete="off" list="dl-vendor"/>
+							@useDetected(f, "vendor")
+						</div>
+						<div class="field grow">
+							<label for="df-model">Model</label>
+							<input type="text" id="df-model" name="model" value={ f.Device.Model } autocomplete="off" list="dl-model"/>
+							@useDetected(f, "model")
+						</div>
 					</div>
-					<label>
-						Function
-						<input type="text" name="function" value={ f.Device.Function } placeholder="Role, room, Wi-Fi channel…" autocomplete="off"/>
-					</label>
+					<div class="field">
+						<label for="df-function">Function</label>
+						<input type="text" id="df-function" name="function" value={ f.Device.Function } placeholder="Role, room, Wi-Fi channel…" autocomplete="off" list="dl-function"/>
+						@useDetected(f, "function")
+					</div>
 					<div class="field">
 						<label for="df-parent">Parent device</label>
 						<input type="search" class="df-filter" data-filter-for="df-parent" placeholder="Filter by name or IP" aria-label="Filter parent devices" hidden/>
@@ -248,9 +262,19 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 						<label for="df-tags">Tags</label>
 						<input type="text" id="df-tags" name="tags" value={ tagNamesJoin(f.Tags) } placeholder="media, upstairs" autocomplete="off"/>
 						<span class="hint">Separate tags with commas.</span>
+						for _, t := range f.DetectedTags {
+							<button type="button" class="btn-link df-use" data-append-tag={ t }>Add detected tag: { t }</button>
+						}
 					</div>
 				</div>
 			</details>
+			for _, field := range []string{"vendor", "model", "function"} {
+				<datalist id={ "dl-" + field }>
+					for _, v := range f.Suggest[field] {
+						<option value={ v }></option>
+					}
+				</datalist>
+			}
 		</div>
 		<div class="df">
 			if modal {
@@ -265,6 +289,14 @@ templ deviceFormInner(f DeviceForm, modal bool) {
 			}
 		</div>
 	</form>
+}
+
+// useDetected offers the value autofill detected for a text field, when it
+// differs from what the field holds; dialog.js fills it in on a click.
+templ useDetected(f DeviceForm, field string) {
+	if v, ok := f.Detected[field]; ok {
+		<button type="button" class="btn-link df-use" data-fill={ field } data-value={ v }>Use detected: { v }</button>
+	}
 }
 
 // iconPicker shows the icon the device gets, which follows its kind until

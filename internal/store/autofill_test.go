@@ -113,3 +113,27 @@ func TestDeviceIDs(t *testing.T) {
 		}
 	})
 }
+
+func TestDistinctDeviceValues(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		ctx := t.Context()
+		for _, v := range []string{"Brother", "Apple", "", "Apple"} {
+			if _, err := st.CreateDevice(ctx, store.Device{Name: "d" + v, Kind: "other", Vendor: v, Source: "manual"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := st.DistinctDeviceValues(ctx, "vendor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 2 || got[0] != "Apple" || got[1] != "Brother" {
+			t.Fatalf("vendors = %q", got)
+		}
+		if _, err := st.DistinctDeviceValues(ctx, "notes"); err == nil {
+			t.Fatal("notes: want an error")
+		}
+		if _, err := st.DistinctDeviceValues(ctx, "kind"); err == nil {
+			t.Fatal("kind: want an error")
+		}
+	})
+}
