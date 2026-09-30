@@ -73,7 +73,6 @@
   .devtable .col-lease .chip + .chip { margin-left:var(--sp-1); }
   .devtable .col-tags { max-width:220px; }
   .devtable .col-seen, .devtable .col-status, .devtable td.col-kind { white-space:nowrap; }
-  .devtable .col-tags .chip { margin:1px var(--sp-1) 1px 0; }
   .devtable td.col-tags { line-height:1.9; }
   /* With the optional columns on, the busiest cells give up room first. */
   :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable :is(th, td) { padding-left:var(--sp-2); padding-right:var(--sp-2); }

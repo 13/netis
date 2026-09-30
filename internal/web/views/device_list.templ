@@ -151,8 +151,12 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 		<td class="col-kind">{ KindLabel(row.Kind) }</td>
 		<td class="col-func opt">{ row.Function }</td>
 		<td class="col-tags opt">
-			for _, tn := range row.TagNames {
-				<span class="chip">{ tn }</span>
+			if len(row.TagNames) > 0 {
+				<span class="tag-list">
+					for _, tn := range row.TagNames {
+						@TagChip(tn, o.TagColors.Of(tn))
+					}
+				</span>
 			}
 		</td>
 		<td class="col-seen muted">
@@ -355,6 +359,12 @@ templ deviceFilters(p DeviceListPage) {
 								}
 							</select>
 						</label>
+						if p.Filter.Tag != "" {
+							@TagSpan(p.Filter.Tag, p.TagColors.Of(p.Filter.Tag))
+							<a class="btn btn-quiet btn-icon btn-sm" href={ templ.URL(p.ClearTagHref) } aria-label="Clear tag filter">
+								@Icon("x", "")
+							</a>
+						}
 					}
 					<div class="dl-toggles" role="group" aria-label="Show only">
 						<label class="dl-toggle">
@@ -442,7 +452,8 @@ templ DeviceResults(p DeviceListPage) {
 				<div id="dev-list" class="dl-table">
 					@deviceTableWith(p.Rows, deviceTableOpts{
 						Base: "/devices", Keep: p.Filter.Values(), Sort: sortMark(p), Dir: p.Dir,
-						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts, Next: ReturnURL(bulkReturn(p)),
+						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts, TagColors: p.TagColors,
+						Next: ReturnURL(bulkReturn(p)),
 					})
 				</div>
 				<div id="dev-grid" class="devgrid" hidden>

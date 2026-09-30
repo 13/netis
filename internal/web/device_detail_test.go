@@ -123,6 +123,23 @@ func TestDeviceDetailRelatedAndSubnetLinks(t *testing.T) {
 	}
 }
 
+// The About panel shows tags as coloured chips linking to the filtered list.
+func TestDeviceDetailTagChips(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(ctx, id, []string{"nas"})
+	if _, err := st.DB.Exec(`UPDATE tag SET color=? WHERE name=?`, "teal", "nas"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := authedGet(t, srv, st, "/devices/"+itoa(id)).Body.String()
+	if !strings.Contains(body, `class="tag tag-teal"`) || !strings.Contains(body, `href="/devices?tag=nas"`) {
+		t.Errorf("device page does not show the tag as a coloured chip: %s", body)
+	}
+}
+
 // The back link returns to the page of ours the user came from, and to the
 // device list from anywhere else.
 func TestDeviceDetailBackLink(t *testing.T) {
@@ -285,6 +302,15 @@ func TestDevicePageShowsDetected(t *testing.T) {
 	}
 	if strings.Contains(body, "chip-detected") {
 		t.Error("a value a person set is marked Detected")
+	}
+	// The tag hint's value shows as a chip, not plain text.
+	i := strings.Index(body, "port 32400 open")
+	if i < 0 {
+		t.Fatal("missing the tag hint's detail")
+	}
+	row := body[strings.LastIndex(body[:i], "<tr>"):i]
+	if !strings.Contains(row, `class="tag tag-`) {
+		t.Errorf("detected panel does not show the tag hint as a chip: %s", row)
 	}
 
 	// A device with no clues shows neither the panel nor a badge.

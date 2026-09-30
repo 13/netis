@@ -179,6 +179,42 @@ func TestDeviceListColumnDefaults(t *testing.T) {
 	}
 }
 
+// Tags show as coloured chips that link to the filtered list, and a tag
+// filter in effect shows as a chip with a clear link next to the select
+// that keeps the list's other query parameters.
+func TestDeviceListTagChips(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(ctx, id, []string{"nas"})
+	if _, err := st.DB.Exec(`UPDATE tag SET color=? WHERE name=?`, "teal", "nas"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, `class="tag tag-teal"`) {
+		t.Error("tags column does not show the tag in its stored colour")
+	}
+	if !strings.Contains(body, `href="/devices?tag=nas"`) {
+		t.Error("tag chip does not link to the filtered list")
+	}
+
+	body = authedGet(t, srv, st, "/devices?tag=nas&q=na&new=1").Body.String()
+	re := regexp.MustCompile(`<a class="[^"]*" href="([^"]*)" aria-label="Clear tag filter"`)
+	m := re.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("filtered list missing the clear-tag link: %s", body)
+	}
+	href := strings.ReplaceAll(m[1], "&amp;", "&")
+	if strings.Contains(href, "tag=nas") {
+		t.Errorf("clear-tag link still carries the tag filter: %s", href)
+	}
+	if !strings.Contains(href, "q=na") || !strings.Contains(href, "new=1") {
+		t.Errorf("clear-tag link drops the other filters: %s", href)
+	}
+}
+
 // An address two devices claim in the same subnet is flagged on both rows.
 func TestDeviceListFlagsDuplicateIPs(t *testing.T) {
 	srv, st := testServer(t)

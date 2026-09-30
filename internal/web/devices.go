@@ -110,10 +110,16 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := views.DeviceListPage{All: len(rows), Subnets: subnets, Conflicts: ipConflicts(rows)}
+	tagColors := make(views.TagColors, len(tags))
 	for _, t := range tags {
 		p.Tags = append(p.Tags, t.Name)
+		tagColors[t.Name] = t.Color
 	}
+	p.TagColors = tagColors
 	p.Filter = parseDeviceFilter(r)
+	if p.Filter.Tag != "" {
+		p.ClearTagHref = clearTagHref(r)
+	}
 	rows = filterDevices(rows, p.Filter.Q)
 	rows = applyDeviceFilter(rows, p.Filter)
 
@@ -173,6 +179,18 @@ func parseDeviceFilter(r *http.Request) views.DeviceFilter {
 		f.Subnet = id
 	}
 	return f
+}
+
+// clearTagHref is the current request's URL with the tag filter removed and
+// every other query parameter (search, subnet, sort, toggles) kept, for the
+// clear link next to the tag filter select.
+func clearTagHref(r *http.Request) string {
+	v := r.URL.Query()
+	v.Del("tag")
+	if len(v) == 0 {
+		return "/devices"
+	}
+	return "/devices?" + v.Encode()
 }
 
 // applyDeviceFilter keeps the rows that pass every filter set in f except the
@@ -760,6 +778,15 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	allTags, err := s.store.ListTags(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	tagColors := make(views.TagColors, len(allTags))
+	for _, t := range allTags {
+		tagColors[t.Name] = t.Color
+	}
 	hints, err := s.store.ListHints(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -834,6 +861,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		Back:         s.deviceBackLink(r),
 		Detected:     autofill.Explain(d, tagNames, recs, hints),
 		Autofilled:   autofilled,
+		TagColors:    tagColors,
 	}))
 }
 
