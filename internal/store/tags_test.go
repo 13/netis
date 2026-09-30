@@ -181,3 +181,62 @@ func TestDeleteTag(t *testing.T) {
 		}
 	})
 }
+
+// Attaching a tag reuses one whose name differs only in case, rather than
+// creating a near-duplicate.
+func TestAttachTagIgnoresCase(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := t.Context()
+		a, _ := s.CreateDevice(ctx, Device{Name: "a", Kind: "other", Source: "manual"})
+		b, _ := s.CreateDevice(ctx, Device{Name: "b", Kind: "other", Source: "manual"})
+		c, _ := s.CreateDevice(ctx, Device{Name: "c", Kind: "other", Source: "manual"})
+		if err := s.SetDeviceTags(ctx, a, []string{"nas"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetDeviceTags(ctx, b, []string{"NAS"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.AddDeviceTags(ctx, c, []string{"Nas"}); err != nil {
+			t.Fatal(err)
+		}
+		tags, _ := s.ListTagsWithCounts(ctx)
+		if len(tags) != 1 || tags[0].Name != "nas" || tags[0].Devices != 3 {
+			t.Fatalf("tags = %+v, want the one nas on 3 devices", tags)
+		}
+		// Retyping a device's own tag in another case keeps it.
+		if err := s.SetDeviceTags(ctx, a, []string{"NAS"}); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.DeviceTags(ctx, a); len(got) != 1 || got[0].Name != "nas" {
+			t.Fatalf("device a tags = %+v", got)
+		}
+	})
+}
+
+// A rename collides with another tag whatever the case, but changing only
+// the case of a tag's own name is a plain rename.
+func TestRenameTagIgnoresCase(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := t.Context()
+		a, _ := s.CreateDevice(ctx, Device{Name: "a", Kind: "other", Source: "manual"})
+		s.SetDeviceTags(ctx, a, []string{"nas", "foo"})
+		nas, _ := tagByName(t, s, "nas")
+		foo, _ := tagByName(t, s, "foo")
+
+		if _, err := s.RenameTag(ctx, foo.ID, "NAS", false); !errors.Is(err, ErrTagExists) {
+			t.Fatalf("foo -> NAS: err = %v, want ErrTagExists", err)
+		}
+		merged, err := s.RenameTag(ctx, foo.ID, "NAS", true)
+		if err != nil || merged != nas.ID {
+			t.Fatalf("merge foo -> NAS: merged=%d err=%v, want %d", merged, err, nas.ID)
+		}
+
+		merged, err = s.RenameTag(ctx, nas.ID, "NAS", false)
+		if err != nil || merged != 0 {
+			t.Fatalf("nas -> NAS: merged=%d err=%v", merged, err)
+		}
+		if got, ok := tagByName(t, s, "NAS"); !ok || got.ID != nas.ID {
+			t.Fatalf("after case rename: %+v ok=%v", got, ok)
+		}
+	})
+}

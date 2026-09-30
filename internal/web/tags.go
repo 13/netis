@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -122,8 +123,17 @@ func (s *Server) handleTagRename(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case merged != 0:
-		note.Detail += " (merged)"
-		s.tagsDone(w, r, "Merged into "+name)
+		// The survivor keeps its own spelling, which may differ in case.
+		into := name
+		if tags, err := s.store.ListTags(r.Context()); err == nil {
+			for _, o := range tags {
+				if o.ID == merged {
+					into = o.Name
+				}
+			}
+		}
+		note.Detail = t.Name + " -> " + into + " (merged)"
+		s.tagsDone(w, r, "Merged into "+into)
 	case name == t.Name:
 		s.tagsDone(w, r, "Nothing to change")
 	default:
@@ -139,13 +149,17 @@ func (s *Server) tagMergeConfirm(w http.ResponseWriter, r *http.Request, id int6
 		s.fail(w, r, err)
 		return
 	}
+	// The other tag matches ignoring case, as the store's does; it is named
+	// as it is, with the exact spelling preferred.
 	m := views.TagMerge{ID: id, Into: into}
+	exact := false
 	for _, tc := range d.Tags {
 		switch {
 		case tc.ID == id:
 			m.Devices = tc.Devices
-		case tc.Name == into:
-			m.IntoDevices = tc.Devices
+		case !exact && strings.EqualFold(tc.Name, into):
+			exact = tc.Name == into
+			m.Into, m.IntoDevices = tc.Name, tc.Devices
 		}
 	}
 	d.TagMerge = m

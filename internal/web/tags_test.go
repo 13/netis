@@ -249,6 +249,36 @@ func TestTagRenameMergeConfirmCounts(t *testing.T) {
 	}
 }
 
+// Renaming to another tag's name in a different case asks to merge into that
+// tag, named as it is, and the merge keeps its spelling.
+func TestTagRenameMergeIgnoresCase(t *testing.T) {
+	srv, st := testServer(t)
+	ids := seedTags(t, st)
+	path := fmt.Sprintf("/settings/tags/%d/rename", ids["media"])
+	body := authedPost(t, srv, st, path, url.Values{"name": {"NAS"}}).Body.String()
+	for _, want := range []string{
+		"nas already exists; its 2 devices and this 1 will share it.",
+		`<input type="hidden" name="name" value="nas"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("confirmation missing %q", want)
+		}
+	}
+	rec := authedPost(t, srv, st, path, url.Values{"name": {"NAS"}, "confirm": {"1"}})
+	if toastOf(rec) != "Merged into nas" {
+		t.Errorf("toast = %q", toastOf(rec))
+	}
+	if tc, ok := tagCount(t, st, "nas"); !ok || tc.Devices != 2 {
+		t.Errorf("nas = %+v ok=%v", tc, ok)
+	}
+
+	// Changing only the case of its own name is a plain rename.
+	rec = authedPost(t, srv, st, fmt.Sprintf("/settings/tags/%d/rename", ids["nas"]), url.Values{"name": {"NAS"}})
+	if toastOf(rec) != "Renamed to NAS" {
+		t.Errorf("case rename toast = %q", toastOf(rec))
+	}
+}
+
 // A unique violation from the rename (the name was created meanwhile) is a
 // conflict shown on the page, not a server failure.
 func TestTagRenameRaceIsConflict(t *testing.T) {

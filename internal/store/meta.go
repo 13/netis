@@ -119,8 +119,9 @@ var ErrTagExists = errors.New("a tag with that name already exists")
 // set, id's devices join that tag and id is deleted; mergedInto is that
 // tag's id (0 for a plain rename). Without merge that case is ErrTagExists
 // and nothing changes. Renaming to its own name is a no-op. A missing tag is
-// sql.ErrNoRows. The name is matched exactly, as tags are unique by exact
-// name.
+// sql.ErrNoRows. Another tag's name is matched ignoring case, as attaching
+// does, so "nas" and "NAS" do not end up side by side; changing only the case
+// of the tag's own name is a plain rename.
 func (s *Store) RenameTag(ctx context.Context, id int64, name string, merge bool) (mergedInto int64, err error) {
 	err = s.withTx(ctx, func(c conn) error {
 		var cur string
@@ -131,7 +132,8 @@ func (s *Store) RenameTag(ctx context.Context, id int64, name string, merge bool
 			return nil
 		}
 		var other int64
-		err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE name=?`), name).Scan(&other)
+		err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE LOWER(name)=LOWER(?) AND id<>?
+			ORDER BY CASE WHEN name=? THEN 0 ELSE 1 END, id LIMIT 1`), name, id, name).Scan(&other)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			_, err := s.execOn(ctx, c, `UPDATE tag SET name=? WHERE id=?`, name, id)
@@ -203,16 +205,18 @@ func (s *Store) UntagDevice(ctx context.Context, deviceID, tagID int64) error {
 }
 
 // SetDeviceTags syncs a device's tags to exactly the given names: names are
-// trimmed, blanks dropped, and de-duplicated; tags that don't exist are
-// created (color #888888); tags no longer present are detached. Idempotent
-// and order-independent.
+// trimmed, blanks dropped, and de-duplicated ignoring case; a name matches an
+// existing tag ignoring case, and tags that don't exist are created with the
+// auto colour; tags no longer present are detached. Idempotent and
+// order-independent.
 func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []string) error {
-	// Build the desired set (trim, drop empty, dedup).
-	want := map[string]bool{}
+	// Build the desired set (trim, drop empty, dedup), keyed by lower case
+	// so a name retyped in another case keeps the tag the device has.
+	want := map[string]string{} // lower name -> name as typed
 	for _, n := range names {
 		n = strings.TrimSpace(n)
 		if n != "" {
-			want[n] = true
+			want[strings.ToLower(n)] = n
 		}
 	}
 
@@ -220,9 +224,9 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 	if err != nil {
 		return err
 	}
-	have := map[string]int64{} // name -> tag id, currently attached
+	have := map[string]int64{} // lower name -> tag id, currently attached
 	for _, t := range current {
-		have[t.Name] = t.ID
+		have[strings.ToLower(t.Name)] = t.ID
 	}
 
 	// The detaches and attaches go in one transaction: a failure partway
@@ -230,8 +234,8 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 	// removed and none of its new ones added, which is a state the user never
 	// asked for and cannot tell apart from a successful edit.
 	return s.withTx(ctx, func(c conn) error {
-		for name, id := range have {
-			if want[name] {
+		for key, id := range have {
+			if _, ok := want[key]; ok {
 				continue
 			}
 			if _, err := s.execOn(ctx, c,
@@ -239,8 +243,8 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 				return err
 			}
 		}
-		for name := range want {
-			if _, ok := have[name]; ok {
+		for key, name := range want {
+			if _, ok := have[key]; ok {
 				continue
 			}
 			id, err := s.findOrCreateTagOn(ctx, c, name)
@@ -262,17 +266,21 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 const defaultTagColor = ""
 
 // findOrCreateTagOn returns the id of the tag with the given name, creating it
-// with the auto colour if it does not exist yet.
+// with the auto colour if it does not exist yet. The name matches ignoring
+// case, so typing "NAS" attaches the existing "nas" rather than a second tag;
+// should several tags already differ only in case, the exact spelling wins,
+// then the oldest.
 //
-// It looks the name up directly rather than scanning the whole tag table, which
-// is what SetDeviceTags used to do once per name. The insert tolerates a
-// concurrent creator via ON CONFLICT and re-reads, so two requests attaching
-// the same new tag cannot make one of them fail.
+// It looks the name up directly rather than scanning the whole tag table. The
+// insert tolerates a concurrent creator via ON CONFLICT and re-reads, so two
+// requests attaching the same new tag cannot make one of them fail.
 // findOrCreateTagOn takes an explicit connection so it can run inside the
-// caller's transaction; SetDeviceTags is its only caller and always has one.
+// caller's transaction (SetDeviceTags, AddDeviceTags and autofill's tag
+// hints all call it from one).
 func (s *Store) findOrCreateTagOn(ctx context.Context, c conn, name string) (int64, error) {
 	var id int64
-	err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE name=?`), name).Scan(&id)
+	err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE LOWER(name)=LOWER(?)
+		ORDER BY CASE WHEN name=? THEN 0 ELSE 1 END, id LIMIT 1`), name, name).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
