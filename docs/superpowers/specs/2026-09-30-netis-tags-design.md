@@ -133,7 +133,7 @@ Settings, Admin, **Tags** (`/settings/tags`, admin only):
 - Delete: confirm ("Remove media from 4 devices?"), then detach and delete.
 - Empty state: "No tags yet. Add tags to devices from their edit form or
   the device list."
-- Audit actions: `tag.update`, `tag.delete`.
+- Audit actions: `tag.color`, `tag.rename`, `tag.delete`.
 
 Autofill needs no change: a deleted or renamed tag leaves its autofill
 records without a matching device tag, so the next pass marks them owned
