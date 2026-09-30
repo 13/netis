@@ -530,4 +530,13 @@ func TestProbeHintValuesCleaned(t *testing.T) {
 	if !has(hs, "name", "Front Door", 70) {
 		t.Errorf("hints = %+v, want cleaned name", hs)
 	}
+	// Bidi overrides and zero-width characters could make a name display as
+	// something else.
+	hs = ssdpHints([]probe.UPnPDevice{{
+		DeviceType:   "urn:schemas-upnp-org:device:Basic:1",
+		FriendlyName: "Ki\u200btchen \u202eVT",
+	}})
+	if !has(hs, "name", "Kitchen VT", 70) {
+		t.Errorf("hints = %+v, want format characters dropped", hs)
+	}
 }

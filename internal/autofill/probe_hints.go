@@ -323,12 +323,13 @@ var mdnsHandlers = map[string]func(probe.MDNSService) []store.Hint{
 // maxAnnounced caps a hint value taken from what a device announced, in runes.
 const maxAnnounced = 128
 
-// cleanAnnounced tidies a string a device announced: control characters
-// dropped, whitespace runs collapsed to one space, trimmed, and capped at
+// cleanAnnounced tidies a string a device announced: control and format
+// characters (bidi overrides, zero-width spaces, which can make a name
+// display as something else) dropped, whitespace runs collapsed to one space, trimmed, and capped at
 // maxAnnounced runes.
 func cleanAnnounced(v string) string {
 	v = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) && !unicode.IsSpace(r) {
+		if (unicode.IsControl(r) && !unicode.IsSpace(r)) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
