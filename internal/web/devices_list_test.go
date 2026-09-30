@@ -179,6 +179,135 @@ func TestDeviceListColumnDefaults(t *testing.T) {
 	}
 }
 
+// Tags are on by default: the page carries the show-tags class and a
+// checked Tags box before any script runs, and the script keeps that default
+// until someone picks columns.
+func TestDeviceListShowsTagsByDefault(t *testing.T) {
+	srv, st := testServer(t)
+	seedDeviceList(t, st)
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, `id="devices" class="devices show-tags"`) {
+		t.Error("devices page lacks the default show-tags class")
+	}
+	if !strings.Contains(body, `data-col="tags" checked`) {
+		t.Error("column picker does not check Tags by default")
+	}
+	js := authedGet(t, srv, st, "/static/devices.js").Body.String()
+	if !strings.Contains(js, "DEFAULT_COLS = ['tags']") {
+		t.Error("devices.js lacks the default columns")
+	}
+}
+
+// Tags show as coloured chips that link to the filtered list, and a tag
+// filter in effect shows as a chip with a clear link next to the select
+// that keeps the list's other query parameters.
+func TestDeviceListTagChips(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(ctx, id, []string{"nas"})
+	if _, err := st.DB.Exec(`UPDATE tag SET color=? WHERE name=?`, "teal", "nas"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, `class="tag tag-teal"`) {
+		t.Error("tags column does not show the tag in its stored colour")
+	}
+	if !strings.Contains(body, `href="/devices?tag=nas"`) {
+		t.Error("tag chip does not link to the filtered list")
+	}
+
+	body = authedGet(t, srv, st, "/devices?tag=nas&q=na&new=1").Body.String()
+	re := regexp.MustCompile(`<a class="[^"]*" href="([^"]*)" aria-label="Clear tag filter"`)
+	m := re.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("filtered list missing the clear-tag link: %s", body)
+	}
+	href := strings.ReplaceAll(m[1], "&amp;", "&")
+	if strings.Contains(href, "tag=nas") {
+		t.Errorf("clear-tag link still carries the tag filter: %s", href)
+	}
+	if !strings.Contains(href, "q=na") || !strings.Contains(href, "new=1") {
+		t.Errorf("clear-tag link drops the other filters: %s", href)
+	}
+}
+
+// htmxGet performs an htmx GET against the results target, the same way the
+// filter bar's own hx-get does.
+func htmxGet(t *testing.T, srv *Server, path string) string {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	req.AddCookie(&http.Cookie{Name: "netis_session", Value: "testtok"})
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "dev-results")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec.Body.String()
+}
+
+// activeTagOOBSection returns the body from the dl-active-tag out-of-band
+// element up to (and including) the clear link, or up to a reasonable bound
+// when there is no clear link (no tag filter in effect).
+func activeTagOOBSection(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `id="dl-active-tag"`)
+	if i < 0 {
+		t.Fatalf("no dl-active-tag element in body: %.300s", body)
+	}
+	rest := body[i:]
+	if j := strings.Index(rest, "</a>"); j >= 0 {
+		return rest[:j+len("</a>")]
+	}
+	end := len(rest)
+	if end > 300 {
+		end = 300
+	}
+	return rest[:end]
+}
+
+// The filter bar's htmx response must keep the active-tag chip and its clear
+// link in step with the results it swaps in: it carries the same fragment
+// as an out-of-band swap, since only #dev-results itself is swapped in.
+func TestDeviceListHTMXKeepsActiveTagInStep(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	id, _ := st.CreateDevice(ctx, store.Device{Name: "nas", Kind: "server", Source: "manual"})
+	st.SetDeviceTags(ctx, id, []string{"nas"})
+	authedGet(t, srv, st, "/") // seeds the session htmxGet reuses
+
+	body := htmxGet(t, srv, "/devices?tag=nas&q=na")
+	if !strings.Contains(body, `id="dl-active-tag" hx-swap-oob="true"`) {
+		t.Fatalf("htmx response missing the active-tag out-of-band element: %.400s", body)
+	}
+	section := activeTagOOBSection(t, body)
+	if !regexp.MustCompile(`<span class="tag tag-\w+" title="nas">nas</span>`).MatchString(section) {
+		t.Errorf("oob element missing the nas chip: %s", section)
+	}
+	re := regexp.MustCompile(`href="([^"]*)" aria-label="Clear tag filter"`)
+	m := re.FindStringSubmatch(section)
+	if m == nil {
+		t.Fatalf("oob element missing the clear-tag link: %s", section)
+	}
+	href := strings.ReplaceAll(m[1], "&amp;", "&")
+	if strings.Contains(href, "tag=nas") {
+		t.Errorf("oob clear-tag link still carries the tag filter: %s", href)
+	}
+	if !strings.Contains(href, "q=na") {
+		t.Errorf("oob clear-tag link drops the other filters: %s", href)
+	}
+
+	// With no tag filter (e.g. after choosing "Any tag"), the oob element is
+	// still sent, but empty: no stale chip, no clear link.
+	body = htmxGet(t, srv, "/devices?q=na")
+	section = activeTagOOBSection(t, body)
+	if strings.Contains(section, `class="tag `) || strings.Contains(section, "Clear tag filter") {
+		t.Errorf("oob element should be empty with no tag filter: %s", section)
+	}
+}
+
 // An address two devices claim in the same subnet is flagged on both rows.
 func TestDeviceListFlagsDuplicateIPs(t *testing.T) {
 	srv, st := testServer(t)

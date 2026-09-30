@@ -151,8 +151,12 @@ templ deviceRow(row store.DeviceRow, depth int, o deviceTableOpts) {
 		<td class="col-kind">{ KindLabel(row.Kind) }</td>
 		<td class="col-func opt">{ row.Function }</td>
 		<td class="col-tags opt">
-			for _, tn := range row.TagNames {
-				<span class="chip">{ tn }</span>
+			if len(row.TagNames) > 0 {
+				<span class="tag-list">
+					for _, tn := range row.TagNames {
+						@TagChip(tn, o.TagColors.Of(tn))
+					}
+				</span>
 			}
 		</td>
 		<td class="col-seen muted">
@@ -183,8 +187,9 @@ templ deviceTable(rows []store.DeviceRow, q, sortKey, dir, base string, grouped 
 
 // deviceTableWith is the devices table with every option. Default columns
 // are device, IP, status, kind and last seen; MAC, lease, function and tags
-// (class opt) are hidden unless the column picker on the devices page turns
-// them on.
+// (class opt) are hidden unless a show-<col> class above the table turns
+// them on. The devices page starts with show-tags (on desktop; phones never
+// show optional cells) and its column picker changes the set.
 templ deviceTableWith(rows []store.DeviceRow, o deviceTableOpts) {
 	<table class="devtable">
 		<thead>
@@ -232,7 +237,7 @@ func keepQ(q string) url.Values {
 // bar, and the results.
 templ DeviceList(username string, p DeviceListPage) {
 	@Layout("Devices", username) {
-		<div id="devices" class="devices">
+		<div id="devices" class="devices show-tags">
 			<div class="page-head">
 				<h1>Devices</h1>
 				<div class="dl-actions">
@@ -356,6 +361,7 @@ templ deviceFilters(p DeviceListPage) {
 							</select>
 						</label>
 					}
+					@activeTagFilter(p)
 					<div class="dl-toggles" role="group" aria-label="Show only">
 						<label class="dl-toggle">
 							<input type="checkbox" name="new" value="1" checked?={ p.Filter.New }/>
@@ -375,6 +381,35 @@ templ deviceFilters(p DeviceListPage) {
 			<button type="submit" class="btn dl-apply">Apply</button>
 		</div>
 	</form>
+}
+
+// activeTagFilter is the chip for the tag filter in effect, plus the link
+// that clears it; empty when no tag filter is set. It sits in a stable id so
+// the htmx response, which swaps only #dev-results, can also carry it as an
+// out-of-band update (activeTagFilterOOB) and keep it from going missing,
+// stale, or stuck showing a tag that was just cleared.
+templ activeTagFilter(p DeviceListPage) {
+	<span id="dl-active-tag">
+		@activeTagFilterBody(p)
+	</span>
+}
+
+// activeTagFilterOOB is activeTagFilter as an out-of-band swap, sent
+// alongside DeviceResults on an htmx request so the chip and clear link stay
+// in step with the filtered results.
+templ activeTagFilterOOB(p DeviceListPage) {
+	<span id="dl-active-tag" hx-swap-oob="true">
+		@activeTagFilterBody(p)
+	</span>
+}
+
+templ activeTagFilterBody(p DeviceListPage) {
+	if p.Filter.Tag != "" {
+		@TagSpan(p.Filter.Tag, p.TagColors.Of(p.Filter.Tag))
+		<a class="btn btn-quiet btn-icon btn-sm" href={ templ.URL(p.ClearTagHref) } aria-label="Clear tag filter">
+			@Icon("x", "")
+		</a>
+	}
 }
 
 // DeviceResults is the part of the devices page the filter bar replaces: the
@@ -411,7 +446,7 @@ templ DeviceResults(p DeviceListPage) {
 							<label class="menu-item"><input type="checkbox" data-col="mac"/> MAC address</label>
 							<label class="menu-item"><input type="checkbox" data-col="lease"/> Lease</label>
 							<label class="menu-item"><input type="checkbox" data-col="func"/> Function</label>
-							<label class="menu-item"><input type="checkbox" data-col="tags"/> Tags</label>
+							<label class="menu-item"><input type="checkbox" data-col="tags" checked/> Tags</label>
 						</div>
 					</details>
 					<div class="seg" id="dev-view" role="group" aria-label="View" hidden>
@@ -442,7 +477,8 @@ templ DeviceResults(p DeviceListPage) {
 				<div id="dev-list" class="dl-table">
 					@deviceTableWith(p.Rows, deviceTableOpts{
 						Base: "/devices", Keep: p.Filter.Values(), Sort: sortMark(p), Dir: p.Dir,
-						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts, Next: ReturnURL(bulkReturn(p)),
+						Grouped: p.Grouped(), Bulk: IsAdmin(ctx), Conflicts: p.Conflicts, TagColors: p.TagColors,
+						Next: ReturnURL(bulkReturn(p)),
 					})
 				</div>
 				<div id="dev-grid" class="devgrid" hidden>
@@ -453,6 +489,14 @@ templ DeviceResults(p DeviceListPage) {
 			}
 		}
 	</div>
+}
+
+// DeviceResultsHTMX is what the filter bar's htmx request gets: the results,
+// plus the active-tag chip and clear link as an out-of-band swap, so they
+// stay in step with the results even though only #dev-results is swapped in.
+templ DeviceResultsHTMX(p DeviceListPage) {
+	@DeviceResults(p)
+	@activeTagFilterOOB(p)
 }
 
 // sortMark is the column the table marks as sorted: none in the default,

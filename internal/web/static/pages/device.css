@@ -49,7 +49,6 @@
   .dd-notes { white-space:pre-line; }
   .dd-facts { font-size:var(--text-sm); }
   .dd-facts + .hint { margin-top:var(--sp-3); }
-  .dd-tags { display:inline-flex; flex-wrap:wrap; gap:var(--sp-1); }
   .chip-detected { margin-left:var(--sp-2); }
   /* What netis detected: a closed disclosure across the grid, right under
      About; the row beside About fills in from the next panel. */

@@ -54,6 +54,20 @@ type SettingsData struct {
 	NewToken string
 	// SSO is the signed-in user's single sign-on state, on the users tab.
 	SSO SSOAccount
+	// Tags are every tag with its device count, on the tags tab.
+	Tags []store.TagCount
+	// TagMerge is a rename that would merge two tags, waiting for the admin
+	// to confirm it; zero when there is none.
+	TagMerge TagMerge
+}
+
+// TagMerge asks before tag ID (with Devices devices) is renamed to Into, a
+// name another tag with IntoDevices devices already has.
+type TagMerge struct {
+	ID          int64
+	Into        string
+	IntoDevices int
+	Devices     int
 }
 
 // SSOAccount says whether SSO is configured and whether the signed-in user's
@@ -97,7 +111,7 @@ var (
 	}
 	adminSections = []settingsSection{
 		{"network", "Network"}, {"integrations", "Integrations"}, {"notifications", "Notifications"},
-		{"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
+		{"tags", "Tags"}, {"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
 	}
 )
 
@@ -142,7 +156,7 @@ func settingsLink(active string, sec settingsSection) templ.Component {
 		var templ_7745c5c3_Var2 templ.SafeURL
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/settings/" + sec.Key))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 111, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 125, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -165,7 +179,7 @@ func settingsLink(active string, sec settingsSection) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(sec.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 115, Col: 13}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 129, Col: 13}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -289,7 +303,7 @@ func SettingsPage(username string, d SettingsData) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(settingsTitle(d.ActiveTab))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 149, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 163, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -307,7 +321,7 @@ func SettingsPage(username string, d SettingsData) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(Sentence(d.Error))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 151, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/settings.templ`, Line: 165, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -341,6 +355,11 @@ func SettingsPage(username string, d SettingsData) templ.Component {
 				}
 			case "notifications":
 				templ_7745c5c3_Err = notificationsTab(d.Notify).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			case "tags":
+				templ_7745c5c3_Err = tagsTab(d.Tags, d.TagMerge).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

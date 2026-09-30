@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import base from './playwright.config';
+import base, { fixtureServer, PORT } from './playwright.config';
 
 // The README and docs/ screenshots (`make screenshots`), taken from the same
 // fixture server and pinned image as the visual regression suite, so the
@@ -11,5 +11,5 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   use: { ...base.use, trace: 'off' },
-  webServer: base.webServer,
+  webServer: fixtureServer(PORT),
 });

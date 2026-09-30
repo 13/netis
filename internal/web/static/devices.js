@@ -7,6 +7,9 @@
 	if (!root) { return; }
 	var VIEW = 'netis-devices-view', COLS = 'netis-devices-cols';
 	var OPTIONAL = ['mac', 'lease', 'func', 'tags'];
+	// What shows until someone picks columns; the server renders the same
+	// (show-tags on #devices), so the list looks the same without script.
+	var DEFAULT_COLS = ['tags'];
 	var phone = window.matchMedia('(max-width: 640px)');
 
 	function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -14,7 +17,9 @@
 	function all(sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
 
 	function chosenCols() {
-		return (get(COLS) || '').split(',').filter(function (c) { return OPTIONAL.indexOf(c) >= 0; });
+		var v = get(COLS);
+		if (v === null) { return DEFAULT_COLS.slice(); }
+		return v.split(',').filter(function (c) { return OPTIONAL.indexOf(c) >= 0; });
 	}
 	function applyCols() {
 		var on = chosenCols();

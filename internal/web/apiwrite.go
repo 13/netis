@@ -106,6 +106,10 @@ func (s *Server) handleAPIDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auditNote(r).Target = "device " + in.Name
+	if !store.TagNamesFit(in.Tags) {
+		s.apiError(w, r, http.StatusBadRequest, store.TagNameMsg)
+		return
+	}
 	dev := store.Device{
 		Name: in.Name, Kind: in.Kind, Notes: in.Notes, Icon: in.Icon, Source: "manual",
 		Vendor: in.Vendor, Model: in.Model, Function: in.Function, ParentDeviceID: in.ParentID,
@@ -259,6 +263,10 @@ func (s *Server) handleAPIDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 	if setTags {
 		if err := json.Unmarshal(body["tags"], &tags); err != nil {
 			s.apiError(w, r, http.StatusBadRequest, "tags must be a list of strings")
+			return
+		}
+		if !store.TagNamesFit(tags) {
+			s.apiError(w, r, http.StatusBadRequest, store.TagNameMsg)
 			return
 		}
 	}

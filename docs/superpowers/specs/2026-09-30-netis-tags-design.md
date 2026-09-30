@@ -133,7 +133,7 @@ Settings, Admin, **Tags** (`/settings/tags`, admin only):
 - Delete: confirm ("Remove media from 4 devices?"), then detach and delete.
 - Empty state: "No tags yet. Add tags to devices from their edit form or
   the device list."
-- Audit actions: `tag.update`, `tag.delete`.
+- Audit actions: `tag.color`, `tag.rename`, `tag.delete`.
 
 Autofill needs no change: a deleted or renamed tag leaves its autofill
 records without a matching device tag, so the next pass marks them owned
@@ -143,12 +143,17 @@ and never re-adds the old name.
 
 - `ListTagsWithCounts(ctx) ([]TagCount, error)` (`Tag` + `Devices int`).
 - `SetTagColor(ctx, id, color string) error` (web validates the key).
-- `RenameTag(ctx, id, name string) (mergedInto int64, err error)`: one
-  transaction; a plain rename when the name is free, otherwise the merge
-  above; renaming to the same name is a no-op.
+- `RenameTag(ctx, id, name string, merge bool) (mergedInto int64, err error)`:
+  one transaction; a plain rename when no other tag has the name (matched
+  ignoring case, so changing only a tag's own case is a plain rename);
+  otherwise the merge above when `merge` is set, and `ErrTagExists` with
+  nothing changed when it is not; renaming to the same name is a no-op.
+- Attaching a tag by name (`SetDeviceTags`, `AddDeviceTags`, autofill)
+  reuses an existing tag whose name matches ignoring case.
 - `DeleteTag(ctx, id) error` (device_tag rows cascade or are deleted first).
-- Tag name rules as today: trimmed, non-empty; max 64 characters (new,
-  enforced in the web layer and the tag editor).
+- Tag name rules as today: trimmed, non-empty; max 64 characters (new:
+  `store.ValidTagName`/`TagNamesFit`, checked by every writer: Settings
+  rename, device form, bulk tag, API and CSV import).
 
 ## Testing
 

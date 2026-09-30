@@ -72,6 +72,13 @@ type DeviceListPage struct {
 	Matched, All int
 	Subnets      []store.Subnet
 	Tags         []string
+	// TagColors maps every tag's name to its stored colour, for the chips
+	// in the tags column and the active-tag filter.
+	TagColors TagColors
+	// ClearTagHref is the current URL with the tag filter removed and every
+	// other query parameter kept, for the clear link next to the tag
+	// select. Empty when no tag filter is set.
+	ClearTagHref string
 	// Conflicts holds the addresses (ConflictKey) more than one device
 	// holds in the same subnet.
 	Conflicts map[string]bool
@@ -98,6 +105,9 @@ type deviceTableOpts struct {
 	// Bulk adds the selection checkboxes (admins, devices page).
 	Bulk      bool
 	Conflicts map[string]bool
+	// TagColors maps a tag's name to its stored colour, for the tags
+	// column's chips.
+	TagColors TagColors
 	// Next is where a row's Approve sends the browser back to.
 	Next string
 }

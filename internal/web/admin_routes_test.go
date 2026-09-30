@@ -126,6 +126,7 @@ var adminReads = map[string]bool{
 	"GET /settings/network":       true,
 	"GET /settings/integrations":  true,
 	"GET /settings/notifications": true,
+	"GET /settings/tags":          true,
 	"GET /settings/users":         true,
 	"GET /settings/audit":         true,
 	"GET /settings/system":        true,

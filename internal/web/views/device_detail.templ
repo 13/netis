@@ -43,6 +43,9 @@ type DeviceDetail struct {
 	// Autofilled holds the values autofill wrote that the device still
 	// shows, by field (vendor, kind, …; tags as tag:<name>).
 	Autofilled map[string]store.AutofillRecord
+	// TagColors maps every tag's name to its stored colour, for the About
+	// panel's chips and a tag hint's value in the detected panel.
+	TagColors TagColors
 }
 
 // HasMAC says whether any of the device's interfaces has a MAC address,
@@ -321,9 +324,9 @@ templ aboutPanel(d DeviceDetail) {
 			<dt>Tags</dt>
 			<dd>
 				if len(d.Tags) > 0 {
-					<span class="dd-tags">
+					<span class="tag-list">
 						for _, t := range d.Tags {
-							<span class="chip">{ t.Name }</span>
+							@TagChip(t.Name, t.Color)
 						}
 					</span>
 				} else {
@@ -364,7 +367,13 @@ templ detectedPanel(d DeviceDetail) {
 						for _, e := range d.Detected {
 							<tr>
 								<td data-label="Field">{ fieldText[e.Field] }</td>
-								<td data-label="Value">{ hintValue(e) }</td>
+								<td data-label="Value">
+									if e.Field == autofill.FieldTag {
+										@TagSpan(e.Value, d.TagColors.Of(e.Value))
+									} else {
+										{ hintValue(e) }
+									}
+								</td>
 								<td data-label="From">
 									<span>
 										{ Sentence(sourceLabel(e.Source)) }

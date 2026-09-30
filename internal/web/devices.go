@@ -110,10 +110,16 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := views.DeviceListPage{All: len(rows), Subnets: subnets, Conflicts: ipConflicts(rows)}
+	tagColors := make(views.TagColors, len(tags))
 	for _, t := range tags {
 		p.Tags = append(p.Tags, t.Name)
+		tagColors[t.Name] = t.Color
 	}
+	p.TagColors = tagColors
 	p.Filter = parseDeviceFilter(r)
+	if p.Filter.Tag != "" {
+		p.ClearTagHref = clearTagHref(r)
+	}
 	rows = filterDevices(rows, p.Filter.Q)
 	rows = applyDeviceFilter(rows, p.Filter)
 
@@ -132,9 +138,11 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Rows = rows
 
-	// The filter bar asks htmx for the results alone.
+	// The filter bar asks htmx for the results alone; it also carries the
+	// active-tag chip and clear link as an out-of-band swap, since only
+	// #dev-results itself gets replaced.
 	if isHTMX(r) && r.Header.Get("HX-Target") == "dev-results" {
-		s.render(w, r, views.DeviceResults(p))
+		s.render(w, r, views.DeviceResultsHTMX(p))
 		return
 	}
 	u, _ := userFrom(r)
@@ -173,6 +181,18 @@ func parseDeviceFilter(r *http.Request) views.DeviceFilter {
 		f.Subnet = id
 	}
 	return f
+}
+
+// clearTagHref is the current request's URL with the tag filter removed and
+// every other query parameter (search, subnet, sort, toggles) kept, for the
+// clear link next to the tag filter select.
+func clearTagHref(r *http.Request) string {
+	v := r.URL.Query()
+	v.Del("tag")
+	if len(v) == 0 {
+		return "/devices"
+	}
+	return "/devices?" + v.Encode()
 }
 
 // applyDeviceFilter keeps the rows that pass every filter set in f except the
@@ -311,14 +331,17 @@ func sortDeviceRows(rows []store.DeviceRow, key, dir string) {
 // isHTMX reports whether r came from htmx rather than a plain browser request.
 func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
 
-// deviceFormLists loads the subnets and devices the device form offers as
-// choices.
+// deviceFormLists loads the subnets, devices and tags the device form offers
+// as choices.
 func (s *Server) deviceFormLists(r *http.Request, f *views.DeviceForm) error {
 	var err error
 	if f.Subnets, err = s.store.ListSubnets(r.Context()); err != nil {
 		return err
 	}
 	if f.AllDevices, err = s.store.ListDevices(r.Context()); err != nil {
+		return err
+	}
+	if f.AllTags, err = s.store.ListTags(r.Context()); err != nil {
 		return err
 	}
 	return s.deviceFormSuggest(r.Context(), f)
@@ -494,6 +517,10 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderDeviceForm(w, r, f, status)
 	}
 	auditNote(r).Target = "device " + dev.Name
+	if !store.TagNamesFit(parseTags(r.FormValue("tags"))) {
+		refuse(http.StatusBadRequest, store.TagNameMsg)
+		return
+	}
 	// A subnet_id that is missing or not a number is "not chosen" (zero).
 	subnetID, _ := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
 	nd, msg, err := s.checkNewDevice(r.Context(), dev, r.FormValue("mac"), r.FormValue("ip"), subnetID)
@@ -620,6 +647,12 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		d.ParentDeviceID = nil
+	}
+	if !store.TagNamesFit(parseTags(r.FormValue("tags"))) {
+		f := submittedDeviceForm(r, d, true)
+		f.Error = store.TagNameMsg
+		s.renderDeviceForm(w, r, f, http.StatusBadRequest)
+		return
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
 		if status, msg, ok := writeFailure(err, "device conflicts with an existing one", parentMissingMsg); ok {
@@ -760,6 +793,15 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	allTags, err := s.store.ListTags(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	tagColors := make(views.TagColors, len(allTags))
+	for _, t := range allTags {
+		tagColors[t.Name] = t.Color
+	}
 	hints, err := s.store.ListHints(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -834,6 +876,7 @@ func (s *Server) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 		Back:         s.deviceBackLink(r),
 		Detected:     autofill.Explain(d, tagNames, recs, hints),
 		Autofilled:   autofilled,
+		TagColors:    tagColors,
 	}))
 }
 

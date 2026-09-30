@@ -46,6 +46,20 @@ type SettingsData struct {
 	NewToken string
 	// SSO is the signed-in user's single sign-on state, on the users tab.
 	SSO SSOAccount
+	// Tags are every tag with its device count, on the tags tab.
+	Tags []store.TagCount
+	// TagMerge is a rename that would merge two tags, waiting for the admin
+	// to confirm it; zero when there is none.
+	TagMerge TagMerge
+}
+
+// TagMerge asks before tag ID (with Devices devices) is renamed to Into, a
+// name another tag with IntoDevices devices already has.
+type TagMerge struct {
+	ID          int64
+	Into        string
+	IntoDevices int
+	Devices     int
 }
 
 // SSOAccount says whether SSO is configured and whether the signed-in user's
@@ -89,7 +103,7 @@ var (
 	}
 	adminSections = []settingsSection{
 		{"network", "Network"}, {"integrations", "Integrations"}, {"notifications", "Notifications"},
-		{"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
+		{"tags", "Tags"}, {"users", "Users"}, {"audit", "Audit log"}, {"system", "System"},
 	}
 )
 
@@ -161,6 +175,8 @@ templ SettingsPage(username string, d SettingsData) {
 						@integrationsTab(d)
 					case "notifications":
 						@notificationsTab(d.Notify)
+					case "tags":
+						@tagsTab(d.Tags, d.TagMerge)
 					case "users":
 						@usersTab(d)
 					case "audit":

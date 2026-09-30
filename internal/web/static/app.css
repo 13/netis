@@ -46,6 +46,21 @@
     --activity-soft:light-dark(#FAF0DC, #372E17);
     --fault:light-dark(#C62F37, #FF6B6B);
     --fault-soft:light-dark(#FBE6E7, #3C2325);
+    /* Tag palette: text on its soft tint. No status hue, not the accent. */
+    --tag-slate:light-dark(#4A5563, #B8C1CC);
+    --tag-slate-soft:light-dark(#EDF0F3, #2A3139);
+    --tag-indigo:light-dark(#4338CA, #A9B4FB);
+    --tag-indigo-soft:light-dark(#EDEEFC, #272B4C);
+    --tag-sky:light-dark(#0B6A9E, #7CCDF5);
+    --tag-sky-soft:light-dark(#E2F1FA, #16303F);
+    --tag-teal:light-dark(#0F7066, #62E0CC);
+    --tag-teal-soft:light-dark(#E1F4F1, #15332F);
+    --tag-violet:light-dark(#6B2FD0, #C3B3FB);
+    --tag-violet-soft:light-dark(#F0EAFD, #2E2647);
+    --tag-pink:light-dark(#B3175A, #F5A6CD);
+    --tag-pink-soft:light-dark(#FCE7F0, #3C2231);
+    --tag-sand:light-dark(#85562A, #DDB78A);
+    --tag-sand-soft:light-dark(#F5EDE3, #352B20);
     --scrim:light-dark(rgb(22 26 24 / .45), rgb(0 0 0 / .6));
     --overlay-shadow:0 12px 32px light-dark(rgb(22 26 24 / .18), rgb(0 0 0 / .5)), 0 2px 6px light-dark(rgb(22 26 24 / .08), rgb(0 0 0 / .3));
 
@@ -164,6 +179,68 @@
   .chip.dhcp { border-style:dashed; border-color:var(--border-strong); }
   button.chip { cursor:pointer; height:24px; padding:0 var(--sp-2); }
   button.chip:hover { border-color:var(--accent); color:var(--fg); }
+
+  /* ---- tag: a user label in its palette colour (views.TagChip). A tag-<key>
+     class picks the hue; the name is cut with an ellipsis, in full in title. ---- */
+  /* inline-block, not flex: text-overflow only cuts a block's own text. */
+  .tag { --tag:var(--tag-slate); --tag-soft:var(--tag-slate-soft);
+         display:inline-block; height:22px; padding:0 10px; max-width:16rem;
+         border:1px solid color-mix(in srgb, var(--tag) 22%, transparent); border-radius:var(--r-round);
+         background:var(--tag-soft); color:var(--tag); font-family:var(--font-sans); font-size:var(--text-xs);
+         font-weight:var(--w-medium); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+         vertical-align:middle; text-decoration:none; }
+  /* A linked tag leaves the cutting to its name span, so the link does not
+     clip the 44px tap area phones give links in text (see below). */
+  a.tag { overflow:visible; }
+  .tag-text { display:block; overflow:hidden; text-overflow:ellipsis; }
+  a.tag:hover, a.tag:focus-visible { border-color:color-mix(in srgb, var(--tag) 60%, transparent); text-decoration:none; }
+  .tag-slate { --tag:var(--tag-slate); --tag-soft:var(--tag-slate-soft); }
+  .tag-indigo { --tag:var(--tag-indigo); --tag-soft:var(--tag-indigo-soft); }
+  .tag-sky { --tag:var(--tag-sky); --tag-soft:var(--tag-sky-soft); }
+  .tag-teal { --tag:var(--tag-teal); --tag-soft:var(--tag-teal-soft); }
+  .tag-violet { --tag:var(--tag-violet); --tag-soft:var(--tag-violet-soft); }
+  .tag-pink { --tag:var(--tag-pink); --tag-soft:var(--tag-pink-soft); }
+  .tag-sand { --tag:var(--tag-sand); --tag-soft:var(--tag-sand-soft); }
+  .tag-list { display:flex; flex-wrap:wrap; gap:var(--sp-1); }
+  /* ---- tag editor: the device form's tags as chips (static/tags.js), in a
+     field that looks like a text input, with a suggestions popover. ---- */
+  .tag-editor { position:relative; display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-1);
+         min-height:var(--h-md); padding:4px var(--sp-2); background:var(--surface); cursor:text;
+         border:1px solid var(--border-strong); border-radius:var(--r-control); }
+  .tag-editor:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .tag-editor .tag { display:inline-flex; align-items:center; gap:2px; padding-right:3px; overflow:visible; cursor:default; }
+  .tag-editor .tag-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .tag-editor-input, .tag-editor-input:focus { flex:1 1 6rem; min-width:6rem; min-height:22px; padding:0 var(--sp-1);
+         border:0; border-radius:0; background:transparent; box-shadow:none; outline:none; }
+  .tag-remove { display:inline-flex; align-items:center; justify-content:center; flex:none; width:16px; height:16px;
+         padding:0; border:0; border-radius:var(--r-round); background:transparent; color:inherit; }
+  .tag-remove:hover { background:color-mix(in srgb, var(--tag) 18%, transparent); }
+  .tag-remove:focus-visible { outline:2px solid var(--focus); outline-offset:0; }
+  .tag-remove .icon { width:12px; height:12px; }
+  .tag-editor-list { position:absolute; top:calc(100% + 4px); left:-1px; z-index:40; display:flex; flex-direction:column;
+         gap:2px; min-width:12rem; max-width:calc(100% + 2px); max-height:16rem; overflow-y:auto; margin:0; padding:var(--sp-1);
+         list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel);
+         box-shadow:var(--overlay-shadow); color:var(--fg); cursor:default; }
+  /* As a popover (tags.js places it) it sits in the top layer, in viewport
+     coordinates. */
+  .tag-editor-list[popover] { position:fixed; inset:auto; width:auto; height:auto; max-width:none; }
+  .tag-editor-option { display:flex; align-items:center; min-height:var(--h-sm); padding:0 var(--sp-2);
+         border-radius:var(--r-control); cursor:pointer; }
+  .tag-editor-option:hover, .tag-editor-option.is-active { background:var(--surface-2); }
+  /* Tag colour picker (Settings, Tags): a radio group of swatches, the radio
+     visually hidden inside each label; the checked one is ringed in its hue. */
+  .tag-picker { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2); min-width:0; margin:0; }
+  .tag-swatches { display:flex; flex-wrap:wrap; gap:2px; min-width:10rem; margin:0; padding:0; border:0; }
+  .tag-swatches .tag-swatch { flex-direction:row; align-items:center; justify-content:center; gap:6px;
+         min-width:28px; height:28px; margin:0; padding:0 6px; border:1px solid transparent;
+         border-radius:var(--r-round); color:var(--fg); font-size:var(--text-xs); cursor:pointer; }
+  .tag-swatches .tag-swatch:hover { background:var(--surface-2); }
+  .tag-swatches .tag-swatch:has(input:checked) { border-color:var(--tag); background:var(--tag-soft); }
+  .tag-swatches .tag-swatch:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
+  .tag-count { white-space:nowrap; }
+  .tag-rename, .tag-merge { flex-wrap:wrap; }
+  .tag-rename input { width:10rem; min-width:0; }
+  .tag-swatch-dot { width:14px; height:14px; flex:none; border-radius:var(--r-round); background:var(--tag); }
 
   /* ---- status: an LED dot plus words. The only place status colour appears.
      A tone class on the element (or an ancestor) picks the colour. ---- */
@@ -540,7 +617,7 @@
   .onboard-brand { display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
   .onboard-brand .mark { display:block; width:44px; height:44px; }
   .onboard-brand .wm { font-size:var(--text-lg); font-weight:var(--w-semibold); }
-  .onboard-brand .tag { color:var(--muted); font-size:var(--text-sm); }
+  .onboard-brand .tagline { color:var(--muted); font-size:var(--text-sm); }
   .onboard-card { display:flex; flex-direction:column; gap:var(--sp-3); width:100%; max-width:440px; padding:var(--sp-5);
                   background:var(--surface); border:1px solid var(--border); border-radius:var(--r-panel); }
   .onboard-card h1 { margin:0; font-size:var(--text-lg); }
@@ -618,6 +695,7 @@
     .disclosure > summary, .subnet-row > summary { min-height:44px; }
     .pager .btn, .panel-actions .btn { min-height:44px; }
     label:has(> input[type="checkbox"]), label:has(> input[type="radio"]), label.chk { min-height:44px; }
+    .tag-swatches .tag-swatch { min-width:40px; }
 
     /* Small targets that sit in text or rows (a device name, a lease chip,
        a disclosure line) keep their look but take taps 44px tall. */

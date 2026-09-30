@@ -17,6 +17,7 @@ export const PAGES = [
   { name: 'grid', path: '/subnets/1' },
   { name: 'events', path: '/events' },
   { name: 'settings-network', path: '/settings/network' },
+  { name: 'settings-tags', path: '/settings/tags' },
   { name: 'login', path: '/login', anon: true },
 ];
 

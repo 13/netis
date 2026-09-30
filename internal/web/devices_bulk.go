@@ -96,6 +96,10 @@ func (s *Server) handleDeviceBulkTag(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "enter the tag to add", http.StatusBadRequest)
 		return
 	}
+	if !store.TagNamesFit(tags) {
+		http.Error(w, store.TagNameMsg, http.StatusBadRequest)
+		return
+	}
 	note := auditNote(r)
 	note.Target = bulkTarget(devs)
 	note.Detail = "tag " + strings.Join(tags, ", ")

@@ -130,8 +130,23 @@ INSERT INTO open_port (iface_id, port, proto, service_guess, first_seen, last_se
   (5, 445, 'tcp', 'smb', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z'),
   (5, 32400, 'tcp', 'plex', '2026-09-10T12:00:00Z', '2026-09-15T11:00:00Z');
 
-INSERT INTO tag (id, name, color) VALUES (1, 'infra', '#1f5fd1'), (2, 'media', '#888888');
-INSERT INTO device_tag (device_id, tag_id) VALUES (1, 1), (2, 1), (4, 1), (5, 1), (5, 2), (14, 2);
+-- Palette keys are set explicitly (not left as hex) because the seed loads
+-- after migrations run, so migration 0017's hex-to-auto cleanup never sees
+-- these rows. 'personal' is left '' to show the auto colour in screenshots.
+INSERT INTO tag (id, name, color) VALUES
+  (1, 'infra', 'indigo'),
+  (2, 'media', 'teal'),
+  (3, 'iot', 'sand'),
+  (4, 'wireguard', 'violet'),
+  (5, 'proxmox', 'sky'),
+  (6, 'personal', '');
+INSERT INTO device_tag (device_id, tag_id) VALUES
+  (1, 1), (2, 1), (4, 1), (5, 1),
+  (5, 2), (14, 2),
+  (15, 3), (16, 3), (17, 3),
+  (18, 4), (19, 4),
+  (6, 5), (7, 5), (8, 5),
+  (10, 6), (12, 6), (13, 6);
 INSERT INTO custom_field (device_id, key, value) VALUES (6, 'proxmox_status', 'running'), (7, 'proxmox_status', 'running');
 -- What autofill found for the nas: it filled the vendor from the MAC; the
 -- function and tag the open Plex port suggest were already set.
