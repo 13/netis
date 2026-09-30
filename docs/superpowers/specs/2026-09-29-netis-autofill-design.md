@@ -1,7 +1,8 @@
 # netis device autofill (A-series): design
 
-Date: 2026-09-29. Status: design; A1 planned in
-`docs/superpowers/plans/2026-09-29-netis-autofill-a1.md`.
+Date: 2026-09-29. Status: A1 merged (plan
+`docs/superpowers/plans/2026-09-29-netis-autofill-a1.md`); A2-A4 planned in
+`docs/superpowers/plans/2026-09-30-netis-autofill-a2-a4.md`.
 
 ## Problem
 
@@ -254,3 +255,40 @@ never fails a sweep or a lease sync.
 - **A4.** `store.DistinctDeviceValues(field)`; datalists in
   `device_form.templ`; "Use detected" fills the input client-side, and saving
   makes the value the person's.
+
+## A2-A4 decisions (2026-09-30)
+
+- **Package.** Network probes live in `internal/probe` and return raw
+  observations (`MDNSService`, `UPnPDevice`); turning them into hints is
+  `internal/autofill` (`probe_hints.go`), next to the other rule tables.
+- **Mapping to devices.** An mDNS or SSDP answer belongs to the address it
+  came from (the UDP packet source). The probe runs per subnet and maps
+  addresses through `ListSubnetIfaceIPs`; an address netis has no device
+  for is ignored (the next sweep creates it, the next probe fills it).
+- **When.** The scan engine calls `Autofill.Probe(subnet)` after each sweep.
+  The service queues it (non-blocking, dropped when the queue is full) and a
+  worker probes each subnet at most once every 15 minutes, only when a local
+  interface has an address in the subnet (a routed subnet gets nothing), and
+  only while `autofill_enabled` is on. mDNS and SSDP run concurrently, 3 s
+  window each. After storing hints the worker runs a pass for the devices
+  that answered.
+- **Stale probe hints.** A device that does not answer keeps its previous
+  probe hints (it may be asleep). A device that answers replaces them.
+- **mDNS queries.** One query with PTR questions (QU bit) for the fixed list
+  of interesting service types, sent to 224.0.0.251:5353 out of the subnet's
+  interface from an ephemeral port (legacy unicast, answered straight back,
+  like the name lookup). An instance seen without TXT gets a follow-up TXT
+  question. No service-type enumeration.
+- **SSDP safety.** Description XML is fetched only when the LOCATION host is
+  exactly the responder's IP, over http or https, no redirects, 2 s
+  timeout, 64 KiB cap, at most 4 locations per responder.
+- **Apple model identifiers** (`MacBookPro18,3`) become `MacBook Pro
+  (MacBookPro18,3)` by prefix; unknown identifiers stay as they are.
+- **A4 suggestions.** `store.DistinctDeviceValues(field)` for vendor,
+  model and function (at most 200 each) plus this device's hint values feed
+  `<datalist>`s. On the edit form, a field with a resolved candidate that
+  differs from the current value (owned or not: the person decides) gets a
+  "Use detected:
+  <value>" button that fills the input client-side; tags get "Add
+  detected tag" buttons that append to the comma list. Saving works as
+  any edit: the value becomes the person's.
