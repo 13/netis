@@ -41,7 +41,8 @@ docker run -d --name netis \
 > only works if the container shares the host's network namespace. Running
 > netis on a bridged/NAT network will still ping and track online/offline
 > state, but MAC address (and therefore vendor) discovery will not work for
-> those subnets.
+> those subnets. Host networking also lets netis hear the mDNS and UPnP
+> answers it uses to fill in device details.
 
 The image runs netis as root and sets `NETIS_PRIVILEGED_ICMP=1`, so it sends
 raw ICMP echo requests. Docker grants root in a container `CAP_NET_RAW` by

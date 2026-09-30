@@ -45,9 +45,13 @@ func testEngine(t *testing.T) (*Engine, *store.Store, *fakeSweeper, int64) {
 	return e, st, fs, snID
 }
 
-type countKicker struct{ n int }
+type countKicker struct {
+	n      int
+	probes []int64
+}
 
-func (k *countKicker) Kick() { k.n++ }
+func (k *countKicker) Kick()                 { k.n++ }
+func (k *countKicker) Probe(sn store.Subnet) { k.probes = append(k.probes, sn.ID) }
 
 func TestSweepKicksAutofill(t *testing.T) {
 	e, st, fs, snID := testEngine(t)
@@ -60,6 +64,9 @@ func TestSweepKicksAutofill(t *testing.T) {
 	}
 	if k.n != 1 {
 		t.Fatalf("kicks = %d", k.n)
+	}
+	if len(k.probes) != 1 || k.probes[0] != snID {
+		t.Fatalf("probes = %v, want [%d]", k.probes, snID)
 	}
 }
 

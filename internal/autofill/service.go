@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"netis/internal/probe"
 	"netis/internal/store"
 )
 
@@ -28,11 +30,29 @@ type Service struct {
 	mu sync.Mutex
 	// now is a test hook for the seen_at timestamp; defaults to time.Now.
 	now func() time.Time
+
+	// probeCh queues subnets for the probe worker (see Probe).
+	probeCh chan store.Subnet
+	// probers find hints on a link, by source name (mdns, ssdp).
+	probers map[string]SubnetProber
+	// probedAt is when each subnet was last probed; only the worker uses it.
+	probedAt map[int64]time.Time
+	// probeEvery is the least time between probes of one subnet.
+	probeEvery time.Duration
+	// iface finds the local interface attached to a subnet, nil when none.
+	iface func(cidr string) *net.Interface
 }
 
-// New returns a service over st. Call Start to serve Kick.
+// New returns a service over st. Call Start to serve Kick and Probe.
 func New(st *store.Store) *Service {
-	return &Service{st: st, kick: make(chan struct{}, 1), interval: 10 * time.Second, now: time.Now}
+	return &Service{
+		st: st, kick: make(chan struct{}, 1), interval: 10 * time.Second, now: time.Now,
+		probeCh:    make(chan store.Subnet, 16),
+		probers:    map[string]SubnetProber{"mdns": mdnsProber, "ssdp": ssdpProber},
+		probedAt:   map[int64]time.Time{},
+		probeEvery: 15 * time.Minute,
+		iface:      probe.InterfaceFor,
+	}
 }
 
 // Enabled reports whether the admin left autofill on (the default).
@@ -55,8 +75,16 @@ func (s *Service) Kick() {
 }
 
 // Start runs a full pass now, then one per burst of kicks, at most once per
-// interval, until ctx is done.
+// interval, until ctx is done. It also serves Probe, and returns only once
+// the probe worker has stopped.
 func (s *Service) Start(ctx context.Context) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.probeLoop(ctx)
+	}()
 	for {
 		if err := s.Run(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("autofill pass failed", "err", err)

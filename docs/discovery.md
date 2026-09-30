@@ -57,6 +57,13 @@ see: the maker registered for the MAC address (the IEEE registry, built in),
 the hostname (`BRW3C2AF4A1B2C3` is a Brother printer, `Galaxy-S23` a Samsung
 phone) and open ports found by a port scan (9100 is a printer, 8006 Proxmox).
 
+On subnets the netis host is directly attached to, netis also listens for
+what devices announce about themselves on the local network: mDNS (Bonjour)
+names Chromecasts, AirPlay speakers, printers, HomeKit and ESPHome devices,
+and UPnP names TVs, speakers and routers. It asks after a sweep, at most every
+15 minutes per subnet. In Docker this needs host networking, which netis
+already requires (see [Docker](install.md#docker)).
+
 It only fills a field that is empty (kind counts as empty while it is Other),
 and it never changes a value you set: once you edit or clear a value netis
 filled, that field is yours. A tag you remove stays removed. On a device's
