@@ -71,7 +71,6 @@
 		box.id = id + '-input';
 		box.className = 'tag-editor-input';
 		box.autocomplete = 'off';
-		box.maxLength = MAX_LEN;
 		box.setAttribute('role', 'combobox');
 		box.setAttribute('aria-expanded', 'false');
 		box.setAttribute('aria-controls', listId);
@@ -130,7 +129,9 @@
 		}
 
 		function render() {
-			editor.querySelectorAll('.tag').forEach(function (c) { c.remove(); });
+			// :scope > .tag only: the suggestion list is a child of the editor
+			// too, and its options are also .tag chips.
+			editor.querySelectorAll(':scope > .tag').forEach(function (c) { c.remove(); });
 			chips.forEach(function (name) { editor.insertBefore(chipEl(name), box); });
 			box.placeholder = chips.length ? '' : (input.placeholder || '');
 		}
@@ -171,8 +172,19 @@
 		}
 
 		// place puts the popover list under the field, or over it when there
-		// is no room below.
+		// is no room below. It is the target of the window resize/scroll
+		// listeners added while the list is open (see show()); if the editor
+		// was ripped out of the DOM without closing the list first - htmx
+		// swapping it out from under us - those listeners would otherwise
+		// hang around forever pointing at a detached node. The
+		// htmx:beforeSwap/htmx:beforeCleanupElement handlers below close the
+		// list proactively, so this is a backstop for whatever they miss.
 		function place() {
+			if (!editor.isConnected) {
+				window.removeEventListener('resize', place);
+				window.removeEventListener('scroll', place, true);
+				return;
+			}
 			if (!popover || list.hidden) { return; }
 			var r = editor.getBoundingClientRect();
 			var h = list.offsetHeight;
@@ -309,10 +321,24 @@
 		render();
 
 		input._tagEditor = { add: add };
+		// Exposed so htmx:beforeSwap/htmx:beforeCleanupElement (below) can
+		// close the list - and so drop its window listeners - before the
+		// editor is removed from the DOM.
+		editor._tagEditorClose = close;
 	}
 
 	function initAll(root) {
 		(root || document).querySelectorAll('input[data-tag-editor]').forEach(init);
+	}
+
+	// closeEditorsIn closes the suggestion list of every tag editor at or
+	// within root, so none is left with window resize/scroll listeners once
+	// htmx removes it.
+	function closeEditorsIn(root) {
+		if (!root || !root.querySelectorAll) { return; }
+		var editors = root.classList && root.classList.contains('tag-editor') ? [root] : [];
+		editors = editors.concat(Array.prototype.slice.call(root.querySelectorAll('.tag-editor')));
+		editors.forEach(function (el) { if (el._tagEditorClose) { el._tagEditorClose(); } });
 	}
 
 	window.netisTags = {
@@ -332,4 +358,9 @@
 	}
 	document.addEventListener('htmx:afterSwap', function () { initAll(); });
 	document.addEventListener('htmx:historyRestore', function () { initAll(); });
+	// Close any editor's suggestion list before htmx removes it, so its
+	// window resize/scroll listeners (added in show(), while the list is
+	// open) get torn down instead of leaking.
+	document.addEventListener('htmx:beforeSwap', function (e) { closeEditorsIn(e.detail && e.detail.target); });
+	document.addEventListener('htmx:beforeCleanupElement', function (e) { closeEditorsIn(e.target); });
 })();

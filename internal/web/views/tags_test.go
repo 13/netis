@@ -26,6 +26,23 @@ func TestTagColor(t *testing.T) {
 	}
 }
 
+// The auto hue is FNV-1a 32-bit over the lower-cased name, mod 7, the same
+// algorithm static/tags.js runs client-side (autoColor there) and
+// e2e/tests/tags.spec.ts checks against. These pairs are pinned literals, not
+// recomputed from TagColor, so a change to the hash or to TagPalette's key
+// order fails here instead of silently drifting from the JS copy.
+func TestTagColorPinned(t *testing.T) {
+	for name, want := range map[string]string{
+		"garage": "indigo",
+		"cam":    "sky",
+		"office": "indigo",
+	} {
+		if got := TagColor(name, ""); got != want {
+			t.Errorf("TagColor(%q, \"\") = %q, want %q", name, got, want)
+		}
+	}
+}
+
 // The hash spreads names over the whole palette.
 func TestTagColorUsesEveryHue(t *testing.T) {
 	seen := map[string]bool{}

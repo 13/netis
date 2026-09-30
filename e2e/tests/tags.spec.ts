@@ -1,25 +1,22 @@
 import { test, expect } from './fixtures';
 
-// The palette keys in picker order and the auto hue, as views.TagColor
-// computes them: FNV-1a 32-bit over the lower-cased name, mod 7.
-const PALETTE = ['slate', 'indigo', 'sky', 'teal', 'violet', 'pink', 'sand'];
-function autoColor(name: string): string {
-  let h = 0x811c9dc5;
-  for (const b of new TextEncoder().encode(name.toLowerCase())) {
-    h ^= b;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return PALETTE[h % PALETTE.length];
-}
+// "garage" hashes to the "indigo" palette key under both static/tags.js's
+// autoColor and Go's views.TagColor (FNV-1a 32-bit over the lower-cased
+// name, mod 7) — pinned as a literal here and in
+// internal/web/views/tags_test.go's TestTagColorPinned, so the two staying
+// in step is actually checked rather than compared against a JS copy of the
+// Go function.
+const GARAGE_COLOR = 'tag-indigo';
 
 // The chip editor on the device form (static/tags.js). This spec saves the
 // device, so it runs in the "interaction" project against its own fixture
 // server (playwright.config.ts) and never changes what the screenshots see.
 test('tags are edited as chips with suggestions', async ({ open }) => {
   const page = await open('/devices/5/edit');
-  const editor = page.locator('.tag-editor');
   const box = page.getByRole('combobox', { name: 'Add a tag' });
-  const chips = editor.locator('.tag');
+  // Direct children only: the suggestion listbox lives inside the editor too
+  // and its options are also .tag chips.
+  const chips = page.locator('.tag-editor > .tag');
   const hidden = page.locator('#df-tags');
 
   await expect(hidden).toBeHidden();
@@ -29,7 +26,7 @@ test('tags are edited as chips with suggestions', async ({ open }) => {
   await box.fill('garage');
   await box.press('Enter');
   await expect(chips).toHaveText(['infra', 'media', 'garage']);
-  await expect(editor.locator('.tag', { hasText: 'garage' })).toHaveClass(new RegExp(`\\btag-${autoColor('garage')}\\b`));
+  await expect(page.locator('.tag-editor > .tag', { hasText: 'garage' })).toHaveClass(new RegExp(`\\b${GARAGE_COLOR}\\b`));
 
   await box.pressSequentially('cam,');
   await expect(chips).toHaveText(['infra', 'media', 'garage', 'cam']);
@@ -67,6 +64,10 @@ test('tags are edited as chips with suggestions', async ({ open }) => {
   await expect(page).toHaveURL(/\/devices\/5$/);
   const saved = page.locator('dd .tag-list .tag');
   await expect(saved).toHaveText(['garage', 'infra', 'media']);
+  // Go-rendered chip, same literal colour as the JS editor chip above: the
+  // two sides of the hash agree without comparing against a JS copy of the
+  // Go function.
+  await expect(saved.filter({ hasText: 'garage' })).toHaveClass(new RegExp(`\\b${GARAGE_COLOR}\\b`));
 });
 
 // The form in a dialog gets the editor too, and Escape with suggestions open
@@ -80,7 +81,7 @@ test('the edit dialog edits tags as chips', async ({ open }) => {
     (s.parentElement as HTMLDetailsElement).open = true;
   });
   const box = dialog.getByRole('combobox', { name: 'Add a tag' });
-  await expect(dialog.locator('.tag-editor .tag')).toHaveText(['infra']);
+  await expect(dialog.locator('.tag-editor > .tag')).toHaveText(['infra']);
   await box.pressSequentially('me');
   const list = dialog.getByRole('listbox', { name: 'Existing tags' });
   await expect(list.getByRole('option')).toHaveText(['media']);
