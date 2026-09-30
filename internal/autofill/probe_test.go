@@ -164,6 +164,10 @@ func TestProbeOffDoesNothing(t *testing.T) {
 		svc.Probe(subs[0])
 		<-passes
 		time.Sleep(100 * time.Millisecond)
+		// The worker must have taken the request, or this proves nothing.
+		if len(svc.probeCh) != 0 {
+			t.Fatal("probe request still queued")
+		}
 		if n := calls.Load(); n != 0 {
 			t.Fatalf("prober calls = %d, want 0", n)
 		}

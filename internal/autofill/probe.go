@@ -79,6 +79,9 @@ func (s *Service) probeLoop(ctx context.Context) {
 			return
 		case sn = <-s.probeCh:
 		}
+		if ctx.Err() != nil {
+			return
+		}
 		if !Enabled(ctx, s.st) {
 			continue
 		}
