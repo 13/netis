@@ -783,7 +783,7 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<div class=\"panel\"><div class=\"sg-row\"><span class=\"chip\">homelab</span> <span class=\"chip\">server</span> <span class=\"chip static\">Static</span> <span class=\"chip dhcp\">DHCP</span> <span class=\"chip\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<div class=\"panel\"><div class=\"sg-row\"><span class=\"chip\">Printer</span> <span class=\"chip\">Switch</span> <span class=\"chip static\">Static</span> <span class=\"chip dhcp\">DHCP</span> <span class=\"chip\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

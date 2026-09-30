@@ -138,9 +138,11 @@ func (s *Server) handleDeviceList(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Rows = rows
 
-	// The filter bar asks htmx for the results alone.
+	// The filter bar asks htmx for the results alone; it also carries the
+	// active-tag chip and clear link as an out-of-band swap, since only
+	// #dev-results itself gets replaced.
 	if isHTMX(r) && r.Header.Get("HX-Target") == "dev-results" {
-		s.render(w, r, views.DeviceResults(p))
+		s.render(w, r, views.DeviceResultsHTMX(p))
 		return
 	}
 	u, _ := userFrom(r)
