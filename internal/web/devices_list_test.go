@@ -179,6 +179,25 @@ func TestDeviceListColumnDefaults(t *testing.T) {
 	}
 }
 
+// Tags are on by default: the page carries the show-tags class and a
+// checked Tags box before any script runs, and the script keeps that default
+// until someone picks columns.
+func TestDeviceListShowsTagsByDefault(t *testing.T) {
+	srv, st := testServer(t)
+	seedDeviceList(t, st)
+	body := authedGet(t, srv, st, "/devices").Body.String()
+	if !strings.Contains(body, `id="devices" class="devices show-tags"`) {
+		t.Error("devices page lacks the default show-tags class")
+	}
+	if !strings.Contains(body, `data-col="tags" checked`) {
+		t.Error("column picker does not check Tags by default")
+	}
+	js := authedGet(t, srv, st, "/static/devices.js").Body.String()
+	if !strings.Contains(js, "DEFAULT_COLS = ['tags']") {
+		t.Error("devices.js lacks the default columns")
+	}
+}
+
 // Tags show as coloured chips that link to the filtered list, and a tag
 // filter in effect shows as a chip with a clear link next to the select
 // that keeps the list's other query parameters.
