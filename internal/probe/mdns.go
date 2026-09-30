@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -148,9 +149,34 @@ type browse struct {
 	instances map[instKey]instance
 	txt       map[instKey][]string
 	asked     map[string]bool // lower-cased full names already sent a TXT question
+	// srv maps an instance, as announced by one source, to the lower-cased
+	// host its SRV record names; addrs maps a host, as one source announced
+	// it, to its IPv4 addresses. Both are keyed by the answering address.
+	srv   map[instKey]string
+	addrs map[instKey][]string
 }
 
-// handle records the PTR and TXT records in msg from ip and returns the full
+// relayed reports whether the source that announced k also said the
+// instance lives on a host with addresses, none of them the source's own: a
+// Bonjour Sleep Proxy or an mDNS reflector answering for another host.
+func (br *browse) relayed(k instKey) bool {
+	host, ok := br.srv[k]
+	if !ok {
+		return false
+	}
+	ips, ok := br.addrs[instKey{k.ip, host}]
+	if !ok {
+		return false
+	}
+	for _, ip := range ips {
+		if ip == k.ip {
+			return false
+		}
+	}
+	return true
+}
+
+// handle records the PTR, TXT, SRV and A records in msg from ip and returns the full
 // names of new instances still lacking a TXT record.
 func (br *browse) handle(ip string, msg []byte) []string {
 	var p dnsmessage.Parser
@@ -193,6 +219,14 @@ func (br *browse) handle(ip string, msg []byte) []string {
 			}
 		case *dnsmessage.TXTResource:
 			br.txt[instKey{ip, strings.ToLower(name)}] = body.TXT
+		case *dnsmessage.SRVResource:
+			br.srv[instKey{ip, strings.ToLower(name)}] = strings.ToLower(body.Target.String())
+		case *dnsmessage.AResource:
+			k := instKey{ip, strings.ToLower(name)}
+			a := netip.AddrFrom4(body.A).String()
+			if !slices.Contains(br.addrs[k], a) {
+				br.addrs[k] = append(br.addrs[k], a)
+			}
 		}
 	}
 	var ask []string
@@ -206,10 +240,16 @@ func (br *browse) handle(ip string, msg []byte) []string {
 	return ask
 }
 
-// services returns one MDNSService per instance, sorted by IP, type, instance.
+// services returns one MDNSService per instance, sorted by IP, type,
+// instance. Instances a source announced for another host are left out:
+// they cannot be credited to the source, and the real host answers for
+// itself when awake.
 func (br *browse) services() []MDNSService {
 	out := make([]MDNSService, 0, len(br.instances))
 	for k, in := range br.instances {
+		if br.relayed(k) {
+			continue
+		}
 		label := in.fullName[:len(in.fullName)-len("."+in.typ+".local.")]
 		out = append(out, MDNSService{IP: k.ip, Type: in.typ, Instance: label, TXT: parseTXT(br.txt[k])})
 	}
@@ -279,6 +319,8 @@ func browseMDNS(ctx context.Context, ifi *net.Interface, addr string, types []st
 		instances: map[instKey]instance{},
 		txt:       map[instKey][]string{},
 		asked:     map[string]bool{},
+		srv:       map[instKey]string{},
+		addrs:     map[instKey][]string{},
 	}
 	for _, t := range types {
 		br.types[strings.ToLower(t+".local.")] = t

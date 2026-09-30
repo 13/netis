@@ -62,7 +62,9 @@ what devices announce about themselves on the local network: mDNS (Bonjour)
 names Chromecasts, AirPlay speakers, printers, HomeKit and ESPHome devices,
 and UPnP names TVs, speakers and routers. It asks after a sweep, at most every
 15 minutes per subnet. In Docker this needs host networking, which netis
-already requires (see [Docker](install.md#docker)).
+already requires (see [Docker](install.md#docker)). Devices answer these
+questions straight back to a random port on the netis host, so a stateful
+host firewall there (ufw, firewalld) can drop the answers.
 
 It only fills a field that is empty (kind counts as empty while it is Other),
 and it never changes a value you set: once you edit or clear a value netis

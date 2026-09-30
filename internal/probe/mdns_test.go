@@ -19,16 +19,25 @@ type responder struct {
 	ptr       map[string]string   // "<type>.local." -> instance full name
 	txt       map[string][]string // instance full name -> TXT strings
 	inlineTXT bool
+	hosts     map[string]hostRec // instance full name -> SRV target and its A record
 	txtAsked  chan string
 }
 
+// hostRec is the SRV target and IPv4 address sent as additionals with an
+// instance's PTR answer.
+type hostRec struct{ target, ip string }
+
 func newResponder(t *testing.T, inline bool, ptr map[string]string, txt map[string][]string) *responder {
+	return newResponderHosts(t, inline, ptr, txt, nil)
+}
+
+func newResponderHosts(t *testing.T, inline bool, ptr map[string]string, txt map[string][]string, hosts map[string]hostRec) *responder {
 	t.Helper()
 	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &responder{conn: c, ptr: ptr, txt: txt, inlineTXT: inline, txtAsked: make(chan string, 8)}
+	r := &responder{conn: c, ptr: ptr, txt: txt, inlineTXT: inline, hosts: hosts, txtAsked: make(chan string, 8)}
 	t.Cleanup(func() { c.Close() })
 	go r.serve()
 	return r
@@ -50,7 +59,7 @@ func (r *responder) serve() {
 		qs, _ := p.AllQuestions()
 		b := dnsmessage.NewBuilder(nil, dnsmessage.Header{Response: true, Authoritative: true})
 		b.StartAnswers()
-		var extra []string
+		var extra, hostsFor []string
 		for _, q := range qs {
 			name := q.Name.String()
 			switch q.Type {
@@ -60,6 +69,9 @@ func (r *responder) serve() {
 						dnsmessage.PTRResource{PTR: dnsmessage.MustNewName(inst)})
 					if r.inlineTXT {
 						extra = append(extra, inst)
+					}
+					if _, ok := r.hosts[inst]; ok {
+						hostsFor = append(hostsFor, inst)
 					}
 				}
 			case dnsmessage.TypeTXT:
@@ -74,6 +86,14 @@ func (r *responder) serve() {
 		for _, inst := range extra {
 			b.TXTResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName(inst), Class: dnsmessage.ClassINET, TTL: 120},
 				dnsmessage.TXTResource{TXT: r.txt[inst]})
+		}
+		for _, inst := range hostsFor {
+			h := r.hosts[inst]
+			target := dnsmessage.MustNewName(h.target)
+			b.SRVResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName(inst), Class: dnsmessage.ClassINET, TTL: 120},
+				dnsmessage.SRVResource{Port: 8009, Target: target})
+			b.AResource(dnsmessage.ResourceHeader{Name: target, Class: dnsmessage.ClassINET, TTL: 120},
+				dnsmessage.AResource{A: [4]byte(net.ParseIP(h.ip).To4())})
 		}
 		msg, err := b.Finish()
 		if err == nil {
@@ -121,6 +141,40 @@ func TestBrowseMDNSFollowsUpForTXT(t *testing.T) {
 		}
 	default:
 		t.Fatal("no follow-up TXT question")
+	}
+}
+
+// TestBrowseMDNSRelayedAnswers checks that an instance whose SRV host has
+// addresses other than the answering one (a Bonjour Sleep Proxy or a
+// reflector answering for another host) is dropped, while one without
+// SRV/A records is credited to the source as before.
+func TestBrowseMDNSRelayedAnswers(t *testing.T) {
+	const inst = "Office._googlecast._tcp.local."
+	ptr := map[string]string{"_googlecast._tcp.local.": inst}
+	txt := map[string][]string{inst: {"md=Chromecast"}}
+	cases := []struct {
+		name  string
+		hosts map[string]hostRec
+		want  int
+	}{
+		{"SRV host is the source", map[string]hostRec{inst: {"office.local.", "127.0.0.1"}}, 1},
+		{"SRV host is another address", map[string]hostRec{inst: {"office.local.", "10.9.9.9"}}, 0},
+		{"no SRV or A", nil, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := newResponderHosts(t, true, ptr, txt, c.hosts)
+			got, err := browseMDNS(context.Background(), nil, r.addr(), []string{"_googlecast._tcp"}, 300*time.Millisecond)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != c.want {
+				t.Fatalf("services = %+v, want %d", got, c.want)
+			}
+			if c.want == 1 && (got[0].IP != "127.0.0.1" || got[0].TXT["md"] != "Chromecast") {
+				t.Fatalf("service = %+v", got[0])
+			}
+		})
 	}
 }
 
