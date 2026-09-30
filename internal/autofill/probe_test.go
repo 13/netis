@@ -3,6 +3,7 @@ package autofill
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -173,5 +174,55 @@ func TestProbeOffDoesNothing(t *testing.T) {
 		}
 		cancel()
 		<-done
+	})
+}
+
+// TestProbeLoopSkipsIPv6 checks that only IPv4 subnets are probed: the mDNS
+// and SSDP probes speak IPv4 only.
+func TestProbeLoopSkipsIPv6(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		discovered(t, st, "dev5", "02:00:00:00:00:05", "", "10.0.0.5")
+		subs, _ := st.ListSubnets(ctx)
+		v6ID, err := st.CreateSubnet(ctx, store.Subnet{CIDR: "fd00::/112", Kind: "lan"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v6, _ := st.GetSubnet(ctx, v6ID)
+
+		var mu sync.Mutex
+		var probed []string
+		svc := New(st)
+		svc.probers = map[string]SubnetProber{"mdns": func(_ context.Context, ifi *net.Interface) (map[string][]store.Hint, error) {
+			mu.Lock()
+			probed = append(probed, ifi.Name)
+			mu.Unlock()
+			return nil, nil
+		}}
+		svc.iface = func(cidr string) *net.Interface { return &net.Interface{Name: cidr} }
+		done := make(chan struct{})
+		go func() { svc.Start(ctx); close(done) }()
+		// Requests are handled in order: once the IPv4 one is probed, the
+		// IPv6 one has been handled.
+		svc.Probe(v6)
+		svc.Probe(subs[0])
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			mu.Lock()
+			n := len(probed)
+			mu.Unlock()
+			if n > 0 {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		cancel()
+		<-done
+		mu.Lock()
+		defer mu.Unlock()
+		if len(probed) != 1 || probed[0] != subs[0].CIDR {
+			t.Fatalf("probed = %v, want only %s", probed, subs[0].CIDR)
+		}
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -68,7 +69,7 @@ func (s *Service) Probe(sn store.Subnet) {
 	}
 }
 
-// probeLoop probes the subnets Probe asks for, until ctx is done. Only
+// probeLoop probes the subnets Probe asks for, until ctx is done. Only IPv4
 // subnets a local interface is attached to are probed, each at most once
 // per probeEvery.
 func (s *Service) probeLoop(ctx context.Context) {
@@ -86,6 +87,10 @@ func (s *Service) probeLoop(ctx context.Context) {
 			continue
 		}
 		if last, ok := s.probedAt[sn.ID]; ok && s.now().Sub(last) < s.probeEvery {
+			continue
+		}
+		// The probes speak IPv4 only.
+		if p, err := netip.ParsePrefix(sn.CIDR); err != nil || !p.Addr().Is4() {
 			continue
 		}
 		ifi := s.iface(sn.CIDR)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"netis/internal/oui"
 	"netis/internal/probe"
@@ -101,11 +102,27 @@ func firstNonEmpty(vals ...string) string {
 }
 
 // hapIcons maps HomeKit's "ci" (category identifier) TXT value to an icon.
+// 32 (Target Controller, a remote) is left out: it is not a TV.
 var hapIcons = map[string]string{
 	"5": "lightbulb", "7": "plug", "8": "plug",
 	"9": "thermometer", "10": "thermometer",
-	"17": "cctv", "26": "speaker", "31": "tv", "32": "tv",
+	"17": "cctv", "18": "cctv", // IP camera, video doorbell
+	"24": "tv", "31": "tv", "35": "tv", "36": "tv", // Apple TV, television, set-top box, streaming stick
+	"25": "speaker", "26": "speaker", "34": "speaker", // HomePod, speaker, audio receiver
 }
+
+// hapBridge is HomeKit's category for a bridge. Bridges such as Home
+// Assistant's HomeKit Bridge and Homebridge run on servers, so they say
+// nothing about the host but that it does smart-home work.
+const hapBridge = "2"
+
+// castSpeaker matches the Google Cast model names of speakers and speaker
+// groups, as opposed to TVs and streamers.
+var castSpeaker = regexp.MustCompile(`(?i)nest (mini|audio)|google home|home mini|audio|speaker|group`)
+
+// mediaSoftware matches the UPnP model names of media software running on a
+// general-purpose machine, which say nothing about the machine itself.
+var mediaSoftware = regexp.MustCompile(`(?i)windows media player|windows media|plex|kodi|minidlna|readydlna|jellyfin|emby|serviio|universal media server`)
 
 // workstationMAC matches the " [xx:xx:xx:xx:xx:xx]" suffix _workstation._tcp
 // instances carry.
@@ -119,7 +136,11 @@ func hGooglecast(s probe.MDNSService) []store.Hint {
 	if name := firstNonEmpty(s.TXT["fn"], s.Instance); name != "" {
 		hs = append(hs, hint(FieldName, name, 70))
 	}
-	hs = append(hs, hint(FieldIcon, "tv", 60), hint(FieldTag, "media", 60))
+	icon := "tv"
+	if castSpeaker.MatchString(s.TXT["md"]) {
+		icon = "speaker"
+	}
+	hs = append(hs, hint(FieldIcon, icon, 60), hint(FieldTag, "media", 60))
 	return hs
 }
 
@@ -207,6 +228,9 @@ func hPrinter(s probe.MDNSService) []store.Hint {
 }
 
 func hHap(s probe.MDNSService) []store.Hint {
+	if s.TXT["ci"] == hapBridge {
+		return []store.Hint{hint(FieldTag, "smart-home", 60)}
+	}
 	hs := []store.Hint{hint(FieldKind, "iot", 70), hint(FieldTag, "smart-home", 60)}
 	if md := s.TXT["md"]; md != "" {
 		hs = append(hs, hint(FieldModel, md, 70))
@@ -296,6 +320,41 @@ var mdnsHandlers = map[string]func(probe.MDNSService) []store.Hint{
 	"_workstation._tcp":     hWorkstation,
 }
 
+// maxAnnounced caps a hint value taken from what a device announced, in runes.
+const maxAnnounced = 128
+
+// cleanAnnounced tidies a string a device announced: control characters
+// dropped, whitespace runs collapsed to one space, trimmed, and capped at
+// maxAnnounced runes.
+func cleanAnnounced(v string) string {
+	v = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && !unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, v)
+	v = strings.Join(strings.Fields(v), " ")
+	if r := []rune(v); len(r) > maxAnnounced {
+		v = strings.TrimSpace(string(r[:maxAnnounced]))
+	}
+	return v
+}
+
+// finish cleans every hint value with cleanAnnounced, drops the hints left
+// empty, and tags the rest with detail.
+func finish(hs []store.Hint, detail string) []store.Hint {
+	out := hs[:0]
+	for _, h := range hs {
+		h.Value = cleanAnnounced(h.Value)
+		if h.Value == "" {
+			continue
+		}
+		h.Detail = detail
+		out = append(out, h)
+	}
+	return out
+}
+
 // mdnsHints turns every service of one address into hints, each tagged with
 // evidence naming its type and instance.
 func mdnsHints(svcs []probe.MDNSService) []store.Hint {
@@ -305,12 +364,7 @@ func mdnsHints(svcs []probe.MDNSService) []store.Hint {
 		if !ok {
 			continue
 		}
-		hs := fn(s)
-		detail := fmt.Sprintf("mDNS %s %q", s.Type, s.Instance)
-		for i := range hs {
-			hs[i].Detail = detail
-		}
-		out = append(out, hs...)
+		out = append(out, finish(fn(s), fmt.Sprintf("mDNS %s %q", s.Type, s.Instance))...)
 	}
 	return dedupe(out)
 }
@@ -331,15 +385,29 @@ func deviceTypeShort(t string) string {
 	return rest
 }
 
-// deviceHints turns one UPnP device description into hints.
+// isMediaSoftware reports whether d is a media renderer or server that is
+// software on a general-purpose machine (Windows Media Player, Plex, Kodi
+// and the like) rather than a media device.
+func isMediaSoftware(d probe.UPnPDevice) bool {
+	switch deviceTypeShort(d.DeviceType) {
+	case "MediaRenderer", "MediaServer":
+	default:
+		return false
+	}
+	return strings.EqualFold(oui.Normalize(d.Manufacturer), "Microsoft") || mediaSoftware.MatchString(d.ModelName)
+}
+
+// deviceHints turns one UPnP device description into hints. Media software
+// gives no vendor or model: those would describe the software, not the host.
 func deviceHints(d probe.UPnPDevice) []store.Hint {
 	var hs []store.Hint
-	if d.Manufacturer != "" {
+	software := isMediaSoftware(d)
+	if d.Manufacturer != "" && !software {
 		if v := oui.Normalize(d.Manufacturer); v != "" {
 			hs = append(hs, hint(FieldVendor, v, 80))
 		}
 	}
-	if d.ModelName != "" {
+	if d.ModelName != "" && !software {
 		model := d.ModelName
 		if d.ModelNumber != "" && !strings.Contains(model, d.ModelNumber) {
 			model += " " + d.ModelNumber
@@ -355,7 +423,8 @@ func deviceHints(d probe.UPnPDevice) []store.Hint {
 	case "WLANAccessPointDevice":
 		hs = append(hs, hint(FieldKind, "router", 60))
 	case "MediaRenderer":
-		hs = append(hs, hint(FieldIcon, "tv", 60), hint(FieldTag, "media", 60))
+		// Only a suggestion: PCs and phones render media too.
+		hs = append(hs, hint(FieldIcon, "tv", 40), hint(FieldTag, "media", 60))
 	case "MediaServer":
 		hs = append(hs, hint(FieldTag, "media", 50))
 	case "Printer":
@@ -376,12 +445,8 @@ func deviceHints(d probe.UPnPDevice) []store.Hint {
 func ssdpHints(devs []probe.UPnPDevice) []store.Hint {
 	var out []store.Hint
 	for _, d := range devs {
-		hs := deviceHints(d)
 		detail := fmt.Sprintf("UPnP %s %q", deviceTypeShort(d.DeviceType), strings.TrimSpace(d.FriendlyName))
-		for i := range hs {
-			hs[i].Detail = detail
-		}
-		out = append(out, hs...)
+		out = append(out, finish(deviceHints(d), detail)...)
 	}
 	return dedupe(out)
 }

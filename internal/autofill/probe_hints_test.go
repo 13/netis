@@ -1,6 +1,7 @@
 package autofill
 
 import (
+	"strings"
 	"testing"
 
 	"netis/internal/probe"
@@ -145,15 +146,15 @@ func TestMDNSHints(t *testing.T) {
 		{
 			name: "hap ci=5 lightbulb",
 			svc: probe.MDNSService{
-				Type: "_hap._tcp", Instance: "Front Door Lock",
-				TXT: map[string]string{"md": "Lock", "ci": "5"},
+				Type: "_hap._tcp", Instance: "Hallway Bulb",
+				TXT: map[string]string{"md": "LIFX A19", "ci": "5"},
 			},
 			wants: []want{
 				{"kind", "iot", 70},
-				{"model", "Lock", 70},
+				{"model", "LIFX A19", 70},
 				{"icon", "lightbulb", 70},
 				{"tag", "smart-home", 60},
-				{"name", "Front Door Lock", 60},
+				{"name", "Hallway Bulb", 60},
 			},
 		},
 		{
@@ -266,7 +267,7 @@ func TestSSDPHints(t *testing.T) {
 				{"vendor", "Sonos", 80},
 				{"model", "Sonos One S18", 80},
 				{"name", "Kitchen", 70},
-				{"icon", "tv", 60},
+				{"icon", "tv", 40},
 				{"tag", "media", 60},
 			},
 		},
@@ -385,5 +386,148 @@ func TestAppleModel(t *testing.T) {
 		if got := appleModel(in); got != want {
 			t.Errorf("appleModel(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestHAPCategoryIcons(t *testing.T) {
+	cases := map[string]string{
+		"5": "lightbulb", "7": "plug", "8": "plug",
+		"9": "thermometer", "10": "thermometer",
+		"17": "cctv", "18": "cctv",
+		"24": "tv", "31": "tv", "35": "tv", "36": "tv",
+		"25": "speaker", "26": "speaker", "34": "speaker",
+		"32": "", // Target Controller: a remote, not a TV
+		"99": "",
+	}
+	for ci, icon := range cases {
+		t.Run("ci="+ci, func(t *testing.T) {
+			hs := mdnsHints([]probe.MDNSService{{
+				Type: "_hap._tcp", Instance: "Accessory",
+				TXT: map[string]string{"ci": ci},
+			}})
+			var got []string
+			for _, h := range hs {
+				if h.Field == "icon" {
+					got = append(got, h.Value)
+				}
+			}
+			switch {
+			case icon == "" && len(got) != 0:
+				t.Errorf("icons = %v, want none", got)
+			case icon != "" && !has(hs, "icon", icon, 70):
+				t.Errorf("icons = %v, want %q", got, icon)
+			}
+		})
+	}
+}
+
+// TestHAPBridgeOnlyTags checks that a HomeKit bridge (ci=2), which runs on a
+// server such as Home Assistant or Homebridge, says nothing about the host
+// but that it does smart-home work.
+func TestHAPBridgeOnlyTags(t *testing.T) {
+	hs := mdnsHints([]probe.MDNSService{{
+		Type: "_hap._tcp", Instance: "HASS Bridge AB12",
+		TXT: map[string]string{"md": "HASS Bridge", "ci": "2"},
+	}})
+	if len(hs) != 1 || !has(hs, "tag", "smart-home", 60) {
+		t.Fatalf("hints = %+v, want only the smart-home tag", hs)
+	}
+}
+
+func TestGooglecastIcon(t *testing.T) {
+	cases := map[string]string{
+		"Chromecast":          "tv",
+		"Google TV Streamer":  "tv",
+		"Nest Mini":           "speaker",
+		"Nest Audio":          "speaker",
+		"Google Home":         "speaker",
+		"Google Home Mini":    "speaker",
+		"Chromecast Audio":    "speaker",
+		"JBL Link 20 speaker": "speaker",
+		"Google Cast Group":   "speaker",
+	}
+	for md, icon := range cases {
+		t.Run(md, func(t *testing.T) {
+			hs := mdnsHints([]probe.MDNSService{{
+				Type: "_googlecast._tcp", Instance: "x",
+				TXT: map[string]string{"md": md},
+			}})
+			if !has(hs, "icon", icon, 60) {
+				t.Errorf("hints = %+v, want icon %q", hs, icon)
+			}
+			for _, h := range hs {
+				if h.Field == "icon" && h.Value != icon {
+					t.Errorf("extra icon %+v", h)
+				}
+			}
+		})
+	}
+}
+
+// TestSSDPMediaSoftware checks that media software running on a
+// general-purpose machine does not name the machine's vendor or model.
+func TestSSDPMediaSoftware(t *testing.T) {
+	cases := []probe.UPnPDevice{
+		{DeviceType: "urn:schemas-upnp-org:device:MediaRenderer:1", Manufacturer: "Microsoft Corporation",
+			ModelName: "Windows Media Player", ModelNumber: "12", FriendlyName: "DESKTOP-1"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Microsoft Corporation",
+			ModelName: "Windows Media Player Sharing", FriendlyName: "DESKTOP-1"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Plex, Inc.",
+			ModelName: "Plex Media Server", FriendlyName: "nas"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaRenderer:1", Manufacturer: "XBMC Foundation",
+			ModelName: "Kodi", FriendlyName: "htpc"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Justin Maggard",
+			ModelName: "MiniDLNA", FriendlyName: "nas"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Jellyfin",
+			ModelName: "jellyfin", FriendlyName: "media"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Petr Nejedly",
+			ModelName: "Serviio UPnP/AV Server", FriendlyName: "media"},
+		{DeviceType: "urn:schemas-upnp-org:device:MediaServer:1", Manufacturer: "Universal Media Server",
+			ModelName: "Universal Media Server", FriendlyName: "media"},
+	}
+	for _, d := range cases {
+		t.Run(d.ModelName, func(t *testing.T) {
+			hs := ssdpHints([]probe.UPnPDevice{d})
+			for _, h := range hs {
+				if h.Field == "model" || h.Field == "vendor" {
+					t.Errorf("unexpected %+v", h)
+				}
+			}
+			if !has(hs, "name", d.FriendlyName, 70) {
+				t.Errorf("hints = %+v, want the name kept", hs)
+			}
+		})
+	}
+	// A real renderer keeps its vendor and model.
+	hs := ssdpHints([]probe.UPnPDevice{{DeviceType: "urn:schemas-upnp-org:device:MediaRenderer:1",
+		Manufacturer: "Samsung Electronics", ModelName: "UE55TU7000", FriendlyName: "TV"}})
+	if !has(hs, "model", "UE55TU7000", 80) || !has(hs, "vendor", "Samsung", 80) {
+		t.Errorf("hints = %+v", hs)
+	}
+}
+
+func TestProbeHintValuesCleaned(t *testing.T) {
+	long := strings.Repeat("é", 200)
+	hs := mdnsHints([]probe.MDNSService{{
+		Type: "_googlecast._tcp", Instance: "x",
+		TXT: map[string]string{"md": "Chrome\ncast\t  Ultra\x00 ", "fn": long},
+	}})
+	if !has(hs, "model", "Chrome cast Ultra", 80) {
+		t.Errorf("hints = %+v, want cleaned model", hs)
+	}
+	if !has(hs, "name", strings.Repeat("é", 128), 70) {
+		t.Errorf("hints = %+v, want name capped at 128 runes", hs)
+	}
+	hs = ssdpHints([]probe.UPnPDevice{{
+		DeviceType:   "urn:schemas-upnp-org:device:Basic:1",
+		Manufacturer: "Acme", ModelName: "\r\n\t", FriendlyName: "Front\r\nDoor",
+	}})
+	for _, h := range hs {
+		if h.Field == "model" {
+			t.Errorf("empty model kept: %+v", h)
+		}
+	}
+	if !has(hs, "name", "Front Door", 70) {
+		t.Errorf("hints = %+v, want cleaned name", hs)
 	}
 }
