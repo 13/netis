@@ -113,11 +113,12 @@ func (s *Store) SetDeviceTags(ctx context.Context, deviceID int64, names []strin
 	})
 }
 
-// defaultTagColor is what an auto-created tag gets until someone picks one.
-const defaultTagColor = "#888888"
+// defaultTagColor is what an auto-created tag gets until someone picks one:
+// the empty string means auto, drawn in the palette hue its name hashes to (views.TagColor).
+const defaultTagColor = ""
 
 // findOrCreateTagOn returns the id of the tag with the given name, creating it
-// with a neutral color if it does not exist yet.
+// with the auto colour if it does not exist yet.
 //
 // It looks the name up directly rather than scanning the whole tag table, which
 // is what SetDeviceTags used to do once per name. The insert tolerates a

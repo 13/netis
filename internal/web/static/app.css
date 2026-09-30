@@ -46,6 +46,21 @@
     --activity-soft:light-dark(#FAF0DC, #372E17);
     --fault:light-dark(#C62F37, #FF6B6B);
     --fault-soft:light-dark(#FBE6E7, #3C2325);
+    /* Tag palette: text on its soft tint. No status hue, not the accent. */
+    --tag-slate:light-dark(#4A5563, #B8C1CC);
+    --tag-slate-soft:light-dark(#EDF0F3, #2A3139);
+    --tag-indigo:light-dark(#4338CA, #A9B4FB);
+    --tag-indigo-soft:light-dark(#EDEEFC, #272B4C);
+    --tag-sky:light-dark(#0B6A9E, #7CCDF5);
+    --tag-sky-soft:light-dark(#E2F1FA, #16303F);
+    --tag-teal:light-dark(#0F7066, #62E0CC);
+    --tag-teal-soft:light-dark(#E1F4F1, #15332F);
+    --tag-violet:light-dark(#6B2FD0, #C3B3FB);
+    --tag-violet-soft:light-dark(#F0EAFD, #2E2647);
+    --tag-pink:light-dark(#B3175A, #F5A6CD);
+    --tag-pink-soft:light-dark(#FCE7F0, #3C2231);
+    --tag-sand:light-dark(#85562A, #DDB78A);
+    --tag-sand-soft:light-dark(#F5EDE3, #352B20);
     --scrim:light-dark(rgb(22 26 24 / .45), rgb(0 0 0 / .6));
     --overlay-shadow:0 12px 32px light-dark(rgb(22 26 24 / .18), rgb(0 0 0 / .5)), 0 2px 6px light-dark(rgb(22 26 24 / .08), rgb(0 0 0 / .3));
 
@@ -164,6 +179,25 @@
   .chip.dhcp { border-style:dashed; border-color:var(--border-strong); }
   button.chip { cursor:pointer; height:24px; padding:0 var(--sp-2); }
   button.chip:hover { border-color:var(--accent); color:var(--fg); }
+
+  /* ---- tag: a user label in its palette colour (views.TagChip). A tag-<key>
+     class picks the hue; the name is cut with an ellipsis, in full in title. ---- */
+  /* inline-block, not flex: text-overflow only cuts a block's own text. */
+  .tag { --tag:var(--tag-slate); --tag-soft:var(--tag-slate-soft);
+         display:inline-block; height:22px; padding:0 10px; max-width:16rem;
+         border:1px solid color-mix(in srgb, var(--tag) 22%, transparent); border-radius:var(--r-round);
+         background:var(--tag-soft); color:var(--tag); font-family:var(--font-sans); font-size:var(--text-xs);
+         font-weight:var(--w-medium); line-height:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+         vertical-align:middle; text-decoration:none; }
+  a.tag:hover, a.tag:focus-visible { border-color:color-mix(in srgb, var(--tag) 60%, transparent); text-decoration:none; }
+  .tag-slate { --tag:var(--tag-slate); --tag-soft:var(--tag-slate-soft); }
+  .tag-indigo { --tag:var(--tag-indigo); --tag-soft:var(--tag-indigo-soft); }
+  .tag-sky { --tag:var(--tag-sky); --tag-soft:var(--tag-sky-soft); }
+  .tag-teal { --tag:var(--tag-teal); --tag-soft:var(--tag-teal-soft); }
+  .tag-violet { --tag:var(--tag-violet); --tag-soft:var(--tag-violet-soft); }
+  .tag-pink { --tag:var(--tag-pink); --tag-soft:var(--tag-pink-soft); }
+  .tag-sand { --tag:var(--tag-sand); --tag-soft:var(--tag-sand-soft); }
+  .tag-list { display:flex; flex-wrap:wrap; gap:var(--sp-1); }
 
   /* ---- status: an LED dot plus words. The only place status colour appears.
      A tone class on the element (or an ancestor) picks the colour. ---- */

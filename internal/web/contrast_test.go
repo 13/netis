@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"testing"
+
+	"netis/internal/web/views"
 )
 
 // cssTokens returns the light and dark hex value of each colour token in
@@ -69,6 +71,12 @@ func TestTokenContrast(t *testing.T) {
 		pair{"accent", "accent-soft", 4.5}, // selected icon swatch
 		pair{"fault", "fault-soft", 4.5},   // danger button hover
 	)
+	for _, k := range views.TagPalette { // tag chips: text on their tint and on a panel
+		pairs = append(pairs,
+			pair{"tag-" + k, "tag-" + k + "-soft", 4.5},
+			pair{"tag-" + k, "surface", 4.5},
+		)
+	}
 	for theme, tok := range map[string]map[string]string{"light": light, "dark": dark} {
 		for _, p := range pairs {
 			fg, ok1 := tok[p.fg]

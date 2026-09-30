@@ -170,6 +170,20 @@ templ StyleguidePage(username string, colors []ColorToken) {
 				</div>
 			</div>
 		}
+		@sgSection("Tags") {
+			<div class="panel">
+				<div class="tag-list sg-row">
+					for _, k := range TagPalette {
+						@TagSpan(k, k)
+					}
+				</div>
+				<div class="tag-list sg-row">
+					@TagSpan("homelab", "")
+					<span class="muted">Auto: a tag with no colour picked gets the hue its name hashes to.</span>
+				</div>
+				<p class="hint">Tags are the owner's labels. In lists and on the device page each one links to the devices that carry it.</p>
+			</div>
+		}
 		@sgSection("Chips, status and counts") {
 			<div class="panel">
 				<div class="sg-row">
