@@ -8,6 +8,7 @@ A tour of the pages, the navigation and keyboard shortcuts, and the theme.
 - [Subnet grid](#subnet-grid)
 - [Device list](#device-list)
 - [Device page](#device-page)
+- [Tags](#tags)
 - [Events](#events)
 - [Settings](#settings)
 - [Navigation and shortcuts](#navigation-and-shortcuts)
@@ -68,6 +69,29 @@ Offline alerts are turned on per device with **More › Turn on offline alerts**
 
 ![A device page](images/device.png)
 
+## Tags
+
+Tags show as small coloured chips (device list, device page and the "What
+netis detected" panel), each in one of seven hues that stay readable in both
+themes. A tag's colour is either one you picked or, left on auto, a hue
+chosen from its name, so it stays the same chip colour every time. Clicking a
+tag filters the device list to it; the filter bar then shows that tag with a
+button to clear it.
+
+Editing a device's tags is a field of chips with a remove button on each one.
+Type a name and press Enter, comma or Tab to add it; Backspace in an empty
+box removes the last chip; pasting a comma list adds every name in it. A
+suggestion list under the box narrows to existing tags as you type, with
+arrow keys to move, Enter to pick and Escape to close it. Without JavaScript
+the field falls back to a plain comma-separated text box.
+
+Admins manage tags from **Settings › Tags**: a row per tag with its device
+count (a link to the filtered list), a colour picker, rename and delete.
+Renaming a tag to a name another tag already has merges them — every device
+of the renamed tag joins the existing one, which keeps its own colour — and
+the form asks you to confirm before it happens. Deleting a tag asks for
+confirmation too, then removes it from every device that had it.
+
 ## Events
 
 The full event log grouped by day, filterable by what happened, device name and
@@ -91,6 +115,8 @@ tokens** (admins see and can revoke everyone's).
 - **Integrations** — one panel per integration with its status, last run, item
   count, Run now and its settings behind Configure;
 - **Notifications**;
+- **Tags** — colour, rename (renaming to an existing name merges the two,
+  with confirmation) and delete;
 - **Users** (add, delete, change role, reset a password);
 - **Audit log**;
 - **System** — retention, backup status and the running version, build number,
