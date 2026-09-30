@@ -74,9 +74,12 @@
   .devtable .col-tags { max-width:220px; }
   .devtable .col-seen, .devtable .col-status, .devtable td.col-kind { white-space:nowrap; }
   .devtable td.col-tags { line-height:1.9; }
-  /* With the optional columns on, the busiest cells give up room first. */
-  :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable :is(th, td) { padding-left:var(--sp-2); padding-right:var(--sp-2); }
-  :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable .dev { min-width:150px; gap:var(--sp-2); }
+  /* With the optional columns on, the busiest cells give up room first.
+     Desktop only: phones stack the rows and never show optional cells. */
+  @media (min-width:641px) {
+    :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable :is(th, td) { padding-left:var(--sp-2); padding-right:var(--sp-2); }
+    :is(.show-mac, .show-lease, .show-func, .show-tags) .devtable .dev { min-width:150px; gap:var(--sp-2); }
+  }
   .devtable .col-act { width:1%; white-space:nowrap; text-align:right; }
   .devtable .col-act form { margin:0; }
   .devtable .dev { gap:var(--sp-3); min-width:200px; }
