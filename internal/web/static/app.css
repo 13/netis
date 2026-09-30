@@ -198,6 +198,20 @@
   .tag-pink { --tag:var(--tag-pink); --tag-soft:var(--tag-pink-soft); }
   .tag-sand { --tag:var(--tag-sand); --tag-soft:var(--tag-sand-soft); }
   .tag-list { display:flex; flex-wrap:wrap; gap:var(--sp-1); }
+  /* Tag colour picker (Settings, Tags): a radio group of swatches, the radio
+     visually hidden inside each label; the checked one is ringed in its hue. */
+  .tag-picker { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2); min-width:0; margin:0; }
+  .tag-swatches { display:flex; flex-wrap:wrap; gap:2px; min-width:10rem; margin:0; padding:0; border:0; }
+  .tag-swatches .tag-swatch { flex-direction:row; align-items:center; justify-content:center; gap:6px;
+         min-width:28px; height:28px; margin:0; padding:0 6px; border:1px solid transparent;
+         border-radius:var(--r-round); color:var(--fg); font-size:var(--text-xs); cursor:pointer; }
+  .tag-swatches .tag-swatch:hover { background:var(--surface-2); }
+  .tag-swatches .tag-swatch:has(input:checked) { border-color:var(--tag); background:var(--tag-soft); }
+  .tag-swatches .tag-swatch:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
+  .tag-count { white-space:nowrap; }
+  .tag-rename { flex-wrap:wrap; }
+  .tag-rename input { width:10rem; min-width:0; }
+  .tag-swatch-dot { width:14px; height:14px; flex:none; border-radius:var(--r-round); background:var(--tag); }
 
   /* ---- status: an LED dot plus words. The only place status colour appears.
      A tone class on the element (or an ancestor) picks the colour. ---- */
@@ -652,6 +666,7 @@
     .disclosure > summary, .subnet-row > summary { min-height:44px; }
     .pager .btn, .panel-actions .btn { min-height:44px; }
     label:has(> input[type="checkbox"]), label:has(> input[type="radio"]), label.chk { min-height:44px; }
+    .tag-swatches .tag-swatch { min-width:40px; }
 
     /* Small targets that sit in text or rows (a device name, a lease chip,
        a disclosure line) keep their look but take taps 44px tall. */

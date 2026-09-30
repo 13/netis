@@ -47,6 +47,114 @@ func (s *Store) ListTags(ctx context.Context) ([]Tag, error) {
 	return out, rows.Err()
 }
 
+// TagCount is a tag with the number of devices carrying it.
+type TagCount struct {
+	Tag
+	Devices int
+}
+
+// ListTagsWithCounts returns every tag, ordered by name, with how many
+// devices carry it; tags on no device are included with a count of zero.
+func (s *Store) ListTagsWithCounts(ctx context.Context) ([]TagCount, error) {
+	var out []TagCount
+	err := s.eachRow(ctx, `SELECT t.id,t.name,t.color,COUNT(dt.device_id) FROM tag t
+		LEFT JOIN device_tag dt ON dt.tag_id=t.id
+		GROUP BY t.id,t.name,t.color ORDER BY t.name`, func(r *sql.Rows) error {
+		var tc TagCount
+		if err := r.Scan(&tc.ID, &tc.Name, &tc.Color, &tc.Devices); err != nil {
+			return err
+		}
+		out = append(out, tc)
+		return nil
+	})
+	return out, err
+}
+
+// SetTagColor stores a tag's colour: a palette key, or "" for auto. The web
+// layer validates the key. A missing tag is sql.ErrNoRows.
+func (s *Store) SetTagColor(ctx context.Context, id int64, color string) error {
+	return s.withTx(ctx, func(c conn) error {
+		res, err := s.execOn(ctx, c, `UPDATE tag SET color=? WHERE id=?`, color, id)
+		if err != nil {
+			return err
+		}
+		return requireRow(res)
+	})
+}
+
+// RenameTag renames tag id. If another tag already has name, id's devices
+// join that tag and id is deleted; mergedInto is that tag's id (0 for a
+// plain rename). Renaming to its own name is a no-op. A missing tag is
+// sql.ErrNoRows. The name is matched exactly, as tags are unique by exact
+// name.
+func (s *Store) RenameTag(ctx context.Context, id int64, name string) (mergedInto int64, err error) {
+	err = s.withTx(ctx, func(c conn) error {
+		var cur string
+		if err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT name FROM tag WHERE id=?`), id).Scan(&cur); err != nil {
+			return err
+		}
+		if cur == name {
+			return nil
+		}
+		var other int64
+		err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT id FROM tag WHERE name=?`), name).Scan(&other)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			_, err := s.execOn(ctx, c, `UPDATE tag SET name=? WHERE id=?`, name, id)
+			return err
+		case err != nil:
+			return err
+		}
+		// Merge: every device of id joins other (devices already on both keep
+		// a single row), then id goes. Its device_tag rows are removed
+		// explicitly rather than trusting the cascade to be enabled.
+		if _, err := s.execOn(ctx, c, `INSERT INTO device_tag (device_id,tag_id)
+			SELECT device_id,? FROM device_tag WHERE tag_id=? ON CONFLICT DO NOTHING`, other, id); err != nil {
+			return err
+		}
+		if _, err := s.execOn(ctx, c, `DELETE FROM device_tag WHERE tag_id=?`, id); err != nil {
+			return err
+		}
+		if _, err := s.execOn(ctx, c, `DELETE FROM tag WHERE id=?`, id); err != nil {
+			return err
+		}
+		mergedInto = other
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return mergedInto, nil
+}
+
+// DeleteTag detaches a tag from every device and deletes it. A missing tag
+// is sql.ErrNoRows.
+func (s *Store) DeleteTag(ctx context.Context, id int64) error {
+	return s.withTx(ctx, func(c conn) error {
+		if _, err := s.execOn(ctx, c, `DELETE FROM device_tag WHERE tag_id=?`, id); err != nil {
+			return err
+		}
+		res, err := s.execOn(ctx, c, `DELETE FROM tag WHERE id=?`, id)
+		if err != nil {
+			return err
+		}
+		return requireRow(res)
+	})
+}
+
+// requireRow turns an UPDATE or DELETE that touched nothing into
+// sql.ErrNoRows.
+func requireRow(res sql.Result) error {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) TagDevice(ctx context.Context, deviceID, tagID int64) error {
 	_, err := s.exec(ctx, `INSERT INTO device_tag (device_id,tag_id) VALUES (?,?) ON CONFLICT DO NOTHING`,
 		deviceID, tagID)

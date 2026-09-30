@@ -39,7 +39,7 @@ var formSecrets = map[string]bool{
 // adminSettings are the settings pages only an admin can open; the rest
 // ("account", "sessions", "tokens") belong to every account.
 var adminSettings = map[string]bool{
-	"network": true, "integrations": true, "notifications": true,
+	"network": true, "integrations": true, "notifications": true, "tags": true,
 	"users": true, "audit": true, "system": true,
 }
 
@@ -240,6 +240,13 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		}
 	}
 
+	var tags []store.TagCount
+	if tab == "tags" {
+		if tags, err = s.store.ListTagsWithCounts(r.Context()); err != nil {
+			return views.SettingsData{}, err
+		}
+	}
+
 	var audit views.AuditData
 	if tab == "audit" {
 		if audit, err = s.auditData(r); err != nil {
@@ -252,6 +259,7 @@ func (s *Server) settingsData(r *http.Request, tab string) (views.SettingsData, 
 		Notify:  notifyData,
 		Audit:   audit,
 		SSO:     sso,
+		Tags:    tags,
 		Subnets: subnets, Users: users, Values: values, Configured: configured,
 		Sessions: sessions, CurrentSessionID: currentSessionID, CurrentUserID: me.ID,
 		ActiveTab: tab, Detected: newDetected, Statuses: statuses, Tokens: tokens,
