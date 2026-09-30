@@ -138,6 +138,14 @@ func TestDeviceDetailTagChips(t *testing.T) {
 	if !strings.Contains(body, `class="tag tag-teal"`) || !strings.Contains(body, `href="/devices?tag=nas"`) {
 		t.Errorf("device page does not show the tag as a coloured chip: %s", body)
 	}
+	// On phones a linked tag takes taps 44px tall like the other links in
+	// the facts list: the link does not clip, its inner span cuts the name.
+	css := authedGet(t, srv, st, "/static/app.css").Body.String()
+	for _, want := range []string{"a.tag { overflow:visible; }", ".tag-text { display:block; overflow:hidden; text-overflow:ellipsis; }"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("app.css lacks %q", want)
+		}
+	}
 }
 
 // The back link returns to the page of ours the user came from, and to the

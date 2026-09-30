@@ -2,7 +2,7 @@ package views
 
 // TagChip is a tag as a link to the devices that carry it.
 templ TagChip(name, stored string) {
-	<a class={ "tag", "tag-" + TagColor(name, stored) } href={ tagHref(name) } title={ name }>{ name }</a>
+	<a class={ "tag", "tag-" + TagColor(name, stored) } href={ tagHref(name) } title={ name }><span class="tag-text">{ name }</span></a>
 }
 
 // TagSpan is a tag that links nowhere (editor, pickers, previews).

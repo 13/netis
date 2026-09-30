@@ -86,7 +86,9 @@ func TestTagChip(t *testing.T) {
 		`class="tag tag-sky"`,
 		`href="/devices?tag=media+%26+more"`,
 		`title="media &amp; more"`,
-		`>media &amp; more</a>`,
+		// The name sits in its own span, which cuts it with the ellipsis,
+		// so the link itself does not clip its phone tap area.
+		`><span class="tag-text">media &amp; more</span></a>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("TagChip = %s\nmissing %s", got, want)
