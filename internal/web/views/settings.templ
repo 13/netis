@@ -48,6 +48,18 @@ type SettingsData struct {
 	SSO SSOAccount
 	// Tags are every tag with its device count, on the tags tab.
 	Tags []store.TagCount
+	// TagMerge is a rename that would merge two tags, waiting for the admin
+	// to confirm it; zero when there is none.
+	TagMerge TagMerge
+}
+
+// TagMerge asks before tag ID (with Devices devices) is renamed to Into, a
+// name another tag with IntoDevices devices already has.
+type TagMerge struct {
+	ID          int64
+	Into        string
+	IntoDevices int
+	Devices     int
 }
 
 // SSOAccount says whether SSO is configured and whether the signed-in user's
@@ -164,7 +176,7 @@ templ SettingsPage(username string, d SettingsData) {
 					case "notifications":
 						@notificationsTab(d.Notify)
 					case "tags":
-						@tagsTab(d.Tags)
+						@tagsTab(d.Tags, d.TagMerge)
 					case "users":
 						@usersTab(d)
 					case "audit":

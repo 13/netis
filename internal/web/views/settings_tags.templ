@@ -32,12 +32,28 @@ func tagDeleteConfirm(t store.TagCount) string {
 	return "Remove " + t.Name + " from " + tagDevicesLabel(t.Devices) + "?"
 }
 
+// tagMergeQuestion is what the rename form says before a merge: "nas already
+// exists; its 3 devices and these 2 will share it."
+func tagMergeQuestion(m TagMerge) string {
+	these := fmt.Sprintf("these %d", m.Devices)
+	if m.Devices == 1 {
+		these = "this 1"
+	}
+	return m.Into + " already exists; its " + tagDevicesLabel(m.IntoDevices) + " and " + these + " will share it."
+}
+
+// tagRenameAction is where a tag's rename form posts.
+func tagRenameAction(id int64) templ.SafeURL {
+	return templ.URL(fmt.Sprintf("/settings/tags/%d/rename", id))
+}
+
 // tagChipID is the id of the chip cell a colour change redraws.
 func tagChipID(id int64) string { return fmt.Sprintf("tag-chip-%d", id) }
 
 // tagsTab is the admin's Tags page: each tag with its device count, a colour
-// picker, rename and delete.
-templ tagsTab(tags []store.TagCount) {
+// picker, rename and delete. A rename that would merge two tags is asked
+// about in that tag's row (merge) before it happens.
+templ tagsTab(tags []store.TagCount, merge TagMerge) {
 	<div class="panel">
 		if len(tags) == 0 {
 			<p class="empty-note">No tags yet. Add tags to devices from their edit form or the device list.</p>
@@ -54,10 +70,20 @@ templ tagsTab(tags []store.TagCount) {
 								<td data-label="Devices"><a class="tag-count" href={ tagHref(t.Name) }>{ tagDevicesLabel(t.Devices) }</a></td>
 								<td data-label="Colour">@tagColorPicker(t)</td>
 								<td class="cell-actions">
-									<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tags/%d/rename", t.ID)) } class="inline tag-rename">
-										<input type="text" name="name" value={ t.Name } aria-label={ "New name for " + t.Name } maxlength="64" required autocomplete="off"/>
-										<button type="submit" class="btn btn-sm">Rename</button>
-									</form>
+									if merge.ID == t.ID {
+										<form method="post" action={ tagRenameAction(t.ID) } class="inline tag-merge" role="alert">
+											<span class="tag-merge-question">{ tagMergeQuestion(merge) }</span>
+											<input type="hidden" name="name" value={ merge.Into }/>
+											<input type="hidden" name="confirm" value="1"/>
+											<button type="submit" class="btn btn-sm">Merge</button>
+											<a class="btn btn-sm" href="/settings/tags">Cancel</a>
+										</form>
+									} else {
+										<form method="post" action={ tagRenameAction(t.ID) } class="inline tag-rename">
+											<input type="text" name="name" value={ t.Name } aria-label={ "New name for " + t.Name } required autocomplete="off"/>
+											<button type="submit" class="btn btn-sm">Rename</button>
+										</form>
+									}
 									<form method="post" action={ templ.URL(fmt.Sprintf("/settings/tags/%d/delete", t.ID)) } class="inline" data-confirm={ tagDeleteConfirm(t) }>
 										<button type="submit" class="btn btn-danger btn-sm">Delete</button>
 									</form>
@@ -67,7 +93,7 @@ templ tagsTab(tags []store.TagCount) {
 					</tbody>
 				</table>
 			</div>
-			<p class="hint">Renaming a tag to a name another tag already has merges the two: their devices share that tag, which keeps its colour.</p>
+			<p class="hint">Renaming a tag to a name another tag has merges the two, once you confirm; the merged tag keeps that tag's colour.</p>
 		}
 	</div>
 }
@@ -80,7 +106,7 @@ templ tagColorPicker(t store.TagCount) {
 		method="post"
 		action={ templ.URL(fmt.Sprintf("/settings/tags/%d/color", t.ID)) }
 		hx-post={ fmt.Sprintf("/settings/tags/%d/color", t.ID) }
-		hx-trigger="change"
+		hx-trigger="change delay:600ms"
 		hx-swap="none"
 		class="tag-picker"
 	>

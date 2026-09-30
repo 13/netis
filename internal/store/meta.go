@@ -82,12 +82,17 @@ func (s *Store) SetTagColor(ctx context.Context, id int64, color string) error {
 	})
 }
 
-// RenameTag renames tag id. If another tag already has name, id's devices
-// join that tag and id is deleted; mergedInto is that tag's id (0 for a
-// plain rename). Renaming to its own name is a no-op. A missing tag is
+// ErrTagExists is RenameTag refusing to merge into a tag that already has
+// the name when the caller did not ask for a merge.
+var ErrTagExists = errors.New("a tag with that name already exists")
+
+// RenameTag renames tag id. If another tag already has name and merge is
+// set, id's devices join that tag and id is deleted; mergedInto is that
+// tag's id (0 for a plain rename). Without merge that case is ErrTagExists
+// and nothing changes. Renaming to its own name is a no-op. A missing tag is
 // sql.ErrNoRows. The name is matched exactly, as tags are unique by exact
 // name.
-func (s *Store) RenameTag(ctx context.Context, id int64, name string) (mergedInto int64, err error) {
+func (s *Store) RenameTag(ctx context.Context, id int64, name string, merge bool) (mergedInto int64, err error) {
 	err = s.withTx(ctx, func(c conn) error {
 		var cur string
 		if err := c.QueryRowContext(ctx, s.dialect.rebind(`SELECT name FROM tag WHERE id=?`), id).Scan(&cur); err != nil {
@@ -104,6 +109,8 @@ func (s *Store) RenameTag(ctx context.Context, id int64, name string) (mergedInt
 			return err
 		case err != nil:
 			return err
+		case !merge:
+			return ErrTagExists
 		}
 		// Merge: every device of id joins other (devices already on both keep
 		// a single row), then id goes. Its device_tag rows are removed

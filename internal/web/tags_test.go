@@ -192,7 +192,33 @@ func TestTagRenameMerges(t *testing.T) {
 	srv, st := testServer(t)
 	ids := seedTags(t, st)
 	st.SetTagColor(t.Context(), ids["nas"], "teal")
-	rec := authedPost(t, srv, st, fmt.Sprintf("/settings/tags/%d/rename", ids["media"]), url.Values{"name": {"nas"}})
+	path := fmt.Sprintf("/settings/tags/%d/rename", ids["media"])
+
+	// Without confirm the merge waits: the page asks first.
+	rec := authedPost(t, srv, st, path, url.Values{"name": {"nas"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unconfirmed rename = %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"nas already exists; its 2 devices and this 1 will share it.",
+		`name="confirm" value="1"`,
+		`<input type="hidden" name="name" value="nas"`,
+		">Merge<",
+		`href="/settings/tags"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("confirmation missing %q", want)
+		}
+	}
+	if _, ok := tagCount(t, st, "media"); !ok {
+		t.Fatal("media merged without confirmation")
+	}
+	if tc, _ := tagCount(t, st, "nas"); tc.Devices != 2 {
+		t.Fatalf("nas = %+v", tc)
+	}
+
+	rec = authedPost(t, srv, st, path, url.Values{"name": {"nas"}, "confirm": {"1"}})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("rename = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -204,6 +230,52 @@ func TestTagRenameMerges(t *testing.T) {
 	}
 	if tc, _ := tagCount(t, st, "nas"); tc.Devices != 2 || tc.Color != "teal" {
 		t.Errorf("nas = %+v", tc)
+	}
+	es := auditEntries(t, st)
+	if len(es) == 0 || es[0].Detail != "media -> nas (merged)" {
+		t.Errorf("audit = %+v", es[0])
+	}
+}
+
+func TestTagRenameMergeConfirmCounts(t *testing.T) {
+	srv, st := testServer(t)
+	ids := seedTags(t, st)
+	rec := authedPost(t, srv, st, fmt.Sprintf("/settings/tags/%d/rename", ids["nas"]), url.Values{"name": {"media"}})
+	if !strings.Contains(rec.Body.String(), "media already exists; its 1 device and these 2 will share it.") {
+		t.Errorf("confirmation text wrong: %s", rec.Body.String())
+	}
+	if _, ok := tagCount(t, st, "nas"); !ok {
+		t.Fatal("nas merged without confirmation")
+	}
+}
+
+// A unique violation from the rename (the name was created meanwhile) is a
+// conflict shown on the page, not a server failure.
+func TestTagRenameRaceIsConflict(t *testing.T) {
+	srv, st := testServer(t)
+	seedTags(t, st)
+	_, err := st.CreateTag(t.Context(), "nas", "")
+	if !store.IsUniqueViolation(err) {
+		t.Fatalf("expected a unique violation, got %v", err)
+	}
+	authedGet(t, srv, st, "/") // admin exists
+	req := httptest.NewRequest("POST", "/settings/tags/1/rename", nil)
+	rec := httptest.NewRecorder()
+	srv.tagWriteError(rec, req, err)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "A tag with that name was just created; try again") {
+		t.Errorf("race = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTagSettingsInputs(t *testing.T) {
+	srv, st := testServer(t)
+	seedTags(t, st)
+	body := authedGet(t, srv, st, "/settings/tags").Body.String()
+	if !strings.Contains(body, `hx-trigger="change delay:600ms"`) {
+		t.Error("swatch picker should debounce keyboard changes")
+	}
+	if strings.Contains(body, `maxlength="64"`) {
+		t.Error("rename input keeps a UTF-16 maxlength")
 	}
 }
 

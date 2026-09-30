@@ -15,6 +15,7 @@ import (
 const (
 	tagColorMsg = "choose a colour from the list"
 	tagNameMsg  = "a tag name is 1 to 64 characters"
+	tagRaceMsg  = "a tag with that name was just created; try again"
 	// maxTagName is the longest tag name, in characters.
 	maxTagName = 64
 )
@@ -50,13 +51,14 @@ func (s *Server) tagFromPath(w http.ResponseWriter, r *http.Request) (store.Tag,
 }
 
 // tagWriteError answers a failed tag write: a tag deleted meanwhile is a
-// 404, anything else a failure.
+// 404, a name taken meanwhile a 409 on the Tags page, anything else a
+// failure.
 func (s *Server) tagWriteError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
 	}
-	s.fail(w, r, err)
+	s.settingsWriteError(w, r, "tags", err, tagRaceMsg)
 }
 
 // tagsDone sends a plain form post back to the Tags page with msg as a toast.
@@ -100,8 +102,9 @@ func (s *Server) handleTagColor(w http.ResponseWriter, r *http.Request) {
 	s.tagsDone(w, r, "Colour saved")
 }
 
-// handleTagRename renames a tag, or merges it into the tag that already has
-// the new name.
+// handleTagRename renames a tag. A name another tag already has merges the
+// two, but only once the form confirms it (confirm=1); until then the Tags
+// page asks, in the tag's row, with both device counts.
 func (s *Server) handleTagRename(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.tagFromPath(w, r)
 	if !ok {
@@ -115,20 +118,47 @@ func (s *Server) handleTagRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note.Detail = t.Name + " -> " + name
-	merged, err := s.store.RenameTag(r.Context(), t.ID, name)
+	merged, err := s.store.RenameTag(r.Context(), t.ID, name, r.FormValue("confirm") == "1")
+	if errors.Is(err, store.ErrTagExists) {
+		note.Detail += " (merge not confirmed)"
+		s.tagMergeConfirm(w, r, t.ID, name)
+		return
+	}
 	if err != nil {
 		s.tagWriteError(w, r, err)
 		return
 	}
 	switch {
 	case merged != 0:
-		note.Detail = "merged into " + name
+		note.Detail += " (merged)"
 		s.tagsDone(w, r, "Merged into "+name)
 	case name == t.Name:
 		s.tagsDone(w, r, "Nothing to change")
 	default:
 		s.tagsDone(w, r, "Renamed to "+name)
 	}
+}
+
+// tagMergeConfirm answers a rename of tag id to into, a name another tag
+// has, with the Tags page asking whether to merge them.
+func (s *Server) tagMergeConfirm(w http.ResponseWriter, r *http.Request, id int64, into string) {
+	d, err := s.settingsData(r, "tags")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	m := views.TagMerge{ID: id, Into: into}
+	for _, tc := range d.Tags {
+		switch {
+		case tc.ID == id:
+			m.Devices = tc.Devices
+		case tc.Name == into:
+			m.IntoDevices = tc.Devices
+		}
+	}
+	d.TagMerge = m
+	u, _ := userFrom(r)
+	s.render(w, r, views.SettingsPage(u.Username, d))
 }
 
 // handleTagDelete detaches a tag from every device and deletes it.

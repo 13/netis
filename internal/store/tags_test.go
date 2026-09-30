@@ -91,7 +91,7 @@ func TestRenameTagPlain(t *testing.T) {
 		tc, _ := tagByName(t, s, "media")
 		s.SetTagColor(ctx, tc.ID, "pink")
 
-		merged, err := s.RenameTag(ctx, tc.ID, "video")
+		merged, err := s.RenameTag(ctx, tc.ID, "video", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,11 +107,11 @@ func TestRenameTagPlain(t *testing.T) {
 		}
 
 		// Renaming to its own name is a no-op.
-		merged, err = s.RenameTag(ctx, tc.ID, "video")
+		merged, err = s.RenameTag(ctx, tc.ID, "video", false)
 		if err != nil || merged != 0 {
 			t.Fatalf("self rename: merged=%d err=%v", merged, err)
 		}
-		if _, err := s.RenameTag(ctx, tc.ID+99, "x"); !errors.Is(err, sql.ErrNoRows) {
+		if _, err := s.RenameTag(ctx, tc.ID+99, "x", false); !errors.Is(err, sql.ErrNoRows) {
 			t.Fatalf("missing tag: err = %v, want sql.ErrNoRows", err)
 		}
 	})
@@ -131,7 +131,15 @@ func TestRenameTagMerge(t *testing.T) {
 		s.SetTagColor(ctx, nas.ID, "teal")
 		s.SetTagColor(ctx, storage.ID, "pink")
 
-		merged, err := s.RenameTag(ctx, storage.ID, "nas")
+		// Without merge the rename is refused and nothing changes.
+		if _, err := s.RenameTag(ctx, storage.ID, "nas", false); !errors.Is(err, ErrTagExists) {
+			t.Fatalf("unconfirmed merge: err = %v, want ErrTagExists", err)
+		}
+		if got, ok := tagByName(t, s, "storage"); !ok || got.Devices != 2 {
+			t.Fatalf("storage after refused merge = %+v ok=%v", got, ok)
+		}
+
+		merged, err := s.RenameTag(ctx, storage.ID, "nas", true)
 		if err != nil {
 			t.Fatal(err)
 		}

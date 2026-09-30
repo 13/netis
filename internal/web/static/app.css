@@ -209,7 +209,7 @@
   .tag-swatches .tag-swatch:has(input:checked) { border-color:var(--tag); background:var(--tag-soft); }
   .tag-swatches .tag-swatch:has(input:focus-visible) { outline:2px solid var(--focus); outline-offset:2px; }
   .tag-count { white-space:nowrap; }
-  .tag-rename { flex-wrap:wrap; }
+  .tag-rename, .tag-merge { flex-wrap:wrap; }
   .tag-rename input { width:10rem; min-width:0; }
   .tag-swatch-dot { width:14px; height:14px; flex:none; border-radius:var(--r-round); background:var(--tag); }
 
