@@ -135,6 +135,32 @@
 		if (e.target.matches && e.target.matches('input[data-select-all]')) { e.target.select(); }
 	});
 
+	// Device form: "Use detected" ([data-fill]) puts the detected value in
+	// its field, and "Add detected tag" ([data-append-tag]) adds a tag to the
+	// tags field. The events let the Kind change keep the icon in step.
+	document.addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('[data-fill], [data-append-tag]');
+		if (!b || !b.form) { return; }
+		e.preventDefault();
+		if (b.hasAttribute('data-fill')) {
+			var el = b.form.elements[b.getAttribute('data-fill')];
+			if (!el) { return; }
+			el.value = b.getAttribute('data-value');
+			el.dispatchEvent(new Event('input', { bubbles: true }));
+			el.dispatchEvent(new Event('change', { bubbles: true }));
+		} else {
+			var tags = b.form.elements.tags;
+			if (!tags) { return; }
+			var tag = b.getAttribute('data-append-tag');
+			var have = tags.value.split(',').map(function (t) { return t.trim().toLowerCase(); });
+			if (have.indexOf(tag.toLowerCase()) < 0) {
+				tags.value = tags.value.trim() === '' ? tag : tags.value.replace(/[\s,]*$/, '') + ', ' + tag;
+				tags.dispatchEvent(new Event('input', { bubbles: true }));
+			}
+		}
+		b.hidden = true;
+	});
+
 	function selectSwatch(pick, icon) {
 		var hidden = pick.parentNode.querySelector('input[name=icon]') ||
 			pick.closest('.dialog').querySelector('input[name=icon]');

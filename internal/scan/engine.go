@@ -14,8 +14,11 @@ import (
 	"netis/internal/store"
 )
 
-// Kicker asks for work without waiting for it (autofill.Service).
-type Kicker interface{ Kick() }
+// Autofiller asks for work without waiting for it (autofill.Service).
+type Autofiller interface {
+	Kick()
+	Probe(sn store.Subnet)
+}
 
 type Engine struct {
 	Store   *store.Store
@@ -24,9 +27,9 @@ type Engine struct {
 	Sweeper Sweeper
 	ARP     func() (map[string]string, error)
 	Resolve func(context.Context, string) string
-	// Autofill is kicked after each sweep so new and changed devices get
-	// their details filled in. Nil turns that off.
-	Autofill Kicker
+	// Autofill fills in device details after a sweep: Kick asks for a pass,
+	// Probe asks for the swept subnet's link to be probed. Nil turns both off.
+	Autofill Autofiller
 	// Presence confirms a host that answered ARP but not ping (TCPProbe in
 	// production). Nil skips straight to the ARP re-check.
 	Presence func(context.Context, string) (float64, bool)
@@ -174,6 +177,7 @@ func (e *Engine) RunSubnet(ctx context.Context, sn store.Subnet) error {
 	e.checkConflicts(ctx, sn)
 	e.Broker.Publish(fmt.Sprintf("grid:%d", sn.ID), "refresh")
 	if e.Autofill != nil {
+		e.Autofill.Probe(sn)
 		e.Autofill.Kick()
 	}
 	return nil

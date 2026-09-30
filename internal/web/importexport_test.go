@@ -5,11 +5,11 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"mime/multipart"
-	"regexp"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 

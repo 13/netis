@@ -57,11 +57,22 @@ see: the maker registered for the MAC address (the IEEE registry, built in),
 the hostname (`BRW3C2AF4A1B2C3` is a Brother printer, `Galaxy-S23` a Samsung
 phone) and open ports found by a port scan (9100 is a printer, 8006 Proxmox).
 
+On subnets the netis host is directly attached to, netis also listens for
+what devices announce about themselves on the local network: mDNS (Bonjour)
+names Chromecasts, AirPlay speakers, printers, HomeKit and ESPHome devices,
+and UPnP names TVs, speakers and routers. It asks after a sweep, at most every
+15 minutes per subnet. In Docker this needs host networking, which netis
+already requires (see [Docker](install.md#docker)). Devices answer these
+questions straight back to a random port on the netis host, so a stateful
+host firewall there (ufw, firewalld) can drop the answers.
+
 It only fills a field that is empty (kind counts as empty while it is Other),
 and it never changes a value you set: once you edit or clear a value netis
 filled, that field is yours. A tag you remove stays removed. On a device's
 page, **Detected** marks values netis filled, and **What netis detected**
-lists every clue and whether it was used.
+lists every clue and whether it was used. When you edit a device, the vendor,
+model and function fields suggest values as you type, and "Use detected"
+fills in what netis detected where it differs from what the device holds.
 
 Turn it off under Settings, Network, "Fill in device details automatically".
 Every change is recorded in the audit log as user `netis`.

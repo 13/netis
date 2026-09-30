@@ -13,6 +13,7 @@ export const PAGES = [
   { name: 'dashboard', path: '/' },
   { name: 'devices', path: '/devices' },
   { name: 'device', path: '/devices/5' },
+  { name: 'device-edit', path: '/devices/5/edit' },
   { name: 'grid', path: '/subnets/1' },
   { name: 'events', path: '/events' },
   { name: 'settings-network', path: '/settings/network' },
