@@ -163,6 +163,8 @@ func (s *Server) planImport(ctx context.Context, rows []importRow) ([]importPlan
 			p.action, p.err = "error", "MAC also on line "+strconv.Itoa(seen[row.mac])
 		case row.kind != "" && !validKinds[row.kind]:
 			p.action, p.err = "error", "unknown kind "+strconv.Quote(row.kind)
+		case !store.TagNamesFit(row.tags):
+			p.action, p.err = "error", store.TagNameMsg
 		}
 		if p.action == "error" {
 			plans = append(plans, p)

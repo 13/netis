@@ -5,12 +5,41 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 type Tag struct {
 	ID    int64
 	Name  string
 	Color string
+}
+
+// MaxTagName is the longest tag name, in characters.
+const MaxTagName = 64
+
+// TagNameMsg is what every writer answers when a tag name is empty or too
+// long.
+const TagNameMsg = "a tag name is 1 to 64 characters"
+
+// ValidTagName trims name and reports whether it is 1 to MaxTagName
+// characters. It is the one rule every path that names a tag checks.
+func ValidTagName(name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	n := utf8.RuneCountInString(name)
+	return name, n >= 1 && n <= MaxTagName
+}
+
+// TagNamesFit reports whether every name in a list a device's tags are set
+// from is short enough. Blank names pass: the writers drop them.
+func TagNamesFit(names []string) bool {
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n != "" {
+			if _, ok := ValidTagName(n); !ok {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 type CustomField struct{ Key, Value string }

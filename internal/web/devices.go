@@ -517,6 +517,10 @@ func (s *Server) handleDeviceCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderDeviceForm(w, r, f, status)
 	}
 	auditNote(r).Target = "device " + dev.Name
+	if !store.TagNamesFit(parseTags(r.FormValue("tags"))) {
+		refuse(http.StatusBadRequest, store.TagNameMsg)
+		return
+	}
 	// A subnet_id that is missing or not a number is "not chosen" (zero).
 	subnetID, _ := strconv.ParseInt(r.FormValue("subnet_id"), 10, 64)
 	nd, msg, err := s.checkNewDevice(r.Context(), dev, r.FormValue("mac"), r.FormValue("ip"), subnetID)
@@ -643,6 +647,12 @@ func (s *Server) handleDeviceUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		d.ParentDeviceID = nil
+	}
+	if !store.TagNamesFit(parseTags(r.FormValue("tags"))) {
+		f := submittedDeviceForm(r, d, true)
+		f.Error = store.TagNameMsg
+		s.renderDeviceForm(w, r, f, http.StatusBadRequest)
+		return
 	}
 	if err := s.store.UpdateDevice(r.Context(), d); err != nil {
 		if status, msg, ok := writeFailure(err, "device conflicts with an existing one", parentMissingMsg); ok {

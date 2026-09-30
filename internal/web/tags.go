@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
-	"unicode/utf8"
 
 	"netis/internal/store"
 	"netis/internal/web/views"
@@ -14,18 +12,12 @@ import (
 
 const (
 	tagColorMsg = "choose a colour from the list"
-	tagNameMsg  = "a tag name is 1 to 64 characters"
+	tagNameMsg  = store.TagNameMsg
 	tagRaceMsg  = "a tag with that name was just created; try again"
-	// maxTagName is the longest tag name, in characters.
-	maxTagName = 64
 )
 
 // validTagName trims name and reports whether it is 1 to 64 characters.
-func validTagName(name string) (string, bool) {
-	name = strings.TrimSpace(name)
-	n := utf8.RuneCountInString(name)
-	return name, n >= 1 && n <= maxTagName
-}
+func validTagName(name string) (string, bool) { return store.ValidTagName(name) }
 
 // tagFromPath reads the {id} of a /settings/tags/{id}/... route and loads
 // that tag. It answers 404 itself when there is none, and reports false.
