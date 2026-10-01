@@ -18,6 +18,9 @@ type Subnet struct {
 	// both are empty when the pool is not known.
 	DHCPStart string
 	DHCPEnd   string
+	// DHCPPoolSource says who set the pool: "" for nobody, "user", or the
+	// DHCP integration that read it (see SetDHCPPoolFrom).
+	DHCPPoolSource string
 }
 
 // InDHCPPool reports whether ip lies in the subnet's DHCP pool. It is false
@@ -32,21 +35,21 @@ func (sn Subnet) InDHCPPool(ip netip.Addr) bool {
 }
 
 func (s *Store) CreateSubnet(ctx context.Context, sn Subnet) (int64, error) {
-	return s.insertReturningID(ctx, `INSERT INTO subnet (cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end)
-		VALUES (?,?,?,?,?,?,?,?)`,
-		sn.CIDR, sn.Name, sn.VLANID, sn.Kind, sn.ScanEnabled, sn.ScanIntervalSec, sn.DHCPStart, sn.DHCPEnd)
+	return s.insertReturningID(ctx, `INSERT INTO subnet (cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end,dhcp_pool_source)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		sn.CIDR, sn.Name, sn.VLANID, sn.Kind, sn.ScanEnabled, sn.ScanIntervalSec, sn.DHCPStart, sn.DHCPEnd, sn.DHCPPoolSource)
 }
 
 func (s *Store) GetSubnet(ctx context.Context, id int64) (Subnet, error) {
 	var sn Subnet
-	err := s.queryRow(ctx, `SELECT id,cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end
+	err := s.queryRow(ctx, `SELECT id,cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end,dhcp_pool_source
 		FROM subnet WHERE id=?`, id).
-		Scan(&sn.ID, &sn.CIDR, &sn.Name, &sn.VLANID, &sn.Kind, &sn.ScanEnabled, &sn.ScanIntervalSec, &sn.DHCPStart, &sn.DHCPEnd)
+		Scan(&sn.ID, &sn.CIDR, &sn.Name, &sn.VLANID, &sn.Kind, &sn.ScanEnabled, &sn.ScanIntervalSec, &sn.DHCPStart, &sn.DHCPEnd, &sn.DHCPPoolSource)
 	return sn, err
 }
 
 func (s *Store) ListSubnets(ctx context.Context) ([]Subnet, error) {
-	rows, err := s.query(ctx, `SELECT id,cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end
+	rows, err := s.query(ctx, `SELECT id,cidr,name,vlan_id,kind,scan_enabled,scan_interval_sec,dhcp_start,dhcp_end,dhcp_pool_source
 		FROM subnet`)
 	if err != nil {
 		return nil, err
@@ -56,7 +59,7 @@ func (s *Store) ListSubnets(ctx context.Context) ([]Subnet, error) {
 	for rows.Next() {
 		var sn Subnet
 		if err := rows.Scan(&sn.ID, &sn.CIDR, &sn.Name, &sn.VLANID, &sn.Kind,
-			&sn.ScanEnabled, &sn.ScanIntervalSec, &sn.DHCPStart, &sn.DHCPEnd); err != nil {
+			&sn.ScanEnabled, &sn.ScanIntervalSec, &sn.DHCPStart, &sn.DHCPEnd, &sn.DHCPPoolSource); err != nil {
 			return nil, err
 		}
 		out = append(out, sn)
@@ -96,10 +99,25 @@ func sortSubnets(sns []Subnet) {
 }
 
 func (s *Store) UpdateSubnet(ctx context.Context, sn Subnet) error {
-	_, err := s.exec(ctx, `UPDATE subnet SET cidr=?,name=?,vlan_id=?,kind=?,scan_enabled=?,scan_interval_sec=?,dhcp_start=?,dhcp_end=?
+	_, err := s.exec(ctx, `UPDATE subnet SET cidr=?,name=?,vlan_id=?,kind=?,scan_enabled=?,scan_interval_sec=?,dhcp_start=?,dhcp_end=?,dhcp_pool_source=?
 		WHERE id=?`,
-		sn.CIDR, sn.Name, sn.VLANID, sn.Kind, sn.ScanEnabled, sn.ScanIntervalSec, sn.DHCPStart, sn.DHCPEnd, sn.ID)
+		sn.CIDR, sn.Name, sn.VLANID, sn.Kind, sn.ScanEnabled, sn.ScanIntervalSec, sn.DHCPStart, sn.DHCPEnd, sn.DHCPPoolSource, sn.ID)
 	return err
+}
+
+// SetDHCPPoolFrom records the DHCP pool an integration (source) read from its
+// server, but only while the subnet's pool is unowned or already that
+// integration's: a pool the user typed, or another integration's, is left
+// alone. It reports whether the stored pool changed.
+func (s *Store) SetDHCPPoolFrom(ctx context.Context, subnetID int64, start, end, source string) (bool, error) {
+	res, err := s.exec(ctx, `UPDATE subnet SET dhcp_start=?,dhcp_end=?,dhcp_pool_source=?
+		WHERE id=? AND dhcp_pool_source IN ('',?) AND (dhcp_start<>? OR dhcp_end<>? OR dhcp_pool_source<>?)`,
+		start, end, source, subnetID, source, start, end, source)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 func (s *Store) DeleteSubnet(ctx context.Context, id int64) error {
