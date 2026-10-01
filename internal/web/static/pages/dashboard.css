@@ -59,6 +59,11 @@
   .sn-head .spacer { flex:1; }
   .sn-used { font-size:var(--text-xs); }
   .sn .occ { margin:var(--sp-2) 0; }
+  .dash-free .btn { font-weight:var(--w-regular); }
+  .dash-free .mono { font-size:var(--text-sm); }
+  .free-link { display:inline-flex; align-items:center; gap:6px; color:inherit; text-decoration:none; border-radius:var(--r-control); }
+  .free-link:hover { color:var(--accent); text-decoration:underline; }
+  .free-link:hover b { color:var(--accent); }
 
   /* ---- integrations: one line each ---- */
   .integ-rows { list-style:none; margin:0; padding:0; }
@@ -86,6 +91,10 @@
     .health-item .dot { top:var(--sp-2); right:var(--sp-2); }
     .health-l { font-size:var(--text-xs); }
     .sn-used { display:none; }
+    /* The next free IP gets a line of its own under the name. */
+    .dash-free { order:1; width:100%; }
+    .dash-free .btn { min-height:44px; }
+    .dash-free .btn:first-child { flex:1; justify-content:flex-start; }
     .attn { gap:var(--sp-2); }
     .attn-actions .btn { min-height:44px; }
   }

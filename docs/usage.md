@@ -20,7 +20,9 @@ A health strip (online, offline, new, conflicts, failing integrations, each
 linking to the list behind it), a "Needs attention" list with the action for
 each item (approve a new device, run a failing integration, open an IP
 conflict, offline devices with alerts on, devices gone upstream), per-subnet
-usage and recent activity by day.
+usage and recent activity by day. Each subnet shows its next free IP: click it
+to open the subnet with that address picked, or copy it with the button beside
+it.
 
 Until setup is complete, a Finish setup panel lists what is still missing (see
 [First run](install.md#first-run)).
@@ -35,6 +37,18 @@ for an IP claimed by two devices. The border tells a static address (a
 reservation) from a DHCP lease, and the subnet cards count the reservations.
 Each square also names its address and state for screen readers. Squares update
 live over SSE during a scan.
+
+Hovering a square (or moving to it with the arrow keys) shows a card with the
+address, its state and lease, and the device holding it with its MAC and when
+it was last seen. **C** copies the address under the pointer or the focused one.
+
+To find static addresses, the bar above the grid lists the free ranges, the
+largest first; a click marks the run and opens its first address. **Free only**
+fades every address that cannot be handed out, and the **Next free IP** button
+has a copy button beside it. Give a subnet its DHCP pool (Settings → Network,
+first and last address, or just the last octets) and the free addresses inside
+it are drawn stippled and left out of the next free IP, the free ranges and the
+free count, so what is offered is safe to assign statically.
 
 ![A subnet grid](images/grid-light.png)
 
@@ -130,12 +144,15 @@ An admin's page footer shows the version and links to System. Old
 Navigation is a sidebar on wide screens (folding to icons on tablets) and a
 bottom tab bar on phones. **Ctrl-K** (⌘-K on a Mac), or the search button,
 opens a command palette that jumps to a device by name, IP or MAC, a subnet, a
-page, or an action (new device, scan all — admins only).
+page, or an action (new device, scan all — admins only). Typing **free**
+(or `free iot` for one subnet) lists every subnet's next free IP: Enter opens
+it, Shift-Enter copies it.
 
 | Key | Does |
 | --- | --- |
 | `/` | focuses the page's search field (or opens the palette) |
 | `g d` / `g s` / `g e` / `g h` | go to devices, subnets, events and the dashboard |
+| `g f` | find a free IP: each subnet's next free address |
 | `n` | opens a new device (admins) |
 | `?` | lists them all |
 

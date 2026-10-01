@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"netis/internal/scan"
 	"netis/internal/web/views"
 )
 
@@ -28,9 +29,30 @@ type searchSubnet struct {
 	CIDR string `json:"cidr"`
 }
 
+// searchFree is a subnet's lowest address free for static use, for the
+// palette's "free" query: the address, the subnet, and how many are free.
+type searchFree struct {
+	SubnetID int64  `json:"subnet_id"`
+	Name     string `json:"name"`
+	CIDR     string `json:"cidr"`
+	IP       string `json:"ip"`
+	Free     int    `json:"free"`
+}
+
 type searchResult struct {
 	Devices []searchDevice `json:"devices"`
 	Subnets []searchSubnet `json:"subnets"`
+	Free    []searchFree   `json:"free,omitempty"`
+}
+
+// freeQuery reports whether q asks for free addresses ("free", "free lab"),
+// and the rest of it, which narrows the subnets.
+func freeQuery(q string) (string, bool) {
+	f := strings.Fields(strings.ToLower(q))
+	if len(f) == 0 || f[0] != "free" {
+		return "", false
+	}
+	return strings.Join(f[1:], " "), true
 }
 
 // handleSearch answers the command palette: devices matching q by name, IP,
@@ -41,6 +63,16 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	res := searchResult{Devices: []searchDevice{}, Subnets: []searchSubnet{}}
 	if q == "" {
+		s.writeJSON(w, r, res)
+		return
+	}
+	if rest, ok := freeQuery(q); ok {
+		free, err := s.searchFree(r, rest)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		res.Free = free
 		s.writeJSON(w, r, res)
 		return
 	}
@@ -79,4 +111,34 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.writeJSON(w, r, res)
+}
+
+// searchFree lists, for each subnet whose name or CIDR contains q, its
+// lowest address free for static use. Subnets with none left are skipped.
+func (s *Server) searchFree(r *http.Request, q string) ([]searchFree, error) {
+	subnets, err := s.store.ListSubnets(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	out := []searchFree{}
+	for _, sn := range subnets {
+		if len(out) == searchLimit {
+			break
+		}
+		if q != "" && !strings.Contains(strings.ToLower(sn.Name+" "+sn.CIDR), q) {
+			continue
+		}
+		hosts, err := scan.HostIPs(sn.CIDR)
+		if err != nil {
+			continue
+		}
+		occ, err := s.store.SubnetOccupancy(r.Context(), sn.ID)
+		if err != nil {
+			return nil, err
+		}
+		if next, n, _ := freeSummary(sn, hosts, occ); next != "" {
+			out = append(out, searchFree{SubnetID: sn.ID, Name: sn.Name, CIDR: sn.CIDR, IP: next, Free: n})
+		}
+	}
+	return out, nil
 }

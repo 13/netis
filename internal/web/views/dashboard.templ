@@ -8,7 +8,9 @@ import (
 
 // DashRow is one subnet's occupancy. Online, Unseen and Offline split the
 // used addresses by state; Reserved counts the static assignments (DHCP
-// reservations and fixed IPs) among them whatever their state.
+// reservations and fixed IPs) among them whatever their state. Free counts
+// the addresses free for static use and Pool the free ones in the DHCP
+// pool; NextFree is the lowest of the former, "" when none is left.
 type DashRow struct {
 	Subnet   store.Subnet
 	Online   int
@@ -17,7 +19,9 @@ type DashRow struct {
 	Reserved int
 	Used     int
 	Free     int
+	Pool     int
 	Hosts    int
+	NextFree string
 }
 
 type AttentionConflict struct {
@@ -349,6 +353,9 @@ templ dashSubnet(r DashRow) {
 			<span class="mono muted sn-cidr">{ r.Subnet.CIDR }</span>
 			<span class="spacer"></span>
 			<span class="sn-used muted">{ fmt.Sprintf("%d of %d used", r.Used, r.Hosts) }</span>
+			if r.NextFree != "" {
+				@dashNextFree(r)
+			}
 			if r.Subnet.Kind != "wireguard" && IsAdmin(ctx) {
 				<button hx-post={ fmt.Sprintf("/subnets/%d/scan", r.Subnet.ID) } hx-target="#toasts" hx-swap="beforeend" class="btn btn-quiet btn-sm btn-icon" aria-label={ "Scan " + r.Subnet.Name } title={ "Scan " + r.Subnet.Name }>
 					@Icon("radar", "")
@@ -366,10 +373,30 @@ templ dashSubnet(r DashRow) {
 			if r.Unseen > 0 {
 				<span><span class="sw res"></span><b>{ fmt.Sprint(r.Unseen) }</b> not seen yet</span>
 			}
-			<span><span class="sw free"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+			if r.NextFree != "" {
+				<a class="free-link" href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", r.Subnet.ID, r.NextFree)) }><span class="sw free"></span><b>{ fmt.Sprint(r.Free) }</b> free</a>
+			} else {
+				<span><span class="sw free"></span><b>{ fmt.Sprint(r.Free) }</b> free</span>
+			}
+			if r.Pool > 0 {
+				<span><b>{ fmt.Sprint(r.Pool) }</b> in DHCP pool</span>
+			}
 			<span><b>{ fmt.Sprint(r.Reserved) }</b> reserved</span>
 		</div>
 	</li>
+}
+
+// dashNextFree is a subnet's lowest free address on the dashboard: a link
+// that opens the subnet with that address picked, and a button that copies
+// it, so a static IP is one click away.
+templ dashNextFree(r DashRow) {
+	<span class="btn-pair dash-free">
+		<a class="btn btn-sm" href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", r.Subnet.ID, r.NextFree)) } aria-label={ "Next free IP in " + r.Subnet.Name + ": " + r.NextFree }>
+			<span class="muted">Next free</span>
+			<span class="mono">{ r.NextFree }</span>
+		</a>
+		@CopyIP(r.NextFree, "btn-sm")
+	</span>
 }
 
 templ integrationsPanel(d DashboardData) {

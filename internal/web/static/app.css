@@ -396,6 +396,13 @@
   .stack { display:flex; flex-direction:column; gap:var(--sp-3); }
   .grow { flex:1; }
   form.inline, .inline { display:inline-flex; align-items:center; gap:var(--sp-2); margin:0 var(--sp-1) 0 0; }
+  /* Controls that need JavaScript: the head script sets data-theme, so its
+     absence means there is none. */
+  :root:not([data-theme]) .js-only { display:none; }
+  /* Paired buttons that read as one control: a link and its copy button. */
+  .btn-pair { display:inline-flex; }
+  .btn-pair > .btn:first-child:not(:last-child) { border-top-right-radius:0; border-bottom-right-radius:0; }
+  .btn-pair > .btn + .btn { margin-left:-1px; border-top-left-radius:0; border-bottom-left-radius:0; }
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
 }
 

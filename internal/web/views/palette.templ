@@ -33,6 +33,7 @@ func paletteEntries(admin bool) []paletteEntry {
 		)
 	}
 	return append(out,
+		paletteEntry{Group: "Actions", Label: "Find a free IP", Icon: "network", Action: "free-ips", Keys: "free static address unused available", Shortcut: "g f"},
 		paletteEntry{Group: "Actions", Label: "Keyboard shortcuts", Icon: "keyboard", Action: "shortcuts", Keys: "help keys", Shortcut: "?"},
 		paletteEntry{Group: "Actions", Label: "Theme: follow system", Icon: "sun-moon", Action: "theme-system", Keys: "appearance auto"},
 		paletteEntry{Group: "Actions", Label: "Theme: light", Icon: "sun", Action: "theme-light", Keys: "appearance"},
@@ -55,7 +56,7 @@ templ palette() {
 				aria-controls="palette-list"
 				aria-autocomplete="list"
 				aria-label="Search devices, subnets and pages"
-				placeholder="Search devices, subnets, pages…"
+				placeholder="Search devices, subnets, pages… or type free"
 				autocomplete="off"
 				spellcheck="false"
 			/>
@@ -66,6 +67,7 @@ templ palette() {
 		<div class="palette-foot">
 			<span><kbd>↑</kbd> <kbd>↓</kbd> move</span>
 			<span><kbd>Enter</kbd> open</span>
+			<span class="palette-copy-hint" hidden><kbd>Shift</kbd> <kbd>Enter</kbd> copy IP</span>
 			<span><kbd>Esc</kbd> close</span>
 		</div>
 		<template id="palette-static">
@@ -95,6 +97,8 @@ templ palette() {
 				<dd>Go to subnets</dd>
 				<dt><kbd>g</kbd> <kbd>e</kbd></dt>
 				<dd>Go to events</dd>
+				<dt><kbd>g</kbd> <kbd>f</kbd></dt>
+				<dd>Find a free IP</dd>
 				if IsAdmin(ctx) {
 					<dt><kbd>n</kbd></dt>
 					<dd>New device</dd>

@@ -71,6 +71,7 @@
 		var ip = selected;
 		selected = null;
 		markSelected(null);
+		markRange(null);
 		panel.removeAttribute('data-open');
 		panel.innerHTML = empty ? empty.innerHTML : '';
 		setURL(null);
@@ -107,7 +108,13 @@
 		case 'PageDown': j = Math.min(i + cols * 4, n - 1); break;
 		case 'PageUp': j = Math.max(i - cols * 4, 0); break;
 		case 'Escape':
+			hideCard();
 			if (selected) { e.preventDefault(); close(); }
+			return;
+		case 'c': case 'C':
+			if (e.ctrlKey || e.metaKey || e.altKey) { return; }
+			e.preventDefault();
+			if (window.netisCopy) { window.netisCopy(p.value); }
 			return;
 		default: return;
 		}
@@ -135,6 +142,17 @@
 			close();
 			return;
 		}
+		var rc = e.target.closest && e.target.closest('[data-range]');
+		if (rc && portFor(rc.getAttribute('data-range'))) {
+			e.preventDefault();
+			showRange(rc.getAttribute('data-range'), rc.getAttribute('data-range-end'));
+			return;
+		}
+		var fo = e.target.closest && e.target.closest('[data-free-only]');
+		if (fo) {
+			setFreeOnly(fo.getAttribute('aria-pressed') !== 'true');
+			return;
+		}
 		var nf = e.target.closest && e.target.closest('[data-next-free]');
 		if (nf) {
 			var ip = nf.getAttribute('data-next-free');
@@ -150,14 +168,172 @@
 		}
 	});
 
-	// A port's name as a hover tooltip, set on first hover rather than
-	// printed into every port.
-	document.addEventListener('mouseover', function (e) {
-		var p = e.target;
-		if (p.classList && p.classList.contains('port') && !p.title && p.closest('form.patch')) {
-			p.title = p.getAttribute('aria-label');
+	// ---- free ranges: a chip marks its run of ports and opens the first ----
+	var range = null;
+	function markRange(r) {
+		range = r;
+		var f = form();
+		if (!f) { return; }
+		var old = f.querySelectorAll('.port.in-range');
+		for (var i = 0; i < old.length; i++) { old[i].classList.remove('in-range'); }
+		if (!r) { return; }
+		var all = ports(), on = false;
+		for (var j = 0; j < all.length; j++) {
+			if (all[j].value === r[0]) { on = true; }
+			if (on) { all[j].classList.add('in-range'); }
+			if (all[j].value === r[1]) { break; }
 		}
-	});
+	}
+	function showRange(start, end) {
+		open(start, false);
+		markRange([start, end || start]);
+		var p = portFor(start);
+		if (p) {
+			p.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			p.focus({ preventScroll: true });
+		}
+	}
+
+	// ---- "Free only": every port that is not free fades back. Remembered
+	// per browser, since someone hunting for addresses wants it each time.
+	var wrap = document.querySelector('.patch-wrap');
+	function setFreeOnly(on) {
+		if (!wrap) { return; }
+		wrap.toggleAttribute('data-free-only', on);
+		var b = document.querySelector('[data-free-only]');
+		if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+		try { localStorage.setItem('netis-free-only', on ? '1' : ''); } catch (e) {}
+	}
+	try { if (localStorage.getItem('netis-free-only') === '1') { setFreeOnly(true); } } catch (e) {}
+
+	// ---- the hover card: one element for the whole panel, filled from the
+	// grid's JSON (#grid-data) for the port under the pointer or, from the
+	// keyboard, the focused one. It repeats what the port's accessible name
+	// already says, so it is hidden from screen readers.
+	var card = document.getElementById('port-card');
+	var admin = card && card.hasAttribute('data-admin');
+	var cards = null, cardPort = null, showTimer = null, warmUntil = 0;
+	var hoverOK = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	var states = {
+		online: 'Online', offline: 'Offline', reserved: 'Not seen yet', conflict: 'IP conflict',
+		free: 'Free', pool: 'Free, in DHCP pool'
+	};
+
+	function cardData() {
+		if (cards) { return cards; }
+		var el = document.getElementById('grid-data');
+		try { cards = el ? JSON.parse(el.textContent) : {}; } catch (e) { cards = {}; }
+		return cards;
+	}
+	function stateOf(p) {
+		for (var k in states) { if (p.classList.contains(k)) { return k; } }
+		return p.classList.contains('edge') ? 'edge' : '';
+	}
+	function el(tag, cls, text) {
+		var n = document.createElement(tag);
+		if (cls) { n.className = cls; }
+		if (text) { n.textContent = text; }
+		return n;
+	}
+	function fillCard(p) {
+		var ip = p.value, st = stateOf(p), d = cardData()[ip];
+		card.textContent = '';
+		card.setAttribute('data-state', st);
+		var head = el('div', 'pc-head');
+		head.appendChild(el('span', 'pc-ip mono', ip));
+		if (p.classList.contains('static')) { head.appendChild(el('span', 'chip static', 'Static')); }
+		if (p.classList.contains('dhcp')) { head.appendChild(el('span', 'chip dhcp', 'DHCP')); }
+		card.appendChild(head);
+		if (st === 'edge') {
+			var lbl = p.getAttribute('aria-label') || '';
+			card.appendChild(el('div', 'pc-note', lbl.slice(ip.length + 1) || 'Not assignable'));
+			return;
+		}
+		var line = el('div', 'pc-state');
+		line.appendChild(el('span', 'led ' + st));
+		line.appendChild(el('span', '', states[st] || st));
+		card.appendChild(line);
+		if (d) {
+			card.appendChild(el('div', 'pc-name', d.n));
+			if (d.c > 1) { card.appendChild(el('div', 'pc-warn', d.c + ' devices claim this address')); }
+			if (d.m) { card.appendChild(el('div', 'pc-meta mono', d.m)); }
+			card.appendChild(el('div', 'pc-meta', d.s ? 'Last seen ' + d.s : 'Never seen by a scan'));
+		}
+		var hint = el('div', 'pc-hint');
+		hint.appendChild(document.createTextNode(st === 'free' && admin ? 'Click to add a device · ' : 'Click for details · '));
+		hint.appendChild(el('kbd', '', 'C'));
+		hint.appendChild(document.createTextNode(' copy'));
+		card.appendChild(hint);
+	}
+	// Below the port, or above it when there is no room underneath; kept
+	// inside the window at the sides, with the arrow still on the port.
+	function placeCard(p) {
+		var r = p.getBoundingClientRect(), gap = 8, edge = 8;
+		var w = card.offsetWidth, h = card.offsetHeight;
+		var below = r.bottom + gap + h <= window.innerHeight - edge || r.top - gap - h < edge;
+		var x = Math.min(Math.max(r.left + r.width / 2 - w / 2, edge), window.innerWidth - w - edge);
+		var y = below ? r.bottom + gap : r.top - gap - h;
+		card.style.left = Math.round(x) + 'px';
+		card.style.top = Math.round(y) + 'px';
+		card.style.setProperty('--ax', Math.round(r.left + r.width / 2 - x) + 'px');
+		card.setAttribute('data-side', below ? 'bottom' : 'top');
+	}
+	function showCard(p) {
+		if (!card) { return; }
+		clearTimeout(showTimer);
+		cardPort = p;
+		fillCard(p);
+		card.hidden = false;
+		placeCard(p);
+		card.setAttribute('data-show', '');
+	}
+	function hideCard() {
+		clearTimeout(showTimer);
+		showTimer = null;
+		if (!card || card.hidden) { cardPort = null; return; }
+		warmUntil = Date.now() + 400;
+		cardPort = null;
+		card.removeAttribute('data-show');
+		card.hidden = true;
+	}
+	// The first card waits a moment, so a pointer passing over the panel
+	// does not flicker; once one is up, moving along the ports switches it
+	// at once.
+	function wantCard(p) {
+		if (p === cardPort) { return; }
+		clearTimeout(showTimer);
+		if (cardPort || Date.now() < warmUntil) { showCard(p); return; }
+		showTimer = setTimeout(function () { showCard(p); }, 180);
+	}
+	function portAt(t) {
+		return t && t.closest ? t.closest('form.patch .port') : null;
+	}
+	if (card && hoverOK) {
+		document.addEventListener('mouseover', function (e) {
+			var p = portAt(e.target);
+			if (p) { wantCard(p); } else if (cardPort || showTimer) { hideCard(); }
+		});
+		document.addEventListener('mouseleave', hideCard);
+	}
+	if (card) {
+		document.addEventListener('focusin', function (e) {
+			var p = portAt(e.target);
+			if (p && p.matches(':focus-visible')) { showCard(p); }
+		});
+		document.addEventListener('focusout', function (e) {
+			if (portAt(e.target) && cardPort === e.target) { hideCard(); }
+		});
+		window.addEventListener('scroll', hideCard, { passive: true, capture: true });
+		window.addEventListener('resize', hideCard);
+		// C copies the address under the pointer too, not only the focused one.
+		document.addEventListener('keydown', function (e) {
+			if (!cardPort || portAt(e.target) || e.ctrlKey || e.metaKey || e.altKey) { return; }
+			if (e.key !== 'c' && e.key !== 'C') { return; }
+			if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable], dialog')) { return; }
+			e.preventDefault();
+			if (window.netisCopy) { window.netisCopy(cardPort.value); }
+		});
+	}
 
 	// A live refresh replaced the ports: put back the selection, the tab
 	// stop and focus, and bring the open details up to date. A lease change
@@ -171,7 +347,13 @@
 	});
 	document.addEventListener('htmx:afterSwap', function (e) {
 		if (!e.detail.target || e.detail.target.id !== 'grid') { return; }
+		cards = null;
+		if (cardPort) {
+			var hp = portFor(cardPort.value);
+			if (hp) { showCard(hp); } else { hideCard(); }
+		}
 		markSelected(selected);
+		markRange(range);
 		roving(refocus || selected);
 		if (refocus) {
 			var p = portFor(refocus);

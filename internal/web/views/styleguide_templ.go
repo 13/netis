@@ -1142,11 +1142,11 @@ func StyleguidePage(username string, colors []ColorToken) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = gridLegend().Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = gridLegend(true).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "</div><p class=\"hint\">The hover card grid.js shows for a port, here held and free.</p><div class=\"row sg-cards\"><div class=\"port-card\" data-show data-side=\"bottom\" data-state=\"online\"><div class=\"pc-head\"><span class=\"pc-ip mono\">192.168.1.10</span><span class=\"chip static\">Static</span></div><div class=\"pc-state\"><span class=\"led online\"></span><span>Online</span></div><div class=\"pc-name\">nas</div><div class=\"pc-meta mono\">00:11:32:aa:bb:cc</div><div class=\"pc-meta\">Last seen 2 min ago</div><div class=\"pc-hint\">Click for details · <kbd>C</kbd> copy</div></div><div class=\"port-card\" data-show data-side=\"bottom\" data-state=\"free\"><div class=\"pc-head\"><span class=\"pc-ip mono\">192.168.1.42</span></div><div class=\"pc-state\"><span class=\"led free\"></span><span>Free</span></div><div class=\"pc-hint\">Click to add a device · <kbd>C</kbd> copy</div></div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

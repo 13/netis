@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"net/netip"
+	"sort"
 	"strconv"
 
 	"netis/internal/store"
@@ -24,8 +25,99 @@ type GridStats struct {
 	Unseen   int
 	Conflict int
 	Free     int
+	Pool     int // free, but in the DHCP pool
 	Static   int
 	DHCP     int
+}
+
+// FreeRange is a run of consecutive addresses free for static use.
+type FreeRange struct {
+	Start, End string
+	N          int
+}
+
+// freeRangesShown caps the free ranges the subnet header lists; the rest
+// are summed up in one "more" note.
+const freeRangesShown = 6
+
+// shownRanges is the free ranges the header lists, largest first so the
+// room for a block of static addresses shows at once, then in address order.
+func shownRanges(rs []FreeRange) []FreeRange {
+	out := append([]FreeRange(nil), rs...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].N > out[j].N })
+	if len(out) > freeRangesShown {
+		out = out[:freeRangesShown]
+	}
+	sort.SliceStable(out, func(i, j int) bool { return indexOf(rs, out[i]) < indexOf(rs, out[j]) })
+	return out
+}
+
+func indexOf(rs []FreeRange, r FreeRange) int {
+	for i, x := range rs {
+		if x.Start == r.Start {
+			return i
+		}
+	}
+	return -1
+}
+
+// rangeLabel writes a free range compactly: ".50–.99" in an IPv4 subnet of
+// a /24 or smaller, the full addresses otherwise, one address alone.
+func rangeLabel(r FreeRange) string {
+	short := func(ip string) string {
+		a, err := netip.ParseAddr(ip)
+		if err != nil || !a.Is4() {
+			return ip
+		}
+		return fmt.Sprintf(".%d", a.As4()[3])
+	}
+	a, _ := netip.ParseAddr(r.Start)
+	b, _ := netip.ParseAddr(r.End)
+	if a.Is4() && b.Is4() && a.As4()[2] == b.As4()[2] && a.As4()[1] == b.As4()[1] {
+		if r.N == 1 {
+			return short(r.Start)
+		}
+		return short(r.Start) + "–" + short(r.End)
+	}
+	if r.N == 1 {
+		return r.Start
+	}
+	return r.Start + " – " + r.End
+}
+
+// rangeAria names a free range for screen readers.
+func rangeAria(r FreeRange) string {
+	if r.N == 1 {
+		return r.Start + ", 1 free address"
+	}
+	return fmt.Sprintf("%s to %s, %d free addresses", r.Start, r.End, r.N)
+}
+
+// portCard is what the hover card shows for a held address, keyed by the
+// address in the grid's JSON: device name, MAC, when it was last seen and
+// how many interfaces claim it.
+type portCard struct {
+	Name   string `json:"n"`
+	MAC    string `json:"m,omitempty"`
+	Seen   string `json:"s,omitempty"`
+	Claims int    `json:"c,omitempty"`
+}
+
+// portCards gathers the hover card details of every held address. Free
+// addresses need none: their port's state says it all.
+func portCards(cells []GridCell) map[string]portCard {
+	out := make(map[string]portCard)
+	for _, c := range cells {
+		if c.DeviceID == 0 {
+			continue
+		}
+		pc := portCard{Name: c.Name, MAC: c.MAC, Seen: c.Seen}
+		if c.Claims > 1 {
+			pc.Claims = c.Claims
+		}
+		out[c.IP] = pc
+	}
+	return out
 }
 
 // ScanState is where scanning of one subnet stands, for its scan control.
@@ -60,6 +152,7 @@ type GridPageData struct {
 	Cells    []GridCell
 	Stats    GridStats
 	NextFree string
+	Free     []FreeRange
 	Scan     ScanState
 	Devices  []store.DeviceRow
 	SortKey  string
@@ -176,7 +269,7 @@ func portRowLabel(ip string, wide bool) string {
 // panel's status line.
 var cellWords = map[string]string{
 	"online": "Online", "offline": "Offline", "reserved": "Not seen yet",
-	"conflict": "IP conflict", "free": "Free", "edge": "Not assignable",
+	"conflict": "IP conflict", "free": "Free", "pool": "Free, in DHCP pool", "edge": "Not assignable",
 }
 
 // cellTone is the status tone class for a grid state.

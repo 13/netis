@@ -47,9 +47,11 @@ func (s *Server) gridCells(ctx context.Context, sn store.Subnet) ([]views.GridCe
 		if o, ok := occ[ip]; ok {
 			c.DeviceID = o.DeviceID
 			c.Kind = o.Kind
+			c.Name, c.MAC, c.Claims = o.DeviceName, o.MAC, o.Count
 			c.Title = strings.TrimSpace(fmt.Sprintf("%s — %s %s", ip, o.DeviceName, o.MAC))
 			if o.LastSeen != "" {
-				c.Title += " last seen " + views.RelTime(o.LastSeen)
+				c.Seen = views.RelTime(o.LastSeen)
+				c.Title += " last seen " + c.Seen
 			}
 			switch {
 			case o.Count > 1:
@@ -61,6 +63,8 @@ func (s *Server) gridCells(ctx context.Context, sn store.Subnet) ([]views.GridCe
 			default:
 				c.State = "offline"
 			}
+		} else if a, err := netip.ParseAddr(ip); err == nil && sn.InDHCPPool(a) {
+			c.State = "pool"
 		}
 		cells = append(cells, c)
 	}
@@ -135,6 +139,8 @@ func gridStats(cells []views.GridCell) views.GridStats {
 			st.Conflict++
 		case "free":
 			st.Free++
+		case "pool":
+			st.Pool++
 		}
 		switch c.Kind {
 		case "static":
@@ -146,7 +152,8 @@ func gridStats(cells []views.GridCell) views.GridStats {
 	return st
 }
 
-// nextFree is the first free address in the grid, "" when none is left.
+// nextFree is the first address free for static use, "" when none is left.
+// Free addresses in the DHCP pool do not count.
 func nextFree(cells []views.GridCell) string {
 	for _, c := range cells {
 		if c.State == "free" {
@@ -154,6 +161,24 @@ func nextFree(cells []views.GridCell) string {
 		}
 	}
 	return ""
+}
+
+// freeRanges finds the runs of consecutive addresses free for static use,
+// in address order.
+func freeRanges(cells []views.GridCell) []views.FreeRange {
+	var out []views.FreeRange
+	for i := 0; i < len(cells); i++ {
+		if cells[i].State != "free" {
+			continue
+		}
+		j := i
+		for j+1 < len(cells) && cells[j+1].State == "free" {
+			j++
+		}
+		out = append(out, views.FreeRange{Start: cells[i].IP, End: cells[j].IP, N: j - i + 1})
+		i = j
+	}
+	return out
 }
 
 // cellInfo gathers the details panel's content for ip, reporting false when
@@ -194,7 +219,8 @@ func (s *Server) gridPageData(r *http.Request, sn store.Subnet, selected string)
 	u, _ := userFrom(r)
 	d := views.GridPageData{
 		Username: u.Username, Subnet: sn, Cells: cells,
-		Stats: gridStats(cells), NextFree: nextFree(cells), Scan: s.scanState(sn),
+		Stats: gridStats(cells), NextFree: nextFree(cells), Free: freeRanges(cells),
+		Scan: s.scanState(sn),
 	}
 	if selected != "" {
 		info, ok, err := s.cellInfo(r.Context(), sn, cells, selected)

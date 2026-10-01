@@ -5,11 +5,11 @@
 
 INSERT INTO setting (key, value) VALUES ('onboarded', '1');
 
-INSERT INTO subnet (id, cidr, name, vlan_id, kind, scan_enabled, scan_interval_sec) VALUES
-  (1, '192.168.1.0/24', 'LAN', NULL, 'lan', 1, 300),
-  (2, '10.0.20.0/24', 'IoT', 20, 'lan', 1, 600),
-  (3, '10.10.10.0/24', 'Proxmox vmbr0', NULL, 'proxmox-bridge', 1, 300),
-  (4, '10.6.0.0/24', 'WireGuard', NULL, 'wireguard', 0, 120);
+INSERT INTO subnet (id, cidr, name, vlan_id, kind, scan_enabled, scan_interval_sec, dhcp_start, dhcp_end) VALUES
+  (1, '192.168.1.0/24', 'LAN', NULL, 'lan', 1, 300, '192.168.1.100', '192.168.1.199'),
+  (2, '10.0.20.0/24', 'IoT', 20, 'lan', 1, 600, '', ''),
+  (3, '10.10.10.0/24', 'Proxmox vmbr0', NULL, 'proxmox-bridge', 1, 300, '', ''),
+  (4, '10.6.0.0/24', 'WireGuard', NULL, 'wireguard', 0, 120, '', '');
 
 INSERT INTO device (id, name, kind, vendor, model, function, source, parent_device_id, proxmox_vmid, wg_pubkey, reviewed, alert_offline, upstream_missing_since, notes, created_at) VALUES
   (1, 'opnsense', 'router', 'PC Engines', 'APU2', 'Firewall and DHCP', 'manual', NULL, NULL, NULL, 1, 1, NULL, '', '2026-03-01T09:00:00Z'),
