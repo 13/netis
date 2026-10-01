@@ -366,10 +366,54 @@ func parseSubnetForm(r *http.Request) (sn store.Subnet, msg string) {
 	if err != nil || interval < 30 {
 		interval = 120
 	}
+	start, end, msg := parseDHCPPool(prefix.Masked(), r.FormValue("dhcp_start"), r.FormValue("dhcp_end"))
+	if msg != "" {
+		return store.Subnet{}, msg
+	}
 	return store.Subnet{
 		CIDR: prefix.Masked().String(), Name: r.FormValue("name"), Kind: kind,
 		ScanEnabled: r.FormValue("scan_enabled") == "on", ScanIntervalSec: interval,
+		DHCPStart: start, DHCPEnd: end,
 	}, ""
+}
+
+// parseDHCPPool checks a subnet's DHCP pool: both ends blank (no pool), or
+// two addresses of the subnet with the first no higher than the last. A
+// last octet alone ("100") is read as that address in the subnet, the way
+// the pool is usually written on a router.
+func parseDHCPPool(prefix netip.Prefix, start, end string) (string, string, string) {
+	start, end = strings.TrimSpace(start), strings.TrimSpace(end)
+	if start == "" && end == "" {
+		return "", "", ""
+	}
+	if start == "" || end == "" {
+		return "", "", "give the DHCP pool both a first and a last address, or leave both empty"
+	}
+	lo, ok1 := poolAddr(prefix, start)
+	hi, ok2 := poolAddr(prefix, end)
+	switch {
+	case !ok1 || !ok2:
+		return "", "", "the DHCP pool's addresses must be in " + prefix.String() + ", like " + prefix.Addr().Next().String()
+	case hi.Less(lo):
+		return "", "", "the DHCP pool's first address must not come after its last"
+	}
+	return lo.String(), hi.String(), ""
+}
+
+// poolAddr reads one end of a DHCP pool: a full address in prefix, or for an
+// IPv4 subnet a last octet that completes the network address.
+func poolAddr(prefix netip.Prefix, s string) (netip.Addr, bool) {
+	if n, err := strconv.Atoi(s); err == nil && prefix.Addr().Is4() && n >= 0 && n <= 255 {
+		b := prefix.Addr().As4()
+		b[3] = byte(n)
+		a := netip.AddrFrom4(b)
+		return a, prefix.Contains(a)
+	}
+	a, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return a, prefix.Contains(a)
 }
 
 func (s *Server) handleSubnetDelete(w http.ResponseWriter, r *http.Request) {
