@@ -18,6 +18,23 @@ type APIToken struct {
 	CreatedAt  string
 	LastUsedAt *string
 	ExpiresAt  *string
+	// ReadOnly tokens may only read: GET and HEAD.
+	ReadOnly bool
+}
+
+// TokenUser is the owner of a presented API token, and whether the token is
+// read-only.
+type TokenUser struct {
+	User
+	ReadOnly bool
+}
+
+// tokenScope is how a token's read-only flag is stored.
+func tokenScope(readOnly bool) string {
+	if readOnly {
+		return "read"
+	}
+	return "full"
 }
 
 // apiTokenTouchInterval is how stale last_used_at may get before a lookup
@@ -26,24 +43,27 @@ type APIToken struct {
 const apiTokenTouchInterval = time.Minute
 
 // CreateAPIToken stores a new token for a user under its digest. expiresAt is
-// an RFC3339 timestamp, or "" for a token that does not expire.
-func (s *Store) CreateAPIToken(ctx context.Context, userID int64, name, token, expiresAt string, now time.Time) (int64, error) {
-	return s.insertReturningID(ctx, `INSERT INTO api_token (user_id,name,token_hash,created_at,expires_at)
-		VALUES (?,?,?,?,?)`,
-		userID, name, hashToken(token), now.UTC().Format(time.RFC3339), nullable(expiresAt))
+// an RFC3339 timestamp, or "" for a token that does not expire; a readOnly
+// token may only read.
+func (s *Store) CreateAPIToken(ctx context.Context, userID int64, name, token, expiresAt string, readOnly bool, now time.Time) (int64, error) {
+	return s.insertReturningID(ctx, `INSERT INTO api_token (user_id,name,token_hash,created_at,expires_at,scope)
+		VALUES (?,?,?,?,?,?)`,
+		userID, name, hashToken(token), now.UTC().Format(time.RFC3339), nullable(expiresAt), tokenScope(readOnly))
 }
 
-// GetUserByAPIToken resolves a presented token to its owner, reporting false
-// for an unknown or expired one. It records the use, at most once per
-// apiTokenTouchInterval per token.
-func (s *Store) GetUserByAPIToken(ctx context.Context, token string, now time.Time) (User, bool, error) {
-	var u User
+// GetUserByAPIToken resolves a presented token to its owner and scope,
+// reporting false for an unknown or expired one. It records the use, at most
+// once per apiTokenTouchInterval per token.
+func (s *Store) GetUserByAPIToken(ctx context.Context, token string, now time.Time) (TokenUser, bool, error) {
+	var u TokenUser
 	var id int64
+	var scope string
 	nowS := now.UTC().Format(time.RFC3339)
-	err := s.queryRow(ctx, `SELECT t.id,u.id,u.username,u.password_hash,u.role FROM api_token t
+	err := s.queryRow(ctx, `SELECT t.id,t.scope,u.id,u.username,u.password_hash,u.role FROM api_token t
 		JOIN "user" u ON u.id=t.user_id
 		WHERE t.token_hash=? AND (t.expires_at IS NULL OR t.expires_at>?)`, hashToken(token), nowS).
-		Scan(&id, &u.ID, &u.Username, &u.PasswordHash, &u.Role)
+		Scan(&id, &scope, &u.ID, &u.Username, &u.PasswordHash, &u.Role)
+	u.ReadOnly = scope == "read"
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return u, false, nil
@@ -61,7 +81,7 @@ func (s *Store) GetUserByAPIToken(ctx context.Context, token string, now time.Ti
 // ListAPITokens returns tokens newest first: one user's when userID is
 // non-zero, everybody's (for an admin) when it is zero.
 func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, error) {
-	q := `SELECT t.id,t.user_id,u.username,t.name,t.created_at,t.last_used_at,t.expires_at
+	q := `SELECT t.id,t.user_id,u.username,t.name,t.created_at,t.last_used_at,t.expires_at,t.scope
 		FROM api_token t JOIN "user" u ON u.id=t.user_id`
 	var args []any
 	if userID != 0 {
@@ -72,9 +92,11 @@ func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, er
 	var out []APIToken
 	err := s.eachRow(ctx, q, func(rows *sql.Rows) error {
 		var t APIToken
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Username, &t.Name, &t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt); err != nil {
+		var scope string
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Username, &t.Name, &t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &scope); err != nil {
 			return err
 		}
+		t.ReadOnly = scope == "read"
 		out = append(out, t)
 		return nil
 	}, args...)

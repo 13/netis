@@ -190,7 +190,7 @@ func TestAdminRoutesRefuseViewersAndAnonymous(t *testing.T) {
 	cookie := viewerSession(t, st)
 	devID, snID := seedInventory(t, st)
 	eve, _, _ := st.GetUserByName(t.Context(), "eve")
-	if _, err := st.CreateAPIToken(t.Context(), eve.ID, "eve", "netis_viewer", "", time.Now()); err != nil {
+	if _, err := st.CreateAPIToken(t.Context(), eve.ID, "eve", "netis_viewer", "", false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 

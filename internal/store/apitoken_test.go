@@ -17,11 +17,11 @@ func TestAPITokenLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		benTok, err := s.CreateAPIToken(ctx, ben, "backup script", "netis_ben", "", now)
+		benTok, err := s.CreateAPIToken(ctx, ben, "backup script", "netis_ben", "", false, now)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.CreateAPIToken(ctx, eve, "grafana", "netis_eve", now.Add(time.Hour).Format(time.RFC3339), now); err != nil {
+		if _, err := s.CreateAPIToken(ctx, eve, "grafana", "netis_eve", now.Add(time.Hour).Format(time.RFC3339), false, now); err != nil {
 			t.Fatal(err)
 		}
 
@@ -85,7 +85,7 @@ func TestAPITokenLastUsedThrottled(t *testing.T) {
 		ctx := t.Context()
 		t0 := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 		uid, _ := s.CreateUser(ctx, "ben", "h", "admin")
-		if _, err := s.CreateAPIToken(ctx, uid, "x", "netis_x", "", t0); err != nil {
+		if _, err := s.CreateAPIToken(ctx, uid, "x", "netis_x", "", false, t0); err != nil {
 			t.Fatal(err)
 		}
 		lastUsed := func() string {
@@ -126,7 +126,7 @@ func TestAPITokensDeletedWithUser(t *testing.T) {
 			t.Fatal(err)
 		}
 		uid, _ := s.CreateUser(ctx, "eve", "h", "viewer")
-		if _, err := s.CreateAPIToken(ctx, uid, "x", "netis_eve", "", now); err != nil {
+		if _, err := s.CreateAPIToken(ctx, uid, "x", "netis_eve", "", false, now); err != nil {
 			t.Fatal(err)
 		}
 		if ok, err := s.DeleteUserGuarded(ctx, uid); err != nil || !ok {
@@ -147,8 +147,8 @@ func TestPruneCountsAPITokens(t *testing.T) {
 		ctx := t.Context()
 		now := time.Now()
 		uid, _ := s.CreateUser(ctx, "ben", "h", "admin")
-		s.CreateAPIToken(ctx, uid, "old", "netis_old", now.Add(-time.Hour).UTC().Format(time.RFC3339), now.Add(-2*time.Hour))
-		s.CreateAPIToken(ctx, uid, "forever", "netis_forever", "", now)
+		s.CreateAPIToken(ctx, uid, "old", "netis_old", now.Add(-time.Hour).UTC().Format(time.RFC3339), false, now.Add(-2*time.Hour))
+		s.CreateAPIToken(ctx, uid, "forever", "netis_forever", "", false, now)
 		r, err := s.Prune(ctx, now, 0, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -158,6 +158,39 @@ func TestPruneCountsAPITokens(t *testing.T) {
 		}
 		if _, ok, _ := s.GetUserByAPIToken(ctx, "netis_forever", now); !ok {
 			t.Fatal("a token with no expiry was pruned")
+		}
+	})
+}
+
+// A token is full or read-only; the lookup and the token list both say which.
+func TestAPITokenReadOnly(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := t.Context()
+		now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+		uid, err := s.CreateUser(ctx, "ben", "h", "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.CreateAPIToken(ctx, uid, "grafana", "netis_ro", "", true, now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.CreateAPIToken(ctx, uid, "ansible", "netis_rw", "", false, now); err != nil {
+			t.Fatal(err)
+		}
+		for tok, want := range map[string]bool{"netis_ro": true, "netis_rw": false} {
+			u, ok, err := s.GetUserByAPIToken(ctx, tok, now)
+			if err != nil || !ok || u.ID != uid || u.ReadOnly != want {
+				t.Errorf("%s: u=%+v ok=%v err=%v, want read-only %v", tok, u, ok, err, want)
+			}
+		}
+		list, err := s.ListAPITokens(ctx, uid)
+		if err != nil || len(list) != 2 {
+			t.Fatalf("list = %+v err=%v", list, err)
+		}
+		for _, tok := range list {
+			if tok.ReadOnly != (tok.Name == "grafana") {
+				t.Errorf("token %q read-only = %v", tok.Name, tok.ReadOnly)
+			}
 		}
 	})
 }

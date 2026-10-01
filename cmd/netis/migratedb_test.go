@@ -203,7 +203,7 @@ func seedForMigration(t *testing.T, s *store.Store) {
 	if err := s.CreateSession(ctx, "root-session", rootID, "2999-01-01T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAPIToken(ctx, rootID, "script", "netis_root", "", time.Now()); err != nil {
+	if _, err := s.CreateAPIToken(ctx, rootID, "script", "netis_root", "", false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSetting(ctx, "offline_after", "3"); err != nil {

@@ -17,13 +17,17 @@ The JSON API under `/api/` accepts either the session cookie the pages use or
 a personal **API token**. Create one under Settings → API tokens: it is shown
 once (`netis_` followed by 43 characters), only its SHA-256 digest is stored,
 and it acts with your role: a viewer's token can read, an admin's can also
-write. Tokens can expire (default 90 days, 0 = never), are revoked from the
+write. Tick **Read-only** for a token that only ever reads, whoever owns it
+(for a dashboard or monitoring): anything but `GET` and `HEAD` is answered
+`403`. The token list shows each token's access. Tokens can expire (default 90 days, 0 = never), are revoked from the
 same tab, and are deleted with their user. Expired tokens are removed by the
 retention sweep. Admins see and can revoke everyone's tokens.
 
 ```sh
 export NETIS=http://netis.lan:8080 TOKEN=netis_...
 curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
+# the next address free for static use in subnet 1
+curl -s -H "Authorization: Bearer $TOKEN" $NETIS/api/subnets/1/free | jq -r .next
 ```
 
 ## Endpoints
@@ -36,6 +40,7 @@ curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
 | `GET /api/devices` | any | every device with its IPs, MACs, tags and online state; `private_mac` is true when a MAC is randomized |
 | `GET /api/devices/{id}` | any | one device |
 | `GET /api/subnets` | any | configured subnets, with `dhcp_start`/`dhcp_end` and `dhcp_pool_source` (`user` or the integration that read it) when a pool is set |
+| `GET /api/subnets/{id}/free` | any | free addresses for static use: `next` (`""` when none is left), `free`, `pool_free` (free inside the DHCP pool) and `ranges` (`start`, `end`, `size`), largest first |
 | `GET /api/events?limit=N` | any | recent events, newest first (default 100, max 1000) |
 | `GET /api/status` | any | version, uptime, backend, device/subnet counts, integration results |
 | `GET /api/search?q=` | any | up to 8 devices (name, IP, MAC, tag, vendor, model or function) and 8 subnets (name or CIDR) matching `q`; what the command palette uses |
