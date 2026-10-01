@@ -2,9 +2,21 @@ package views
 
 import (
 	"fmt"
+	"net/netip"
 
 	"netis/internal/store"
 )
+
+// poolPlaceholder suggests a pool end in an IPv4 subnet: its network address
+// with the last octet n, or n alone when the subnet is not known yet.
+func poolPlaceholder(cidr string, n int) string {
+	if p, err := netip.ParsePrefix(cidr); err == nil && p.Addr().Is4() {
+		b := p.Masked().Addr().As4()
+		b[3] = byte(n)
+		return netip.AddrFrom4(b).String()
+	}
+	return fmt.Sprint(n)
+}
 
 // scanEvery describes a subnet's periodic scan: "Scans every 5m".
 func scanEvery(sn store.Subnet) string {
@@ -19,6 +31,17 @@ func scanEvery(sn store.Subnet) string {
 	default:
 		return fmt.Sprintf("Scans every %ds", sec)
 	}
+}
+
+// dhcpPoolFields are the DHCP pool's two ends in the subnet forms. Free
+// addresses inside the pool are kept apart from those free for static use.
+templ dhcpPoolFields(cidr, start, end string) {
+	<fieldset class="field-grid narrow dhcp-pool">
+		<legend>DHCP pool <span class="muted text-sm">(optional)</span></legend>
+		<label>First address <input type="text" name="dhcp_start" value={ start } placeholder={ poolPlaceholder(cidr, 100) } class="mono" inputmode="decimal" autocomplete="off"/></label>
+		<label>Last address <input type="text" name="dhcp_end" value={ end } placeholder={ poolPlaceholder(cidr, 199) } class="mono" inputmode="decimal" autocomplete="off"/></label>
+		<p class="hint">Free addresses in the pool are not suggested for static IPs. A last octet alone, like 100, is enough.</p>
+	</fieldset>
 }
 
 // subnetKindSelect is the kind picker in the subnet forms.
@@ -56,6 +79,7 @@ templ subnetRow(sn store.Subnet) {
 					@subnetKindSelect(sn.Kind)
 					<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
 				</div>
+				@dhcpPoolFields(sn.CIDR, sn.DHCPStart, sn.DHCPEnd)
 				<label class="chk">
 					<input
 						type="checkbox"
@@ -154,6 +178,7 @@ templ subnetAddForm(d SettingsData) {
 			@subnetKindSelect(settingOr(d.Values, "default_subnet_kind", "lan"))
 			<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
 		</div>
+		@dhcpPoolFields("", "", "")
 		<label class="chk">
 			<input
 				type="checkbox"

@@ -84,6 +84,8 @@ type apiSubnet struct {
 	VLANID          *int64 `json:"vlan_id,omitempty"`
 	ScanEnabled     bool   `json:"scan_enabled"`
 	ScanIntervalSec int    `json:"scan_interval_sec"`
+	DHCPStart       string `json:"dhcp_start,omitempty"`
+	DHCPEnd         string `json:"dhcp_end,omitempty"`
 }
 
 type apiEvent struct {
@@ -173,6 +175,7 @@ func (s *Server) handleAPISubnets(w http.ResponseWriter, r *http.Request) {
 		out = append(out, apiSubnet{
 			ID: sn.ID, CIDR: sn.CIDR, Name: sn.Name, Kind: sn.Kind, VLANID: sn.VLANID,
 			ScanEnabled: sn.ScanEnabled, ScanIntervalSec: sn.ScanIntervalSec,
+			DHCPStart: sn.DHCPStart, DHCPEnd: sn.DHCPEnd,
 		})
 	}
 	s.writeJSON(w, r, map[string]any{"subnets": out})

@@ -129,6 +129,47 @@
 		}
 	});
 
+	// netisCopy puts text on the clipboard and says so in a toast. Like the
+	// Copy buttons above, it falls back to execCommand outside a secure
+	// context (a plain-http LAN install).
+	function copyToast(msg, err) {
+		var box = document.getElementById('toasts');
+		if (!box) { return; }
+		var t = document.createElement('div');
+		t.className = 'toast' + (err ? ' is-error' : '');
+		t.setAttribute('role', err ? 'alert' : 'status');
+		t.textContent = msg;
+		box.appendChild(t);
+	}
+	window.netisCopy = function (text) {
+		var done = function () { copyToast('Copied ' + text); };
+		var legacy = function () {
+			var ta = document.createElement('textarea');
+			ta.value = text;
+			ta.setAttribute('readonly', '');
+			ta.style.position = 'fixed';
+			ta.style.opacity = '0';
+			document.body.appendChild(ta);
+			ta.select();
+			var ok = false;
+			try { ok = document.execCommand('copy'); } catch (err) {}
+			ta.remove();
+			if (ok) { done(); } else { copyToast('Could not copy ' + text, true); }
+		};
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(text).then(done, legacy);
+		} else {
+			legacy();
+		}
+	};
+	// [data-copy-text] buttons copy their value: an address to hand out.
+	document.addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('[data-copy-text]');
+		if (!b) { return; }
+		e.preventDefault();
+		window.netisCopy(b.getAttribute('data-copy-text'));
+	});
+
 	// Read-only fields marked data-select-all select their whole value on
 	// focus, so a token can be copied by hand in one go.
 	document.addEventListener('focusin', function (e) {

@@ -13,13 +13,19 @@ type GridCell struct {
 	DeviceID int64
 	Title    string
 	Kind     string
+	// For the hover card: the holding device, its MAC, when it was last
+	// seen (relative) and how many interfaces claim the address.
+	Name   string
+	MAC    string
+	Seen   string
+	Claims int
 }
 
 // cellStates names each grid state in words, for screen readers and anyone
 // who cannot tell the colours apart.
 var cellStates = map[string]string{
 	"online": "online", "offline": "offline", "reserved": "not seen yet",
-	"conflict": "IP conflict", "free": "free",
+	"conflict": "IP conflict", "free": "free", "pool": "free, in DHCP pool",
 }
 
 // cellLabel is a cell's accessible name: its address, its state and, when a
@@ -73,6 +79,13 @@ templ GridPage(d GridPageData) {
 		</div>
 		<div class="sn-body">
 			<section class="panel patch-wrap" aria-label="Address panel">
+				<div class="free-bar">
+					@freeStrip(d.Subnet, d.Free, false)
+					<button type="button" class="btn btn-sm free-only js-only" data-free-only aria-pressed="false">
+						@Icon("filter", "")
+						Free only
+					</button>
+				</div>
 				<div
 					id="grid"
 					hx-get={ fmt.Sprintf("/subnets/%d/grid", d.Subnet.ID) }
@@ -80,7 +93,16 @@ templ GridPage(d GridPageData) {
 				>
 					@GridFrag(d.Subnet, d.Cells, d.Selected)
 				</div>
-				@gridLegend()
+				@gridLegend(d.Subnet.DHCPStart != "")
+				<div
+					id="port-card"
+					class="port-card"
+					aria-hidden="true"
+					hidden
+					if IsAdmin(ctx) {
+						data-admin
+					}
+				></div>
 			</section>
 			<aside
 				id="cell-panel"
@@ -137,6 +159,7 @@ templ GridRefresh(d GridPageData) {
 		@gridStatsBody(d.Stats)
 	</div>
 	@nextFreeButtonOOB(d.Subnet, d.NextFree)
+	@freeStrip(d.Subnet, d.Free, true)
 	@ScanControlOOB(d.Scan)
 }
 
@@ -159,6 +182,9 @@ templ gridStatsBody(s GridStats) {
 			<li><span class="led conflict" aria-hidden="true"></span><b>{ fmt.Sprint(s.Conflict) }</b> { pluralWord(s.Conflict, "conflict", "conflicts") }</li>
 		}
 		<li><span class="led free" aria-hidden="true"></span><b>{ fmt.Sprint(s.Free) }</b> free</li>
+		if s.Pool > 0 {
+			<li><span class="led pool" aria-hidden="true"></span><b>{ fmt.Sprint(s.Pool) }</b> free in DHCP pool</li>
+		}
 		<li class="sn-lease"><b>{ fmt.Sprint(s.Static) }</b> static · <b>{ fmt.Sprint(s.DHCP) }</b> DHCP</li>
 	</ul>
 }
@@ -179,13 +205,75 @@ templ nextFreeButtonOOB(sn store.Subnet, ip string) {
 
 templ nextFreeBody(sn store.Subnet, ip string) {
 	if ip != "" {
-		<a class="btn" href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", sn.ID, ip)) } data-next-free={ ip }>
-			Next free IP
-			<span class="mono">{ ip }</span>
-		</a>
+		<span class="btn-pair">
+			<a class="btn" href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", sn.ID, ip)) } data-next-free={ ip }>
+				Next free IP
+				<span class="mono">{ ip }</span>
+			</a>
+			@CopyIP(ip, "")
+		</span>
 	} else {
 		<button type="button" class="btn" disabled>No free IP</button>
 	}
+}
+
+// CopyIP is a button that copies an address to the clipboard (dialog.js).
+// It shows only with JavaScript, which it needs.
+templ CopyIP(ip, size string) {
+	<button type="button" class={ "btn", "btn-icon", size, "js-only" } data-copy-text={ ip } aria-label={ "Copy " + ip } title={ "Copy " + ip }>
+		@Icon("copy", "")
+	</button>
+}
+
+// freeStrip lists the runs of addresses free for static use, the largest
+// first, so room for a block of static IPs shows at a glance. Each is a link
+// to its first address that grid.js turns into opening it in place and
+// marking the run in the panel.
+templ freeStrip(sn store.Subnet, rs []FreeRange, oob bool) {
+	<div
+		id="free-strip"
+		class="free-strip"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<span class="free-strip-lbl">
+			if sn.DHCPStart != "" {
+				Free for static
+			} else {
+				Free ranges
+			}
+		</span>
+		if len(rs) == 0 {
+			<span class="muted text-sm">
+				if sn.DHCPStart != "" {
+					None outside the DHCP pool
+				} else {
+					None
+				}
+			</span>
+		} else {
+			<ul class="free-ranges" aria-label="Free address ranges">
+				for _, r := range shownRanges(rs) {
+					<li>
+						<a
+							class="range-chip"
+							href={ templ.URL(fmt.Sprintf("/subnets/%d?ip=%s", sn.ID, r.Start)) }
+							data-range={ r.Start }
+							data-range-end={ r.End }
+							aria-label={ rangeAria(r) }
+						>
+							<span class="mono">{ rangeLabel(r) }</span>
+							<span class="range-n">{ fmt.Sprint(r.N) }</span>
+						</a>
+					</li>
+				}
+			</ul>
+			if more := len(rs) - len(shownRanges(rs)); more > 0 {
+				<span class="muted text-sm">{ fmt.Sprintf("+%d smaller", more) }</span>
+			}
+		}
+	</div>
 }
 
 // ScanControl says where scanning of a subnet stands (last scan, running,
@@ -288,18 +376,22 @@ templ GridFrag(sn store.Subnet, cells []GridCell, selected string) {
 				</div>
 			}
 		</div>
-		<p id="patch-help" class="sr-only">Arrow keys move between addresses, Enter opens one.</p>
+		<p id="patch-help" class="sr-only">Arrow keys move between addresses, Enter opens one, C copies one.</p>
 	</form>
+	@templ.JSONScript("grid-data", portCards(cells))
 }
 
 // gridLegend says in words what each port look means.
-templ gridLegend() {
+templ gridLegend(pool bool) {
 	<ul class="patch-legend" aria-label="Legend">
 		<li><span class="port online static" aria-hidden="true"></span>Online</li>
 		<li><span class="port offline static" aria-hidden="true"></span>Offline</li>
 		<li><span class="port reserved static" aria-hidden="true"></span>Not seen yet</li>
 		<li><span class="port conflict static" aria-hidden="true"></span>IP conflict</li>
 		<li><span class="port free" aria-hidden="true"></span>Free</li>
+		if pool {
+			<li><span class="port pool" aria-hidden="true"></span>Free, in DHCP pool</li>
+		}
 		<li><span class="port edge" aria-hidden="true"></span>Network or broadcast</li>
 		<li><span class="port free static" aria-hidden="true"></span>Solid rim: static</li>
 		<li><span class="port free dhcp" aria-hidden="true"></span>Dashed rim: DHCP</li>

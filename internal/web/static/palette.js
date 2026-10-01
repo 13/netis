@@ -29,7 +29,8 @@
 
 	var items = [];   // what the list shows now, in order
 	var active = -1;  // index into items of the highlighted option
-	var remote = { q: null, devices: [], subnets: [] };
+	var remote = { q: null, devices: [], subnets: [], free: [] };
+	var copyHint = dlg.querySelector('.palette-copy-hint');
 	var timer = null, seq = 0, opener = null;
 
 	function icon(name) {
@@ -62,6 +63,13 @@
 			remote.subnets.forEach(function (s) {
 				items.push({ group: 'Subnets', label: s.name, icon: 'network', href: '/subnets/' + s.id, detail: s.cidr, mono: true });
 			});
+			// "free" lists each subnet's next free address: Enter opens it
+			// in its subnet, Shift-Enter copies it.
+			remote.free.forEach(function (f) {
+				items.push({ group: 'Free IPs', label: f.ip, monoLabel: true, icon: 'network', copy: f.ip,
+					href: '/subnets/' + f.subnet_id + '?ip=' + encodeURIComponent(f.ip),
+					detail: f.name + ' · ' + f.free + ' free' });
+			});
 		}
 		fixed.forEach(function (e) {
 			if (!q ? e.group !== 'Settings' : matches(e, words)) { items.push(e); }
@@ -85,7 +93,7 @@
 			li.dataset.index = i;
 			li.appendChild(icon(it.icon));
 			var lbl = document.createElement('span');
-			lbl.className = 'palette-label';
+			lbl.className = 'palette-label' + (it.monoLabel ? ' mono' : '');
 			lbl.textContent = it.label;
 			li.appendChild(lbl);
 			if (it.detail) {
@@ -107,6 +115,7 @@
 			list.appendChild(li);
 		});
 		empty.hidden = items.length > 0;
+		if (copyHint) { copyHint.hidden = !items.some(function (it) { return it.copy; }); }
 		select(items.length ? 0 : -1);
 	}
 
@@ -126,14 +135,14 @@
 	function fetchRemote() {
 		var q = input.value.trim();
 		clearTimeout(timer);
-		if (!q) { remote = { q: '', devices: [], subnets: [] }; render(); return; }
+		if (!q) { remote = { q: '', devices: [], subnets: [], free: [] }; render(); return; }
 		timer = setTimeout(function () {
 			var mine = ++seq;
 			fetch('/api/search?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
 				.then(function (r) { return r.ok ? r.json() : { devices: [], subnets: [] }; })
 				.then(function (j) {
 					if (mine !== seq) { return; }
-					remote = { q: q, devices: j.devices || [], subnets: j.subnets || [] };
+					remote = { q: q, devices: j.devices || [], subnets: j.subnets || [], free: j.free || [] };
 					render();
 				})
 				.catch(function () {});
@@ -144,11 +153,13 @@
 		if (window.netisTheme) { window.netisTheme(t); }
 	}
 
-	function run(it) {
+	function run(it, copy) {
 		if (!it) { return; }
 		close();
+		if (copy && it.copy && window.netisCopy) { window.netisCopy(it.copy); return; }
 		if (it.href) { location.href = it.href; return; }
 		switch (it.action) {
+			case 'free-ips': findFree(); break;
 			case 'new-device': newDevice(); break;
 			case 'scan-all':
 				if (window.htmx) { htmx.ajax('POST', '/scan', { target: '#toasts', swap: 'beforeend' }); }
@@ -160,6 +171,14 @@
 		}
 	}
 
+	// The palette, asking for each subnet's next free address.
+	function findFree() {
+		open();
+		input.value = 'free ';
+		render();
+		fetchRemote();
+	}
+
 	function newDevice() {
 		if (window.htmx) { htmx.ajax('GET', '/devices/new', { target: '#modal' }); } else { location.href = '/devices/new'; }
 	}
@@ -169,7 +188,7 @@
 		if (help.open) { help.close(); }
 		opener = document.activeElement;
 		input.value = '';
-		remote = { q: '', devices: [], subnets: [] };
+		remote = { q: '', devices: [], subnets: [], free: [] };
 		render();
 		dlg.showModal();
 		input.focus();
@@ -200,7 +219,7 @@
 		else if (e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { select((active - 1 + items.length) % items.length); } }
 		else if (e.key === 'Home' && items.length) { e.preventDefault(); select(0); }
 		else if (e.key === 'End' && items.length) { e.preventDefault(); select(items.length - 1); }
-		else if (e.key === 'Enter') { e.preventDefault(); run(items[active]); }
+		else if (e.key === 'Enter') { e.preventDefault(); run(items[active], e.shiftKey); }
 	});
 	list.addEventListener('mousemove', function (e) {
 		var li = e.target.closest('.palette-opt');
@@ -237,6 +256,12 @@
 			return;
 		}
 		if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || document.querySelector('dialog[open]')) { return; }
+		if (pendingG && Date.now() - pendingG < 1200 && e.key === 'f') {
+			e.preventDefault();
+			pendingG = 0;
+			findFree();
+			return;
+		}
 		if (pendingG && Date.now() - pendingG < 1200 && goTo[e.key]) {
 			e.preventDefault();
 			pendingG = 0;

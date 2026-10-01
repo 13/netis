@@ -41,6 +41,7 @@ func paletteEntries(admin bool) []paletteEntry {
 		)
 	}
 	return append(out,
+		paletteEntry{Group: "Actions", Label: "Find a free IP", Icon: "network", Action: "free-ips", Keys: "free static address unused available", Shortcut: "g f"},
 		paletteEntry{Group: "Actions", Label: "Keyboard shortcuts", Icon: "keyboard", Action: "shortcuts", Keys: "help keys", Shortcut: "?"},
 		paletteEntry{Group: "Actions", Label: "Theme: follow system", Icon: "sun-moon", Action: "theme-system", Keys: "appearance auto"},
 		paletteEntry{Group: "Actions", Label: "Theme: light", Icon: "sun", Action: "theme-light", Keys: "appearance"},
@@ -80,7 +81,7 @@ func palette() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<input id=\"palette-q\" type=\"text\" role=\"combobox\" aria-expanded=\"true\" aria-controls=\"palette-list\" aria-autocomplete=\"list\" aria-label=\"Search devices, subnets and pages\" placeholder=\"Search devices, subnets, pages…\" autocomplete=\"off\" spellcheck=\"false\"> <kbd>Esc</kbd></div><ul id=\"palette-list\" class=\"palette-list\" role=\"listbox\" aria-label=\"Results\"></ul><p class=\"palette-empty\" hidden>No matches.</p><div class=\"palette-foot\"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span> <span><kbd>Enter</kbd> open</span> <span><kbd>Esc</kbd> close</span></div><template id=\"palette-static\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<input id=\"palette-q\" type=\"text\" role=\"combobox\" aria-expanded=\"true\" aria-controls=\"palette-list\" aria-autocomplete=\"list\" aria-label=\"Search devices, subnets and pages\" placeholder=\"Search devices, subnets, pages… or type free\" autocomplete=\"off\" spellcheck=\"false\"> <kbd>Esc</kbd></div><ul id=\"palette-list\" class=\"palette-list\" role=\"listbox\" aria-label=\"Results\"></ul><p class=\"palette-empty\" hidden>No matches.</p><div class=\"palette-foot\"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span> <span><kbd>Enter</kbd> open</span> <span class=\"palette-copy-hint\" hidden><kbd>Shift</kbd> <kbd>Enter</kbd> copy IP</span> <span><kbd>Esc</kbd> close</span></div><template id=\"palette-static\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -92,7 +93,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Group)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -105,7 +106,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Icon)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 			if templ_7745c5c3_Err != nil {
@@ -118,7 +119,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Href)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -131,7 +132,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Action)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
@@ -144,7 +145,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Keys)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -157,7 +158,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(e.Shortcut)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 145}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 145}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
@@ -170,7 +171,7 @@ func palette() templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(e.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 73, Col: 157}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/palette.templ`, Line: 75, Col: 157}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -189,7 +190,7 @@ func palette() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</button></div><div class=\"db\"><dl class=\"keys\"><dt><kbd data-mod-key>Ctrl K</kbd></dt><dd>Search and jump to</dd><dt><kbd>/</kbd></dt><dd>Search this page, or open search</dd><dt><kbd>g</kbd> <kbd>h</kbd></dt><dd>Go to the dashboard</dd><dt><kbd>g</kbd> <kbd>d</kbd></dt><dd>Go to devices</dd><dt><kbd>g</kbd> <kbd>s</kbd></dt><dd>Go to subnets</dd><dt><kbd>g</kbd> <kbd>e</kbd></dt><dd>Go to events</dd>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</button></div><div class=\"db\"><dl class=\"keys\"><dt><kbd data-mod-key>Ctrl K</kbd></dt><dd>Search and jump to</dd><dt><kbd>/</kbd></dt><dd>Search this page, or open search</dd><dt><kbd>g</kbd> <kbd>h</kbd></dt><dd>Go to the dashboard</dd><dt><kbd>g</kbd> <kbd>d</kbd></dt><dd>Go to devices</dd><dt><kbd>g</kbd> <kbd>s</kbd></dt><dd>Go to subnets</dd><dt><kbd>g</kbd> <kbd>e</kbd></dt><dd>Go to events</dd><dt><kbd>g</kbd> <kbd>f</kbd></dt><dd>Find a free IP</dd>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

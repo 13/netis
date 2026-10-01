@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -29,11 +30,8 @@ func (s *Server) subnetRows(ctx context.Context) ([]views.DashRow, []views.Atten
 			return nil, nil, err
 		}
 		hosts, _ := scan.HostIPs(sn.CIDR)
-		free := len(hosts) - len(occ)
-		if free < 0 {
-			free = 0
-		}
-		row := views.DashRow{Subnet: sn, Used: len(occ), Free: free, Hosts: len(hosts)}
+		row := views.DashRow{Subnet: sn, Used: len(occ), Hosts: len(hosts)}
+		row.NextFree, row.Free, row.Pool = freeSummary(sn, hosts, occ)
 		for ip, o := range occ {
 			switch {
 			case o.Online:
@@ -55,6 +53,26 @@ func (s *Server) subnetRows(ctx context.Context) ([]views.DashRow, []views.Atten
 		rows = append(rows, row)
 	}
 	return rows, conflicts, nil
+}
+
+// freeSummary counts a subnet's host addresses that no device holds: free
+// those free for static use, pool those in the DHCP pool. next is the lowest
+// of the former, "" when none is left.
+func freeSummary(sn store.Subnet, hosts []string, occ map[string]store.Occupant) (next string, free, pool int) {
+	for _, ip := range hosts {
+		if _, held := occ[ip]; held {
+			continue
+		}
+		if a, err := netip.ParseAddr(ip); err == nil && sn.InDHCPPool(a) {
+			pool++
+			continue
+		}
+		if next == "" {
+			next = ip
+		}
+		free++
+	}
+	return next, free, pool
 }
 
 // dashNewLimit caps how many unreviewed devices the attention list names;

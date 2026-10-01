@@ -36,7 +36,8 @@ database — no external services required.
   randomized phone MACs, IP conflicts and devices that vanished upstream are
   called out on the dashboard.
 - **Maps your addresses.** A patch-panel grid per subnet shows every IP as
-  online, offline, reserved, free or conflicting, and suggests the next free one.
+  online, offline, reserved, free or conflicting, lists the free ranges outside
+  the DHCP pool and puts the next free IP one click (or `g f`) away.
 - **Reads your other tools.** Proxmox (VMs and LXCs), Pi-hole, AdGuard Home and
   OPNsense (DHCP leases and reservations) and WireGuard (peer status over SSH).
   Syncs fill in details but never overwrite your edits.
