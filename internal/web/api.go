@@ -1,9 +1,12 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"netis/internal/buildinfo"
@@ -180,6 +183,46 @@ func (s *Server) handleAPISubnets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	s.writeJSON(w, r, map[string]any{"subnets": out})
+}
+
+// apiFreeRange is one run of addresses free for static use.
+type apiFreeRange struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
+	Size  int    `json:"size"`
+}
+
+// handleAPISubnetFree answers what the subnet page shows about free
+// addresses: the next one free for static use ("" when none is left), how
+// many are free outside and inside the DHCP pool, and the free ranges,
+// largest first (in address order among equals). It reads the same grid
+// cells the page does, so the two cannot disagree.
+func (s *Server) handleAPISubnetFree(w http.ResponseWriter, r *http.Request) {
+	sn, err := s.subnetFromPath(r)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.As(err, new(*strconv.NumError)) {
+			http.NotFound(w, r)
+			return
+		}
+		s.fail(w, r, err)
+		return
+	}
+	cells, err := s.gridCells(r.Context(), sn)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	stats := gridStats(cells)
+	ranges := freeRanges(cells)
+	sort.SliceStable(ranges, func(i, j int) bool { return ranges[i].N > ranges[j].N })
+	out := make([]apiFreeRange, 0, len(ranges))
+	for _, fr := range ranges {
+		out = append(out, apiFreeRange{Start: fr.Start, End: fr.End, Size: fr.N})
+	}
+	s.writeJSON(w, r, map[string]any{
+		"subnet_id": sn.ID, "cidr": sn.CIDR, "next": nextFree(cells),
+		"free": stats.Free, "pool_free": stats.Pool, "ranges": out,
+	})
 }
 
 // apiEventLimit bounds ?limit= so one request cannot ask netis to marshal the

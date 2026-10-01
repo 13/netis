@@ -317,3 +317,51 @@ func TestMetricsScrapeToken(t *testing.T) {
 func itoa(i int64) string {
 	return strconv.FormatInt(i, 10)
 }
+
+// /api/subnets/{id}/free answers what the subnet page shows: the next free
+// address for static use, the free counts in and out of the DHCP pool, and
+// the free ranges, largest first.
+func TestAPISubnetFree(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	snID, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.0.0.0/28", Name: "lab", Kind: "lan", ScanIntervalSec: 120,
+		DHCPStart: "10.0.0.1", DHCPEnd: "10.0.0.4"})
+	devID, _ := st.CreateDevice(t.Context(), store.Device{Name: "gw", Kind: "router", Source: "manual"})
+	ifID, _ := st.AddIface(t.Context(), devID, nil, nil)
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.5", "static")
+	st.AssignIP(t.Context(), ifID, snID, "10.0.0.9", "static")
+
+	var got struct {
+		SubnetID int64  `json:"subnet_id"`
+		CIDR     string `json:"cidr"`
+		Next     string `json:"next"`
+		Free     int    `json:"free"`
+		PoolFree int    `json:"pool_free"`
+		Ranges   []struct {
+			Start, End string
+			Size       int
+		} `json:"ranges"`
+	}
+	getJSON(t, srv, st, "/api/subnets/"+itoa(snID)+"/free", &got)
+	if got.SubnetID != snID || got.CIDR != "10.0.0.0/28" || got.Next != "10.0.0.6" || got.Free != 8 || got.PoolFree != 4 {
+		t.Fatalf("free = %+v", got)
+	}
+	if len(got.Ranges) != 2 ||
+		got.Ranges[0].Start != "10.0.0.10" || got.Ranges[0].End != "10.0.0.14" || got.Ranges[0].Size != 5 ||
+		got.Ranges[1].Start != "10.0.0.6" || got.Ranges[1].End != "10.0.0.8" || got.Ranges[1].Size != 3 {
+		t.Fatalf("ranges = %+v", got.Ranges)
+	}
+
+	for _, path := range []string{"/api/subnets/99/free", "/api/subnets/x/free", "/api/subnets/99999999999999999999/free"} {
+		wantJSONError(t, authedGet(t, srv, st, path), http.StatusNotFound, "not found")
+	}
+
+	// A full subnet has no next address and an empty list, not null.
+	full, _ := st.CreateSubnet(t.Context(), store.Subnet{CIDR: "10.9.0.0/30", Name: "p2p", Kind: "lan", ScanIntervalSec: 120})
+	st.AssignIP(t.Context(), ifID, full, "10.9.0.1", "static")
+	st.AssignIP(t.Context(), ifID, full, "10.9.0.2", "static")
+	rec := getJSON(t, srv, st, "/api/subnets/"+itoa(full)+"/free", nil)
+	if body := rec.Body.String(); !strings.Contains(body, `"next":""`) || !strings.Contains(body, `"ranges":[]`) {
+		t.Fatalf("full subnet body = %s", body)
+	}
+}

@@ -184,6 +184,7 @@ func NewServer(st *store.Store, broker *events.Broker, trigger ScanTrigger, runn
 	s.mux.HandleFunc("GET /api/export/devices.csv", s.handleExportCSV)
 	s.mux.HandleFunc("GET /api/export/devices.json", s.handleExportJSON)
 	s.mux.HandleFunc("GET /api/subnets", s.handleAPISubnets)
+	s.mux.HandleFunc("GET /api/subnets/{id}/free", s.handleAPISubnetFree)
 	s.mux.HandleFunc("GET /api/events", s.handleAPIEvents)
 	s.mux.HandleFunc("GET /api/status", s.handleAPIStatus)
 	s.mux.HandleFunc("GET /api/search", s.handleSearch)
