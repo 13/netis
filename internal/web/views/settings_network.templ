@@ -35,11 +35,15 @@ func scanEvery(sn store.Subnet) string {
 
 // dhcpPoolFields are the DHCP pool's two ends in the subnet forms. Free
 // addresses inside the pool are kept apart from those free for static use.
-templ dhcpPoolFields(cidr, start, end string) {
+// source is who set the pool; one an integration read says which.
+templ dhcpPoolFields(cidr, start, end, source string) {
 	<fieldset class="field-grid narrow dhcp-pool">
 		<legend>DHCP pool <span class="muted text-sm">(optional)</span></legend>
 		<label>First address <input type="text" name="dhcp_start" value={ start } placeholder={ poolPlaceholder(cidr, 100) } class="mono" inputmode="decimal" autocomplete="off"/></label>
 		<label>Last address <input type="text" name="dhcp_end" value={ end } placeholder={ poolPlaceholder(cidr, 199) } class="mono" inputmode="decimal" autocomplete="off"/></label>
+		if _, ok := IntegrationTitles[source]; ok {
+			<p class="hint">From { IntegrationName(source) }, kept in step with it. Edit it to set your own, or clear it to let the integrations fill it again.</p>
+		}
 		<p class="hint">Free addresses in the pool are not suggested for static IPs. A last octet alone, like 100, is enough.</p>
 	</fieldset>
 }
@@ -79,7 +83,7 @@ templ subnetRow(sn store.Subnet) {
 					@subnetKindSelect(sn.Kind)
 					<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ fmt.Sprint(sn.ScanIntervalSec) } min="30"/></label>
 				</div>
-				@dhcpPoolFields(sn.CIDR, sn.DHCPStart, sn.DHCPEnd)
+				@dhcpPoolFields(sn.CIDR, sn.DHCPStart, sn.DHCPEnd, sn.DHCPPoolSource)
 				<label class="chk">
 					<input
 						type="checkbox"
@@ -178,7 +182,7 @@ templ subnetAddForm(d SettingsData) {
 			@subnetKindSelect(settingOr(d.Values, "default_subnet_kind", "lan"))
 			<label>Scan interval (seconds) <input type="number" name="scan_interval_sec" value={ settingOr(d.Values, "default_scan_interval_sec", "120") } min="30"/></label>
 		</div>
-		@dhcpPoolFields("", "", "")
+		@dhcpPoolFields("", "", "", "")
 		<label class="chk">
 			<input
 				type="checkbox"

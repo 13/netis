@@ -14,6 +14,7 @@ import (
 type Fetcher interface {
 	Leases(context.Context) (Leases, error)
 	ARP(context.Context) ([]ARPEntry, error)
+	Pools(ctx context.Context, backend string) ([]leases.Range, error)
 }
 
 type Sync struct {
@@ -37,11 +38,11 @@ type Stats struct {
 	ARPUnavailable bool
 }
 
-// RunOnce fills in MACs from the firewall's ARP table and then merges its
-// DHCP leases into the inventory. The ARP step goes first so a lease for a
-// host the scanner found without a MAC (on a routed subnet) enriches that
-// device instead of creating a second one beside it. A failure to read the
-// ARP table does not fail the run.
+// RunOnce fills in MACs from the firewall's ARP table, merges its DHCP leases
+// into the inventory, and gives each subnet its DHCP pool. The ARP step goes
+// first so a lease for a host the scanner found without a MAC (on a routed
+// subnet) enriches that device instead of creating a second one beside it.
+// A failure to read the ARP table or the pools does not fail the run.
 func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	ls, err := s.client.Leases(ctx)
 	if err != nil {
@@ -66,6 +67,13 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.Created = created
+
+	// Like the ARP table, the pool is a bonus that does not fail the run.
+	if pools, err := s.client.Pools(ctx, ls.Backend); err != nil {
+		slog.Warn("opnsense dhcp pools unavailable", "backend", ls.Backend, "err", err)
+	} else if _, err := leases.ApplyPools(ctx, s.store, "opnsense", subnets, pools); err != nil {
+		return Stats{}, err
+	}
 	return stats, nil
 }
 

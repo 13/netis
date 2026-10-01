@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"netis/internal/events"
+	"netis/internal/leases"
 	"netis/internal/store"
 	"netis/internal/store/storetest"
 )
@@ -71,6 +72,8 @@ const (
 	iscPath     = "/api/dhcpv4/leases/searchLease"
 	dnsmasqPath = "/api/dnsmasq/leases/search"
 	arpPath     = "/api/diagnostics/interface/getArp"
+	keaNetPath  = "/api/kea/dhcpv4/searchSubnet"
+	rangePath   = "/api/dnsmasq/settings/searchRange"
 )
 
 func TestLeasesKea(t *testing.T) {
@@ -312,4 +315,72 @@ func TestSyncARPUnavailable(t *testing.T) {
 			t.Fatalf("device %q source %q", r.Name, r.Source)
 		}
 	}
+}
+
+// Pools reads the backend that served the leases: Kea's subnet pools (one per
+// line, "a-b" or CIDR) or Dnsmasq's ranges. ISC has no API for its ranges, so
+// nothing is asked.
+func TestPools(t *testing.T) {
+	f := &fake{bodies: map[string]string{
+		keaNetPath: `{"rows":[
+		  {"subnet":"10.0.0.0/24","pools":"10.0.0.100-10.0.0.199\n10.0.0.50 - 10.0.0.59"},
+		  {"subnet":"10.0.1.0/24","pools":"10.0.1.128/26,junk"},
+		  {"subnet":"10.0.2.0/24","pools":""}
+		]}`,
+		rangePath: `{"rows":[
+		  {"interface":"lan","start_addr":"10.0.0.100","end_addr":"10.0.0.200"},
+		  {"interface":"lan","start_addr":"::","end_addr":"","constructor":"lan"}
+		]}`,
+	}}
+	c := NewClient(f.server(t).URL, "key", "secret", false)
+	want := map[string][]leases.Range{
+		"kea": {{Start: "10.0.0.100", End: "10.0.0.199"}, {Start: "10.0.0.50", End: "10.0.0.59"},
+			{Start: "10.0.1.128", End: "10.0.1.191"}},
+		"dnsmasq": {{Start: "10.0.0.100", End: "10.0.0.200"}},
+		"isc":     nil,
+		"":        nil,
+	}
+	for backend, w := range want {
+		f.hits = nil
+		got, err := c.Pools(context.Background(), backend)
+		if err != nil {
+			t.Fatalf("%s: %v", backend, err)
+		}
+		if len(got) != len(w) {
+			t.Fatalf("%s: pools = %+v, want %+v", backend, got, w)
+		}
+		for i := range w {
+			if got[i] != w[i] {
+				t.Errorf("%s: pool %d = %+v, want %+v", backend, i, got[i], w[i])
+			}
+		}
+		if (backend == "isc" || backend == "") && len(f.hits) != 0 {
+			t.Errorf("%s: asked %v", backend, f.hits)
+		}
+	}
+}
+
+// The sync gives the subnet the pool of the backend that served the leases;
+// a pool it cannot read leaves the run healthy.
+func TestSyncAppliesPool(t *testing.T) {
+	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
+		f := &fake{bodies: map[string]string{
+			keaPath:    `{"rows":[{"address":"10.1.0.150","hwaddr":"aa:bb:cc:00:01:01","hostname":"nas","state":"0"}]}`,
+			keaNetPath: `{"rows":[{"subnet":"10.1.0.0/24","pools":"10.1.0.100-10.1.0.199"}]}`,
+			arpPath:    `[]`,
+		}}
+		sync, snID := newSync(t, st, f)
+		if _, err := sync.RunOnce(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		sn, err := st.GetSubnet(t.Context(), snID)
+		if err != nil || sn.DHCPStart != "10.1.0.100" || sn.DHCPEnd != "10.1.0.199" || sn.DHCPPoolSource != "opnsense" {
+			t.Fatalf("subnet = %+v err=%v", sn, err)
+		}
+
+		f.codes = map[string]int{keaNetPath: 403}
+		if _, err := sync.RunOnce(t.Context()); err != nil {
+			t.Fatalf("a pool read failure failed the run: %v", err)
+		}
+	})
 }

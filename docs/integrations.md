@@ -9,6 +9,7 @@ How netis reads devices and leases from Proxmox, Pi-hole, AdGuard Home, OPNsense
 - [Proxmox](#proxmox)
 - [Pi-hole (v6)](#pi-hole-v6)
 - [AdGuard Home and OPNsense](#adguard-home-and-opnsense)
+- [DHCP pools](#dhcp-pools)
 - [WireGuard](#wireguard)
 - [Missing upstream](#missing-upstream)
 
@@ -110,6 +111,25 @@ several addresses, an address two devices claim and a MAC another device
 already has are skipped, nothing is created from ARP, and a MAC that is set
 is never changed. Without the privilege the leases still sync and the status
 line says the ARP table was unavailable.
+
+## DHCP pools
+
+Pi-hole, AdGuard Home and OPNsense also give each subnet its DHCP pool, the
+range free addresses are kept out of when netis suggests a static IP (see
+[Subnet grid](usage.md#subnet-grid)). Pi-hole's comes from
+`/api/config/dhcp` and AdGuard Home's from its IPv4 range; on OPNsense it is
+Kea's subnet pools or Dnsmasq's DHCP ranges, whichever backend served the
+leases. ISC dhcpd has no API for its ranges, so set those by hand. A pool
+lands on the subnet that holds it whole; when a subnet has several, the
+largest wins.
+
+A pool you typed in Settings → Network is never replaced. One an integration
+set says "From OPNsense" (or whichever) under the pool fields and follows
+the server while you leave it alone; editing it makes it yours, and clearing
+both fields hands it back, so the next sync fills it again. Only the
+integration that set a pool updates it, and none ever clears one: a pool
+removed upstream stays until you clear it. A pool that cannot be read (a
+missing privilege, say) is logged and the leases still sync.
 
 ## WireGuard
 

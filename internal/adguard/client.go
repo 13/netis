@@ -15,12 +15,13 @@ import (
 )
 
 // DHCP is what AdGuard Home reports about its DHCP server: whether it is on,
-// its current leases and its static leases (reservations). Entries without a
-// valid MAC or IP are dropped.
+// its current leases, its static leases (reservations) and its IPv4 pool.
+// Entries without a valid MAC or IP are dropped.
 type DHCP struct {
 	Enabled bool
 	Leases  []leases.Entry
 	Static  []leases.Entry
+	Pools   []leases.Range
 }
 
 // Client talks to the AdGuard Home control API with HTTP basic auth.
@@ -71,14 +72,23 @@ func (c *Client) DHCPStatus(ctx context.Context) (DHCP, error) {
 		return DHCP{}, fmt.Errorf("adguard %s: HTTP %d", path, resp.StatusCode)
 	}
 	var body struct {
-		Enabled      bool    `json:"enabled"`
+		Enabled bool `json:"enabled"`
+		V4      struct {
+			RangeStart string `json:"range_start"`
+			RangeEnd   string `json:"range_end"`
+		} `json:"v4"`
 		Leases       []lease `json:"leases"`
 		StaticLeases []lease `json:"static_leases"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return DHCP{}, fmt.Errorf("adguard %s: %w", path, err)
 	}
-	return DHCP{Enabled: body.Enabled, Leases: entries(body.Leases), Static: entries(body.StaticLeases)}, nil
+	d := DHCP{Enabled: body.Enabled, Leases: entries(body.Leases), Static: entries(body.StaticLeases)}
+	// AdGuard Home's IPv6 pool has a start and no end, so only IPv4's is read.
+	if r, ok := leases.ParseRange(body.V4.RangeStart + "-" + body.V4.RangeEnd); ok {
+		d.Pools = append(d.Pools, r)
+	}
+	return d, nil
 }
 
 func entries(in []lease) []leases.Entry {

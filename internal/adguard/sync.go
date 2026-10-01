@@ -33,7 +33,8 @@ type Stats struct {
 	Created  int
 }
 
-// RunOnce merges AdGuard Home's leases and static leases into the inventory.
+// RunOnce merges AdGuard Home's leases and static leases into the inventory,
+// and its DHCP pool into the subnet that holds it.
 // With the DHCP server off it changes nothing and reports that, rather than
 // applying whatever stale leases the response still lists.
 func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
@@ -50,6 +51,9 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 	}
 	created, err := leases.Apply(ctx, s.store, s.events, "adguard", subnets, dhcp.Static, dhcp.Leases)
 	if err != nil {
+		return Stats{}, err
+	}
+	if _, err := leases.ApplyPools(ctx, s.store, "adguard", subnets, dhcp.Pools); err != nil {
 		return Stats{}, err
 	}
 	return Stats{Leases: len(dhcp.Leases), Static: len(dhcp.Static), Created: created}, nil

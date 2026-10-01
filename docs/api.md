@@ -35,7 +35,7 @@ curl -H "Authorization: Bearer $TOKEN" $NETIS/api/devices
 | --- | --- | --- |
 | `GET /api/devices` | any | every device with its IPs, MACs, tags and online state; `private_mac` is true when a MAC is randomized |
 | `GET /api/devices/{id}` | any | one device |
-| `GET /api/subnets` | any | configured subnets |
+| `GET /api/subnets` | any | configured subnets, with `dhcp_start`/`dhcp_end` and `dhcp_pool_source` (`user` or the integration that read it) when a pool is set |
 | `GET /api/events?limit=N` | any | recent events, newest first (default 100, max 1000) |
 | `GET /api/status` | any | version, uptime, backend, device/subnet counts, integration results |
 | `GET /api/search?q=` | any | up to 8 devices (name, IP, MAC, tag, vendor, model or function) and 8 subnets (name or CIDR) matching `q`; what the command palette uses |

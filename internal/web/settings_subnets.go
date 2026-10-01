@@ -18,6 +18,9 @@ func (s *Server) handleSubnetCreate(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "network", http.StatusBadRequest, msg)
 		return
 	}
+	if sn.DHCPStart != "" {
+		sn.DHCPPoolSource = "user"
+	}
 	auditNote(r).Target = "subnet " + sn.CIDR
 	if _, err := s.store.CreateSubnet(r.Context(), sn); err != nil {
 		s.settingsWriteError(w, r, "network", err, subnetExistsMsg)
@@ -32,7 +35,8 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := s.store.GetSubnet(r.Context(), id); err != nil {
+	old, err := s.store.GetSubnet(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -46,12 +50,27 @@ func (s *Server) handleSubnetUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sn.ID = id
+	sn.DHCPPoolSource = poolSource(old, sn)
 	auditNote(r).Target = "subnet " + sn.CIDR
 	if err := s.store.UpdateSubnet(r.Context(), sn); err != nil {
 		s.settingsWriteError(w, r, "network", err, subnetExistsMsg)
 		return
 	}
 	http.Redirect(w, r, "/settings/network", http.StatusSeeOther)
+}
+
+// poolSource is who owns the pool the subnet form saves: whoever owned it
+// while it is unchanged, the user once it is edited, and nobody when it is
+// cleared, so a DHCP integration may fill it again.
+func poolSource(old, sn store.Subnet) string {
+	switch {
+	case sn.DHCPStart == "" && sn.DHCPEnd == "":
+		return ""
+	case sn.DHCPStart == old.DHCPStart && sn.DHCPEnd == old.DHCPEnd:
+		return old.DHCPPoolSource
+	default:
+		return "user"
+	}
 }
 
 const subnetExistsMsg = "a subnet with that CIDR already exists"

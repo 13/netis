@@ -2,12 +2,15 @@ package pihole
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"netis/internal/leases"
 )
 
 const (
@@ -17,6 +20,7 @@ const (
 	]}`
 	dhcpHostsJSON = `{"config":{"dhcp":{"hosts":["AA:BB:CC:00:00:20,10.0.0.20,printer","BADENTRY"]}}}`
 	dnsHostsJSON  = `{"config":{"dns":{"hosts":["10.0.0.20 printer.lan","10.0.0.30 nas.lan"]}}}`
+	dhcpJSON      = `{"config":{"dhcp":{"active":%v,"start":"10.0.0.100","end":"10.0.0.199","router":"10.0.0.1","hosts":[]}}}`
 )
 
 // fixtureServer serves /api/auth (returns a SID) and the three read endpoints.
@@ -40,9 +44,34 @@ func fixtureServer(t *testing.T, authHits *int32) *httptest.Server {
 	mux.HandleFunc("/api/dhcp/leases", guard(leasesJSON))
 	mux.HandleFunc("/api/config/dhcp/hosts", guard(dhcpHostsJSON))
 	mux.HandleFunc("/api/config/dns/hosts", guard(dnsHostsJSON))
+	mux.HandleFunc("/api/config/dhcp", guard(fmt.Sprintf(dhcpJSON, true)))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// DHCPPool reads the pool of Pi-hole's DHCP server, and nothing while the
+// server is off: its config keeps the range either way.
+func TestDHCPPool(t *testing.T) {
+	var hits int32
+	pools, err := NewClient(fixtureServer(t, &hits).URL, "pw", false).DHCPPool(context.Background())
+	if err != nil || len(pools) != 1 || pools[0] != (leases.Range{Start: "10.0.0.100", End: "10.0.0.199"}) {
+		t.Fatalf("pools=%+v err=%v", pools, err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"session":{"sid":"SID123","valid":true}}`))
+	})
+	mux.HandleFunc("/api/config/dhcp", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, dhcpJSON, false)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	pools, err = NewClient(srv.URL, "pw", false).DHCPPool(context.Background())
+	if err != nil || len(pools) != 0 {
+		t.Fatalf("inactive: pools=%+v err=%v", pools, err)
+	}
 }
 
 func TestLeases(t *testing.T) {
