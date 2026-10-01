@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"netis/internal/leases"
 )
 
 // macRe matches a canonical lowercase colon-separated MAC (6 hex pairs).
@@ -272,4 +274,29 @@ func (c *Client) DNSRecords(ctx context.Context) ([]DNSRecord, error) {
 		}
 	}
 	return out, nil
+}
+
+// DHCPPool returns the range Pi-hole's DHCP server hands out, or none while
+// the server is off (its config keeps the range either way).
+func (c *Client) DHCPPool(ctx context.Context) ([]leases.Range, error) {
+	var body struct {
+		Config struct {
+			DHCP struct {
+				Active bool   `json:"active"`
+				Start  string `json:"start"`
+				End    string `json:"end"`
+			} `json:"dhcp"`
+		} `json:"config"`
+	}
+	if err := c.get(ctx, "/api/config/dhcp", &body); err != nil {
+		return nil, err
+	}
+	d := body.Config.DHCP
+	if !d.Active {
+		return nil, nil
+	}
+	if r, ok := leases.ParseRange(d.Start + "-" + d.End); ok {
+		return []leases.Range{r}, nil
+	}
+	return nil, nil
 }

@@ -2,22 +2,27 @@ package pihole
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"netis/internal/events"
+	"netis/internal/leases"
 	"netis/internal/store"
 	"netis/internal/store/storetest"
 )
 
 type fakeFetcher struct {
-	leases []Lease
-	res    []Reservation
-	dns    []DNSRecord
+	leases  []Lease
+	res     []Reservation
+	dns     []DNSRecord
+	pools   []leases.Range
+	poolErr error
 }
 
 func (f *fakeFetcher) Leases(context.Context) ([]Lease, error)             { return f.leases, nil }
 func (f *fakeFetcher) Reservations(context.Context) ([]Reservation, error) { return f.res, nil }
 func (f *fakeFetcher) DNSRecords(context.Context) ([]DNSRecord, error)     { return f.dns, nil }
+func (f *fakeFetcher) DHCPPool(context.Context) ([]leases.Range, error)    { return f.pools, f.poolErr }
 
 func testSync(t *testing.T) (*store.Store, *fakeFetcher, *Sync) {
 	t.Helper()
@@ -273,4 +278,25 @@ func testLeaseMoveRetiresOldDHCPAddress(t *testing.T, st *store.Store) {
 	if claims != 1 {
 		t.Fatalf("10.0.0.12 claimed by %d ifaces, want 1", claims)
 	}
+}
+
+// The sync gives the subnet Pi-hole's pool. A pool it cannot read does not
+// fail the run: the leases are still worth having.
+func TestSyncAppliesPool(t *testing.T) {
+	st, f, sync := testSync(t)
+	f.pools = []leases.Range{{Start: "10.0.0.100", End: "10.0.0.199"}}
+	if _, err := sync.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := st.ListSubnets(t.Context())
+	if sn := list[0]; sn.DHCPStart != "10.0.0.100" || sn.DHCPEnd != "10.0.0.199" || sn.DHCPPoolSource != "pihole" {
+		t.Fatalf("subnet = %+v", sn)
+	}
+
+	f.pools, f.poolErr = nil, errors.New("pihole /api/config/dhcp: HTTP 403")
+	f.leases = []Lease{{MAC: "aa:bb:cc:00:00:10", IP: "10.0.0.10", Hostname: "laptop"}}
+	if _, err := sync.RunOnce(context.Background()); err != nil {
+		t.Fatalf("a pool read failure failed the run: %v", err)
+	}
+	deviceByName(t, st, "laptop")
 }

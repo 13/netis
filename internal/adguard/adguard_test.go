@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"netis/internal/events"
+	"netis/internal/leases"
 	"netis/internal/store"
 	"netis/internal/store/storetest"
 )
@@ -62,6 +63,9 @@ func TestDHCPStatus(t *testing.T) {
 	if s := d.Static[0]; s.MAC != "aa:bb:cc:00:00:20" || s.IP != "10.0.0.20" || s.Hostname != "printer" {
 		t.Fatalf("static = %+v", s)
 	}
+	if len(d.Pools) != 1 || d.Pools[0] != (leases.Range{Start: "10.0.0.100", End: "10.0.0.200"}) {
+		t.Fatalf("pools = %+v", d.Pools)
+	}
 }
 
 // A wrong password surfaces as an HTTP 401 error, which the runner files
@@ -78,7 +82,8 @@ func TestDHCPStatusBadAuth(t *testing.T) {
 func TestSyncAppliesLeases(t *testing.T) {
 	storetest.EachDialect(t, func(t *testing.T, st *store.Store) {
 		ctx := t.Context()
-		if _, err := st.CreateSubnet(ctx, store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120}); err != nil {
+		snID, err := st.CreateSubnet(ctx, store.Subnet{CIDR: "10.0.0.0/24", Kind: "lan", ScanIntervalSec: 120})
+		if err != nil {
 			t.Fatal(err)
 		}
 		srv := fakeAdGuard(t, "", true)
@@ -103,6 +108,10 @@ func TestSyncAppliesLeases(t *testing.T) {
 		ips, _ := st.ListIPs(ctx, iface.ID)
 		if len(ips) != 1 || ips[0].Kind != "static" {
 			t.Fatalf("static lease ips = %+v", ips)
+		}
+		sn, err := st.GetSubnet(ctx, snID)
+		if err != nil || sn.DHCPStart != "10.0.0.100" || sn.DHCPEnd != "10.0.0.200" || sn.DHCPPoolSource != "adguard" {
+			t.Fatalf("subnet pool = %+v err=%v", sn, err)
 		}
 	})
 }

@@ -3,6 +3,7 @@ package pihole
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"netis/internal/events"
 	"netis/internal/leases"
@@ -13,6 +14,7 @@ type Fetcher interface {
 	Leases(context.Context) ([]Lease, error)
 	Reservations(context.Context) ([]Reservation, error)
 	DNSRecords(context.Context) ([]DNSRecord, error)
+	DHCPPool(context.Context) ([]leases.Range, error)
 }
 
 type Sync struct {
@@ -64,6 +66,14 @@ func (s *Sync) RunOnce(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.Created = created
+
+	// The pool is a bonus: a Pi-hole that will not show its DHCP config still
+	// has leases worth having, so a failure here does not fail the run.
+	if pools, err := s.client.DHCPPool(ctx); err != nil {
+		slog.Warn("pihole dhcp pool unavailable", "err", err)
+	} else if _, err := leases.ApplyPools(ctx, s.store, "pihole", subnets, pools); err != nil {
+		return Stats{}, err
+	}
 
 	for _, rec := range dns {
 		snID, ok := leases.SubnetFor(subnets, rec.IP)

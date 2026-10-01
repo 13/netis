@@ -48,7 +48,9 @@ fades every address that cannot be handed out, and the **Next free IP** button
 has a copy button beside it. Give a subnet its DHCP pool (Settings → Network,
 first and last address, or just the last octets) and the free addresses inside
 it are drawn stippled and left out of the next free IP, the free ranges and the
-free count, so what is offered is safe to assign statically.
+free count, so what is offered is safe to assign statically. With a Pi-hole,
+AdGuard Home or OPNsense integration the pool fills itself in (see
+[DHCP pools](integrations.md#dhcp-pools)).
 
 ![A subnet grid](images/grid-light.png)
 

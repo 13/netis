@@ -279,6 +279,49 @@ func (c *Client) dnsmasqLeases(ctx context.Context) (Leases, error) {
 	return out, nil
 }
 
+// Pools returns the DHCP pools of backend, the one that served the leases:
+// Kea's subnet pools or Dnsmasq's ranges. ISC dhcpd has no API for its
+// ranges, so for it (and for no backend) the answer is none.
+func (c *Client) Pools(ctx context.Context, backend string) ([]leases.Range, error) {
+	var out []leases.Range
+	switch backend {
+	case "kea":
+		var body struct {
+			Rows []struct {
+				Pools flexString `json:"pools"`
+			} `json:"rows"`
+		}
+		if err := c.get(ctx, "/api/kea/dhcpv4/searchSubnet"+allRows, &body); err != nil {
+			return nil, err
+		}
+		// A subnet's pools are one per line, "first-last" or a CIDR block;
+		// commas are accepted too.
+		for _, row := range body.Rows {
+			for _, p := range strings.FieldsFunc(string(row.Pools), func(r rune) bool { return r == '\n' || r == ',' }) {
+				if r, ok := leases.ParseRange(p); ok {
+					out = append(out, r)
+				}
+			}
+		}
+	case "dnsmasq":
+		var body struct {
+			Rows []struct {
+				Start flexString `json:"start_addr"`
+				End   flexString `json:"end_addr"`
+			} `json:"rows"`
+		}
+		if err := c.get(ctx, "/api/dnsmasq/settings/searchRange"+allRows, &body); err != nil {
+			return nil, err
+		}
+		for _, row := range body.Rows {
+			if r, ok := leases.ParseRange(string(row.Start) + "-" + string(row.End)); ok {
+				out = append(out, r)
+			}
+		}
+	}
+	return out, nil
+}
+
 // ARP returns the firewall's ARP table. getArp answers with a bare array;
 // an object with rows, as the newer search endpoints use, is accepted too.
 // Rows without a valid IP and MAC are dropped.

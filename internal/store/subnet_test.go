@@ -81,3 +81,65 @@ func TestSubnetDHCPPool(t *testing.T) {
 		t.Fatalf("after clearing the pool: %+v err=%v", list, err)
 	}
 }
+
+// An integration sets a subnet's pool only while nobody else owns it: not
+// over a pool the user typed, nor over another integration's. It keeps its
+// own pool in step, and reports whether anything changed.
+func TestSetDHCPPoolFrom(t *testing.T) {
+	eachDialect(t, func(t *testing.T, s *Store) {
+		ctx := t.Context()
+		id, err := s.CreateSubnet(ctx, Subnet{CIDR: "10.0.0.0/24", Name: "lan", Kind: "lan", ScanIntervalSec: 120})
+		if err != nil {
+			t.Fatal(err)
+		}
+		set := func(start, end, source string) bool {
+			t.Helper()
+			changed, err := s.SetDHCPPoolFrom(ctx, id, start, end, source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return changed
+		}
+		pool := func() Subnet {
+			t.Helper()
+			sn, err := s.GetSubnet(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sn
+		}
+
+		if !set("10.0.0.100", "10.0.0.199", "opnsense") {
+			t.Fatal("an unowned pool was not set")
+		}
+		if sn := pool(); sn.DHCPStart != "10.0.0.100" || sn.DHCPEnd != "10.0.0.199" || sn.DHCPPoolSource != "opnsense" {
+			t.Fatalf("after first set: %+v", sn)
+		}
+		if set("10.0.0.100", "10.0.0.199", "opnsense") {
+			t.Error("the same pool again reported a change")
+		}
+		if !set("10.0.0.50", "10.0.0.99", "opnsense") {
+			t.Error("the owner could not move its pool")
+		}
+		if set("10.0.0.1", "10.0.0.9", "pihole") {
+			t.Error("another integration took over the pool")
+		}
+
+		sn := pool()
+		sn.DHCPStart, sn.DHCPEnd, sn.DHCPPoolSource = "10.0.0.200", "10.0.0.250", "user"
+		if err := s.UpdateSubnet(ctx, sn); err != nil {
+			t.Fatal(err)
+		}
+		if set("10.0.0.50", "10.0.0.99", "opnsense") {
+			t.Error("an integration overwrote the user's pool")
+		}
+		if sn := pool(); sn.DHCPStart != "10.0.0.200" || sn.DHCPPoolSource != "user" {
+			t.Fatalf("user pool changed: %+v", sn)
+		}
+
+		list, err := s.ListSubnets(ctx)
+		if err != nil || len(list) != 1 || list[0].DHCPPoolSource != "user" {
+			t.Fatalf("list: %+v err=%v", list, err)
+		}
+	})
+}

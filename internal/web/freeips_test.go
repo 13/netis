@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -143,5 +144,66 @@ func TestSearchFree(t *testing.T) {
 	}
 	if res := search("freezer"); len(res.Free) != 0 {
 		t.Fatalf("freezer is not a free query: %+v", res.Free)
+	}
+}
+
+// A pool typed into the form is the user's; one an integration read stays
+// the integration's while the form is saved unchanged, becomes the user's
+// once edited, and is handed back to the integrations when cleared. The
+// Network page says which integration a pool came from.
+func TestSubnetFormDHCPPoolSource(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	ctx := t.Context()
+	form := url.Values{"cidr": {"192.168.1.0/24"}, "name": {"main"}, "kind": {"lan"}, "scan_interval_sec": {"120"},
+		"dhcp_start": {"100"}, "dhcp_end": {"199"}}
+	if rec := authedPost(t, srv, st, "/settings/subnets", form); rec.Code != 303 {
+		t.Fatalf("create: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	subnets, _ := st.ListSubnets(ctx)
+	if len(subnets) != 1 || subnets[0].DHCPPoolSource != "user" {
+		t.Fatalf("typed pool source = %+v", subnets)
+	}
+	id := subnets[0].ID
+	path := "/settings/subnets/" + strconv.FormatInt(id, 10)
+	source := func() store.Subnet {
+		t.Helper()
+		sn, err := st.GetSubnet(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sn
+	}
+
+	// Hand the pool to an integration, as a sync would on an unowned pool.
+	sn := source()
+	sn.DHCPStart, sn.DHCPEnd, sn.DHCPPoolSource = "", "", ""
+	st.UpdateSubnet(ctx, sn)
+	if ok, err := st.SetDHCPPoolFrom(ctx, id, "192.168.1.100", "192.168.1.199", "opnsense"); !ok || err != nil {
+		t.Fatalf("SetDHCPPoolFrom: %v %v", ok, err)
+	}
+	if body := authedGet(t, srv, st, "/settings/network").Body.String(); !strings.Contains(body, "From OPNsense") {
+		t.Error("the Network page does not say where the pool came from")
+	}
+
+	form.Set("name", "renamed") // pool unchanged, in octet shorthand
+	if rec := authedPost(t, srv, st, path, form); rec.Code != 303 {
+		t.Fatalf("update: code=%d", rec.Code)
+	}
+	if sn := source(); sn.DHCPPoolSource != "opnsense" || sn.Name != "renamed" {
+		t.Fatalf("unchanged pool lost its source: %+v", sn)
+	}
+
+	form.Set("dhcp_end", "150")
+	authedPost(t, srv, st, path, form)
+	if sn := source(); sn.DHCPPoolSource != "user" || sn.DHCPEnd != "192.168.1.150" {
+		t.Fatalf("edited pool: %+v", sn)
+	}
+
+	form.Set("dhcp_start", "")
+	form.Set("dhcp_end", "")
+	authedPost(t, srv, st, path, form)
+	if sn := source(); sn.DHCPPoolSource != "" || sn.DHCPStart != "" {
+		t.Fatalf("cleared pool: %+v", sn)
 	}
 }
