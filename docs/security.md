@@ -21,8 +21,8 @@ just as it refuses to delete it. A role change applies to that user's next
 request, without signing them out.
 
 Admins add and delete users, change roles and reset passwords under
-Settings → Users. API tokens act with their owner's role (see
-[API tokens](api.md#api-tokens)).
+Settings → Users. API tokens act with their owner's role, or only read when
+created read-only (see [API tokens](api.md#api-tokens)).
 
 ## Passwords and sessions
 

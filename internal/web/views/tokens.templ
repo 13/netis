@@ -67,6 +67,7 @@ templ tokensTab(d SettingsData) {
 						if IsAdmin(ctx) {
 							<th>Owner</th>
 						}
+						<th>Access</th>
 						<th>Created</th>
 						<th>Last used</th>
 						<th>Expires</th>
@@ -78,6 +79,13 @@ templ tokensTab(d SettingsData) {
 							if IsAdmin(ctx) {
 								<td data-label="Owner">{ t.Username }</td>
 							}
+							<td data-label="Access">
+								if t.ReadOnly {
+									Read-only
+								} else {
+									Full
+								}
+							</td>
 							<td data-label="Created">
 								@Time(t.CreatedAt)
 							</td>
@@ -106,6 +114,8 @@ templ tokensTab(d SettingsData) {
 				<label>Expires after (days) <input type="number" name="expires_days" min="0" max="3650" value="90"/></label>
 			</div>
 			<p class="hint">0 means the token never expires.</p>
+			<label class="chk"><input type="checkbox" name="read_only"/> Read-only</label>
+			<p class="hint">A read-only token can only read, even an admin's: for dashboards and monitoring.</p>
 			<button type="submit" class="btn btn-primary">Create token</button>
 		</form>
 	</div>

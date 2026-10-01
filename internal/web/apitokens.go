@@ -52,14 +52,15 @@ func apiBearer(r *http.Request) (string, bool) {
 // is deliberately no fallback to the session cookie: a request that names a
 // token is answered as that token, so a bad one is a 401 however signed-in the
 // browser around it happens to be. Failed lookups count against the caller's
-// address; a valid token is never charged.
+// address; a valid token is never charged. A read-only token is refused
+// anything but GET and HEAD, whatever its owner's role.
 func (s *Server) serveBearer(w http.ResponseWriter, r *http.Request, next http.Handler, token string) {
 	key := "bearer:" + limitKey(s.clientIP(r))
 	if !s.tokenLimiter.reserve(key) {
 		s.apiError(w, r, http.StatusTooManyRequests, "too many failed token attempts, wait a minute")
 		return
 	}
-	u, ok, err := s.store.GetUserByAPIToken(r.Context(), token, time.Now())
+	tu, ok, err := s.store.GetUserByAPIToken(r.Context(), token, time.Now())
 	s.tokenLimiter.done(key, err == nil && !ok)
 	if err != nil {
 		s.unavailable(w, r, err)
@@ -70,12 +71,16 @@ func (s *Server) serveBearer(w http.ResponseWriter, r *http.Request, next http.H
 		s.apiError(w, r, http.StatusUnauthorized, "invalid or expired API token")
 		return
 	}
-	next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
+	if tu.ReadOnly && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		s.apiError(w, r, http.StatusForbidden, "this API token is read-only")
+		return
+	}
+	next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, tu.User)))
 }
 
 // handleTokenCreate issues an API token to the signed-in user. It is
 // self-service, like changing your own password: the token can do no more than
-// its owner. The plaintext is rendered once, on the page this answers with,
+// its owner, and a read-only one can only read. The plaintext is rendered once, on the page this answers with,
 // and is not recoverable afterwards.
 func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	u, ok := userFrom(r)
@@ -92,7 +97,12 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		s.settingsError(w, r, "tokens", http.StatusBadRequest, "the token name is too long; keep it under 100 characters")
 		return
 	}
-	auditNote(r).Target = "token " + name
+	readOnly := r.FormValue("read_only") != ""
+	note := auditNote(r)
+	note.Target = "token " + name
+	if readOnly {
+		note.Detail = "read-only"
+	}
 	now := time.Now().UTC()
 	expires := ""
 	if v := strings.TrimSpace(r.FormValue("expires_days")); v != "" {
@@ -110,7 +120,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if _, err := s.store.CreateAPIToken(r.Context(), u.ID, name, token, expires, now); err != nil {
+	if _, err := s.store.CreateAPIToken(r.Context(), u.ID, name, token, expires, readOnly, now); err != nil {
 		s.fail(w, r, err)
 		return
 	}

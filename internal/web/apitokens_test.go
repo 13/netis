@@ -34,7 +34,7 @@ func bearer(t *testing.T, srv *Server, method, path, token, body string) *httpte
 // tokenFor creates an API token for a user.
 func tokenFor(t *testing.T, st *store.Store, userID int64, token, expires string) {
 	t.Helper()
-	if _, err := st.CreateAPIToken(t.Context(), userID, "t", token, expires, time.Now()); err != nil {
+	if _, err := st.CreateAPIToken(t.Context(), userID, "t", token, expires, false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -228,8 +228,8 @@ func TestTokenRevokeScopedToOwner(t *testing.T) {
 	st.SetSetting(t.Context(), "onboarded", "1")
 	admin := addUser(t, st, "ben", "password1", "admin", "bensess")
 	eve := addUser(t, st, "eve", "password1", "viewer", "evesess")
-	adminTok, _ := st.CreateAPIToken(t.Context(), admin, "ben-script", "netis_ben", "", time.Now())
-	eveTok, _ := st.CreateAPIToken(t.Context(), eve, "eve-script", "netis_eve", "", time.Now())
+	adminTok, _ := st.CreateAPIToken(t.Context(), admin, "ben-script", "netis_ben", "", false, time.Now())
+	eveTok, _ := st.CreateAPIToken(t.Context(), eve, "eve-script", "netis_eve", "", false, time.Now())
 
 	if body := getAs(t, srv, "evesess", "/settings/tokens"); strings.Contains(body, "ben-script") || !strings.Contains(body, "eve-script") {
 		t.Error("a viewer's token tab shows someone else's token, or not their own")
@@ -261,5 +261,61 @@ func TestDeletedUsersTokensStopWorking(t *testing.T) {
 	wantRedirect(t, postAs(t, srv, "bensess", "/settings/users/"+itoa(eve)+"/delete", nil), "/settings/users")
 	if rec := bearer(t, srv, "GET", "/api/status", "netis_eve", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("deleted user's token: code=%d, want 401", rec.Code)
+	}
+}
+
+// A read-only token reads like any other but is refused every write, even
+// when its owner is an admin. The token list says which tokens are read-only.
+func TestReadOnlyToken(t *testing.T) {
+	srv, st := testServer(t)
+	st.SetSetting(t.Context(), "onboarded", "1")
+	addAdmin(t, st)
+	addUser(t, st, "root", "password1", "admin", "rootsess")
+	seedInventory(t, st)
+
+	rec := postAs(t, srv, "rootsess", "/settings/tokens", url.Values{"name": {"grafana"}, "expires_days": {"0"}, "read_only": {"on"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	ro := regexp.MustCompile(`netis_[A-Za-z0-9_-]{43}`).FindString(rec.Body.String())
+	if ro == "" {
+		t.Fatal("new token not shown")
+	}
+	if rec := bearer(t, srv, "GET", "/api/devices", ro, ""); rec.Code != http.StatusOK {
+		t.Fatalf("read-only GET: code=%d", rec.Code)
+	}
+	if rec := bearer(t, srv, "HEAD", "/api/status", ro, ""); rec.Code != http.StatusOK {
+		t.Errorf("read-only HEAD: code=%d", rec.Code)
+	}
+	for _, w := range []struct{ method, path, body string }{
+		{"POST", "/api/devices", `{"name":"x","kind":"other"}`},
+		{"PATCH", "/api/devices/1", `{"name":"y"}`},
+		{"DELETE", "/api/devices/1", ""},
+	} {
+		wantJSONError(t, bearer(t, srv, w.method, w.path, ro, w.body), http.StatusForbidden, "read-only")
+	}
+	if rows, _ := st.ListDevices(t.Context()); len(rows) != 1 || rows[0].Name != "gw" {
+		t.Fatalf("a read-only token changed the inventory: %+v", rows)
+	}
+
+	// A full token of the same admin still writes.
+	postAs(t, srv, "rootsess", "/settings/tokens", url.Values{"name": {"ansible"}, "expires_days": {"0"}})
+	toks, _ := st.ListAPITokens(t.Context(), 0)
+	if len(toks) != 2 {
+		t.Fatalf("tokens = %+v", toks)
+	}
+	for _, tok := range toks {
+		if tok.ReadOnly != (tok.Name == "grafana") {
+			t.Errorf("token %q read-only = %v", tok.Name, tok.ReadOnly)
+		}
+	}
+	tokenFor(t, st, toks[0].UserID, "netis_full", "")
+	if rec := bearer(t, srv, "PATCH", "/api/devices/1", "netis_full", `{"name":"y"}`); rec.Code != http.StatusOK {
+		t.Errorf("full token PATCH: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body := getAs(t, srv, "rootsess", "/settings/tokens")
+	if !strings.Contains(body, "Read-only") || !strings.Contains(body, `name="read_only"`) {
+		t.Error("the tokens tab does not show or offer read-only tokens")
 	}
 }
